@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import type { BatchMetadataUpdate, BatchSummary, IngestBatch, TabKey } from "./types/archive";
+import type {
+  BatchMetadataUpdate,
+  BatchMoveSummary,
+  BatchSummary,
+  IngestBatch,
+  TabKey,
+} from "./types/archive";
 import { api } from "./api/client";
 import ActionBar from "./components/ActionBar";
 import BatchTable from "./components/BatchTable";
@@ -13,6 +19,7 @@ type ActionKey = "refresh" | "scan" | "move";
 export default function App() {
   const [batches, setBatches] = useState<BatchSummary[]>([]);
   const [details, setDetails] = useState<Record<number, IngestBatch>>({});
+  const [moveSummaries, setMoveSummaries] = useState<Record<number, BatchMoveSummary>>({});
   const [detailLoading, setDetailLoading] = useState<Set<number>>(new Set());
   const [detailErrors, setDetailErrors] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(false);
@@ -36,11 +43,13 @@ export default function App() {
       const response = await api.listBatches();
       setBatches(response.items);
       setDetails({});
+      setMoveSummaries({});
     } catch (primaryError: unknown) {
       try {
         const fallback = await api.listPending();
         setBatches(fallback.items);
         setDetails({});
+        setMoveSummaries({});
       } catch {
         setError(primaryError instanceof Error ? primaryError.message : "Unable to load batches");
       }
@@ -96,8 +105,12 @@ export default function App() {
       return next;
     });
     try {
-      const detail = await api.getBatch(id);
+      const [detail, moves] = await Promise.all([
+        api.getBatch(id),
+        api.getBatchMoves(id),
+      ]);
       setDetails((previous) => ({ ...previous, [id]: detail }));
+      setMoveSummaries((previous) => ({ ...previous, [id]: moves }));
     } catch (loadError: unknown) {
       const message = loadError instanceof Error ? loadError.message : "Unable to load batch details";
       setDetailErrors((previous) => ({ ...previous, [id]: message }));
@@ -243,6 +256,7 @@ export default function App() {
           batches={filtered}
           selected={selected}
           details={details}
+          moveSummaries={moveSummaries}
           detailLoading={detailLoading}
           detailErrors={detailErrors}
           loading={loading}

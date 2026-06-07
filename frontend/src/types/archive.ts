@@ -71,6 +71,25 @@ export type MoveResult = {
   errors: string[];
 };
 
+export type MoveAction = {
+  id: number;
+  source_path: string;
+  destination_path: string;
+  file_name?: string | null;
+  status: string;
+  error_message?: string | null;
+  created_at: string;
+  completed_at?: string | null;
+};
+
+export type BatchMoveSummary = {
+  batch_id: number;
+  total: number;
+  completed: number;
+  failed: number;
+  moves: MoveAction[];
+};
+
 export type BatchActionResult = {
   batch_id: number;
   status: string;

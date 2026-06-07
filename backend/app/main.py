@@ -4,7 +4,12 @@ from app.api.routes import router
 from app.core.config import settings
 from app.db.init_db import init_db
 
-app = FastAPI(title=settings.app_name)
+app = FastAPI(
+    title=settings.app_name,
+    docs_url="/docs" if settings.api_docs_enabled else None,
+    redoc_url="/redoc" if settings.api_docs_enabled else None,
+    openapi_url="/openapi.json" if settings.api_docs_enabled else None,
+)
 
 
 @app.on_event("startup")
@@ -24,4 +29,8 @@ app.include_router(router)
 
 @app.get("/")
 def root():
-    return {"message": "Archive Assistant API", "docs": "/docs"}
+    return {
+        "message": "Archive Assistant API is running",
+        "frontend": "http://localhost:5173",
+        "health": "/api/health",
+    }

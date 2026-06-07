@@ -19,6 +19,8 @@ class Settings(BaseSettings):
 
     database_url: str = f"sqlite:///{backend_dir / 'archive_assistant.db'}"
 
+    api_docs_enabled: bool = False
+
     class Config:
         env_file = ".env"
 

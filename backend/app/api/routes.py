@@ -1,14 +1,17 @@
 from datetime import datetime
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, selectinload
 from app.db.session import get_db
-from app.models.archive import ArchiveItem, IngestBatch, IngestFile
+from app.models.archive import ArchiveItem, IngestBatch, IngestFile, MoveAction
 from app.schemas.archive import (
     ApproveResponse, 
+    BatchMoveSummary,
     BatchMetadataUpdate,
     BatchSummary, 
     IngestBatchOut, 
     IngestFileOut,
+    MoveActionOut,
     MoveResponse,
     PaginatedResponse
 )
@@ -101,6 +104,39 @@ def get_batch_files(batch_id: int, db: Session = Depends(get_db)):
     if not files and not db.get(IngestBatch, batch_id):
         raise HTTPException(status_code=404, detail="Batch not found")
     return files
+
+
+@router.get("/batches/{batch_id}/moves", response_model=BatchMoveSummary)
+def get_batch_moves(batch_id: int, db: Session = Depends(get_db)):
+    if not db.get(IngestBatch, batch_id):
+        raise HTTPException(status_code=404, detail="Batch not found")
+
+    actions = (
+        db.query(MoveAction)
+        .filter(MoveAction.batch_id == batch_id)
+        .order_by(MoveAction.id.asc())
+        .all()
+    )
+    moves = [
+        MoveActionOut(
+            id=action.id,
+            source_path=action.source_path,
+            destination_path=action.destination_path,
+            file_name=Path(action.destination_path or action.source_path).name,
+            status=action.status,
+            error_message=action.error_message,
+            created_at=action.created_at,
+            completed_at=action.completed_at,
+        )
+        for action in actions
+    ]
+    return BatchMoveSummary(
+        batch_id=batch_id,
+        total=len(moves),
+        completed=sum(move.status == "completed" for move in moves),
+        failed=sum(move.status == "failed" for move in moves),
+        moves=moves,
+    )
 
 
 @router.patch("/batches/{batch_id}/metadata", response_model=BatchSummary)

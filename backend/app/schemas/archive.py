@@ -79,3 +79,25 @@ class ApproveResponse(BaseModel):
 class MoveResponse(BaseModel):
     moved: int
     errors: list[str]
+
+
+class MoveActionOut(BaseModel):
+    id: int
+    source_path: str
+    destination_path: str
+    file_name: str | None = None
+    status: str
+    error_message: str | None = None
+    created_at: datetime
+    completed_at: datetime | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class BatchMoveSummary(BaseModel):
+    batch_id: int
+    total: int
+    completed: int
+    failed: int
+    moves: list[MoveActionOut]

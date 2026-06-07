@@ -55,7 +55,8 @@ uvicorn app.main:app --reload
 
 Backend runs at: `http://127.0.0.1:8000`
 
-API docs: `http://127.0.0.1:8000/docs`
+API docs (`/docs`) are **disabled by default** — use the React frontend for normal work.
+To temporarily enable Swagger docs, set `API_DOCS_ENABLED=true` in `backend/.env` and restart.
 
 ### Frontend setup
 
@@ -223,6 +224,7 @@ The dashboard is a **React + TypeScript** SPA built with **Vite**. Features:
 
 - **Status tabs**: filter batches by All, Pending, Needs Metadata, Approved, Moved.
 - **Batch table**: selectable rows, expandable detail panels, inline status badges.
+- **Moved library detail**: final destination, metadata used, timeline, move counts, and per-file move history.
 - **Bulk actions**: select all / approve multiple / reject multiple.
 - **Metadata editor**: modal form with artist, album, year, genre fields and live destination preview.
 - **Dark theme**: fully customizable via CSS custom properties in `style.css`.
@@ -247,6 +249,7 @@ Available scripts (`cd frontend`):
 | `GET` | `/api/batches/pending` | List pending batches |
 | `GET` | `/api/batches/needs-metadata-review` | List batches needing metadata review |
 | `GET` | `/api/batches/{id}` | Get batch details |
+| `GET` | `/api/batches/{id}/moves` | Get per-file move history and completion summary |
 | `PATCH` | `/api/batches/{id}/metadata` | Update batch metadata |
 | `POST` | `/api/batches/{id}/approve` | Approve a batch |
 | `POST` | `/api/batches/{id}/send-to-recovery` | Send batch to metadata recovery |
@@ -255,7 +258,7 @@ Available scripts (`cd frontend`):
 | `POST` | `/api/scan/music` | Trigger music scan |
 | `POST` | `/api/move/approved` | Move all approved batches |
 
-Full interactive docs at `http://127.0.0.1:8000/docs`.
+Interactive docs are disabled by default. Enable with `API_DOCS_ENABLED=true` in `backend/.env`.
 
 ---
 

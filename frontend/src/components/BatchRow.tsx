@@ -1,9 +1,10 @@
-import type { BatchSummary, IngestBatch } from "../types/archive";
+import type { BatchMoveSummary, BatchSummary, IngestBatch } from "../types/archive";
 import BatchDetail from "./BatchDetail";
 
 type Props = {
   batch: BatchSummary;
   detail?: IngestBatch;
+  moveSummary?: BatchMoveSummary;
   detailLoading: boolean;
   detailError?: string;
   index: number;
@@ -34,6 +35,7 @@ function statusLabel(status: string): string {
 export default function BatchRow({
   batch,
   detail,
+  moveSummary,
   detailLoading,
   detailError,
   index,
@@ -132,7 +134,7 @@ export default function BatchRow({
             {detailError && (
               <div className="detail-state detail-state--error"><i className="ti ti-wifi-off" /> {detailError}</div>
             )}
-            {detail && <BatchDetail batch={detail} />}
+            {detail && <BatchDetail batch={detail} moveSummary={moveSummary} />}
           </td>
         </tr>
       )}
