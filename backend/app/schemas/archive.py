@@ -1,0 +1,81 @@
+from datetime import datetime
+from typing import Generic, TypeVar
+from pydantic import BaseModel, Field
+
+T = TypeVar("T")
+
+class IngestFileOut(BaseModel):
+    id: int
+    file_name: str
+    extension: str
+    size_bytes: int
+    detected_role: str
+    metadata_json: dict | None = None
+
+    class Config:
+        from_attributes = True
+
+class BatchSummary(BaseModel):
+    id: int
+    detected_type: str
+    status: str
+    artist: str | None = None
+    album: str | None = None
+    year: str | None = None
+    primary_genre: str | None = None
+    format: str | None = None
+    track_count: int = 0
+    disc_count: int = 0
+    confidence: float
+    metadata_quality: str
+    metadata_warnings: list[str]
+    suggested_destination: str | None = None
+    suggested_metadata: dict | None = None
+    metadata_confirmed: bool = False
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class IngestBatchOut(BaseModel):
+    id: int
+    source_kind: str
+    source_path: str
+    detected_type: str
+    status: str
+    confidence: float
+    suggested_destination: str | None = None
+    suggested_metadata: dict | None = None
+    metadata_json: dict | None = None
+    metadata_confirmed: bool = False
+    created_at: datetime
+    approved_at: datetime | None = None
+    files: list[IngestFileOut] = []
+
+    class Config:
+        from_attributes = True
+
+class BatchMetadataUpdate(BaseModel):
+    artist: str = Field(min_length=1)
+    album: str = Field(min_length=1)
+    year: str = Field(pattern=r"^(19|20)\d{2}$")
+    primary_genre: str | None = None
+    format: str | None = None
+
+class PaginatedResponse(BaseModel, Generic[T]):
+    items: list[T]
+    page: int
+    page_size: int
+    total: int
+    total_pages: int
+
+class ApproveResponse(BaseModel):
+    batch_id: int
+    status: str
+    message: str
+    metadata_quality: str | None = None
+    metadata_warnings: list[str] | None = None
+
+class MoveResponse(BaseModel):
+    moved: int
+    errors: list[str]

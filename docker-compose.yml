@@ -1,0 +1,21 @@
+services:
+  archive-backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./backend/archive_assistant.db:/app/backend/archive_assistant.db
+    environment:
+      - PYTHONUNBUFFERED=1
+
+  archive-frontend:
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+    depends_on:
+      - archive-backend

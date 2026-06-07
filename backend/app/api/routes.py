@@ -1,0 +1,243 @@
+from datetime import datetime
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session, selectinload
+from app.db.session import get_db
+from app.models.archive import ArchiveItem, IngestBatch, IngestFile
+from app.schemas.archive import (
+    ApproveResponse, 
+    BatchMetadataUpdate,
+    BatchSummary, 
+    IngestBatchOut, 
+    IngestFileOut,
+    MoveResponse,
+    PaginatedResponse
+)
+from app.services.music_metadata import evaluate_music_album_metadata, suggest_music_destination
+from app.services.scanner import scan_music_ingest
+from app.services.mover import move_approved_batches
+from app.core.config import settings
+
+router = APIRouter(prefix="/api")
+
+
+@router.get("/health")
+def health():
+    return {"status": "ok", "service": "archive-assistant"}
+
+
+@router.post("/scan/music", response_model=list[IngestBatchOut])
+def scan_music(db: Session = Depends(get_db)):
+    return scan_music_ingest(db)
+
+
+@router.get("/batches", response_model=PaginatedResponse[BatchSummary])
+def list_batches(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
+    query = db.query(IngestBatch)
+    total = query.count()
+    batches = (
+        query.order_by(IngestBatch.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    
+    items = [_batch_to_summary(b) for b in batches]
+    return PaginatedResponse(
+        items=items,
+        page=page,
+        page_size=page_size,
+        total=total,
+        total_pages=(total + page_size - 1) // page_size
+    )
+
+
+@router.get("/batches/pending", response_model=PaginatedResponse[BatchSummary])
+def list_pending_batches(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
+    query = db.query(IngestBatch).filter(
+        IngestBatch.status.in_(["pending_review", "needs_metadata_review", "metadata_recovery"])
+    )
+    total = query.count()
+    batches = (
+        query.order_by(IngestBatch.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    
+    items = [_batch_to_summary(b) for b in batches]
+    return PaginatedResponse(
+        items=items,
+        page=page,
+        page_size=page_size,
+        total=total,
+        total_pages=(total + page_size - 1) // page_size
+    )
+
+
+@router.get("/batches/{batch_id}", response_model=IngestBatchOut)
+def get_batch(batch_id: int, db: Session = Depends(get_db)):
+    batch = (
+        db.query(IngestBatch)
+        .options(selectinload(IngestBatch.files))
+        .filter(IngestBatch.id == batch_id)
+        .first()
+    )
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    return batch
+
+
+@router.get("/batches/{batch_id}/files", response_model=list[IngestFileOut])
+def get_batch_files(batch_id: int, db: Session = Depends(get_db)):
+    files = db.query(IngestFile).filter(IngestFile.batch_id == batch_id).all()
+    if not files and not db.get(IngestBatch, batch_id):
+        raise HTTPException(status_code=404, detail="Batch not found")
+    return files
+
+
+@router.patch("/batches/{batch_id}/metadata", response_model=BatchSummary)
+def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Session = Depends(get_db)):
+    batch = db.get(IngestBatch, batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    
+    if batch.status in {"moved", "move_failed"}:
+        raise HTTPException(status_code=400, detail="Moved batches cannot be edited")
+
+    meta = dict(batch.metadata_json or {})
+    
+    # Update core fields
+    meta["artist"] = update.artist.strip()
+    meta["albumartist"] = update.artist.strip()
+    meta["album"] = update.album.strip()
+    meta["year"] = update.year.strip()
+    meta["date"] = update.year.strip()
+    if update.primary_genre is not None:
+        meta["genre"] = update.primary_genre.strip() or "Unknown"
+    if update.format is not None:
+        meta["format"] = update.format.strip().upper()
+    
+    # Re-evaluate quality
+    quality_res = evaluate_music_album_metadata(meta)
+    meta.update(quality_res)
+    
+    file_format = str(meta.get("format", "MP3")).lower()
+    new_dest = suggest_music_destination(
+        {
+            "albumartist": meta["artist"],
+            "album": meta["album"],
+            "date": meta["year"],
+            "extension": file_format,
+        },
+        settings.music_flac_dir,
+        settings.music_mp3_dir
+    )
+    
+    batch.metadata_json = meta
+    batch.suggested_destination = str(new_dest)
+    batch.confidence = quality_res["confidence"]
+    batch.metadata_confirmed = True
+
+    if quality_res["metadata_quality"] in ("good", "fair"):
+        batch.status = "pending_review"
+    elif quality_res["metadata_quality"] == "broken":
+        batch.status = "metadata_recovery"
+    else:
+        batch.status = "needs_metadata_review"
+    
+    batch.updated_at = datetime.utcnow()
+    db.commit()
+    return _batch_to_summary(batch)
+
+
+@router.post("/batches/{batch_id}/approve", response_model=ApproveResponse)
+def approve_batch(batch_id: int, db: Session = Depends(get_db)):
+    batch = db.get(IngestBatch, batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    
+    meta = batch.metadata_json or {}
+    quality = meta.get("metadata_quality", "weak")
+    if batch.status in {"needs_metadata_review", "metadata_recovery"} or quality in {"weak", "broken"}:
+        return ApproveResponse(
+            batch_id=batch.id, 
+            status=batch.status, 
+            message="Batch requires metadata review before approval.",
+            metadata_quality=meta.get("metadata_quality"),
+            metadata_warnings=meta.get("metadata_warnings", [])
+        )
+
+    if batch.status != "pending_review":
+        raise HTTPException(status_code=400, detail=f"Cannot approve batch with status {batch.status}")
+
+    batch.status = "approved"
+    batch.approved_at = datetime.utcnow()
+    batch.approved_by = "bonny-local"
+    batch.updated_at = datetime.utcnow()
+    db.commit()
+    return ApproveResponse(batch_id=batch.id, status=batch.status, message="Batch approved")
+
+
+@router.post("/batches/{batch_id}/reject", response_model=ApproveResponse)
+def reject_batch(batch_id: int, db: Session = Depends(get_db)):
+    batch = db.get(IngestBatch, batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    batch.status = "rejected"
+    batch.updated_at = datetime.utcnow()
+    db.commit()
+    return ApproveResponse(batch_id=batch.id, status=batch.status, message="Batch rejected")
+
+
+@router.post("/batches/{batch_id}/recovery", response_model=ApproveResponse)
+def send_to_recovery(batch_id: int, db: Session = Depends(get_db)):
+    batch = db.get(IngestBatch, batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    batch.status = "metadata_recovery"
+    batch.updated_at = datetime.utcnow()
+    db.commit()
+    return ApproveResponse(batch_id=batch.id, status=batch.status, message="Batch sent to metadata recovery")
+
+
+@router.post("/move/approved", response_model=MoveResponse)
+def move_approved(db: Session = Depends(get_db)):
+    moved, errors = move_approved_batches(db)
+    return MoveResponse(moved=moved, errors=errors)
+
+
+@router.get("/library")
+def library(db: Session = Depends(get_db)):
+    items = db.query(ArchiveItem).order_by(ArchiveItem.created_at.desc()).all()
+    return items
+
+
+def _batch_to_summary(batch: IngestBatch) -> BatchSummary:
+    meta = batch.metadata_json or {}
+    return BatchSummary(
+        id=batch.id,
+        detected_type=batch.detected_type,
+        status=batch.status,
+        artist=meta.get("artist") or meta.get("albumartist"),
+        album=meta.get("album"),
+        year=str(meta.get("year") or meta.get("date") or "")[:4] or None,
+        primary_genre=meta.get("genre"),
+        format=meta.get("format", "MP3"),
+        track_count=meta.get("track_count", 0),
+        disc_count=meta.get("disc_count", 1),
+        confidence=batch.confidence,
+        metadata_quality=meta.get("metadata_quality", "weak"),
+        metadata_warnings=meta.get("metadata_warnings", []),
+        suggested_destination=batch.suggested_destination,
+        suggested_metadata=batch.suggested_metadata,
+        metadata_confirmed=batch.metadata_confirmed,
+        created_at=batch.created_at,
+    )
