@@ -19,6 +19,11 @@ from app.schemas.archive import (
     ScanMusicResponse,
 )
 from app.services.dev_reset import DevResetBlockedError, reset_music_test_data
+from app.services.batch_merge import (
+    find_archived_duplicate_candidate,
+    find_merge_candidate_batches,
+    merge_music_batches,
+)
 from app.services.music_metadata import evaluate_music_album_metadata, suggest_music_destination
 from app.services.scanner import scan_music_ingest
 from app.services.mover import move_approved_batches
@@ -64,7 +69,7 @@ def list_batches(
     page_size: int = Query(25, ge=1, le=100),
     db: Session = Depends(get_db)
 ):
-    query = db.query(IngestBatch)
+    query = db.query(IngestBatch).filter(IngestBatch.status != "merged")
     total = query.count()
     batches = (
         query.order_by(IngestBatch.created_at.desc())
@@ -190,7 +195,7 @@ def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Sessio
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
     
-    if batch.status in {"moved", "move_failed"}:
+    if batch.status in {"moved", "move_failed", "merged"}:
         raise HTTPException(status_code=400, detail="Moved batches cannot be edited")
 
     meta = dict(batch.metadata_json or {})
@@ -248,8 +253,40 @@ def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Sessio
         batch.status = "needs_metadata_review"
     
     batch.updated_at = datetime.utcnow()
+    db.flush()
+
+    merge_candidates = find_merge_candidate_batches(db, batch)
+    merge_result = merge_music_batches(db, batch, merge_candidates)
+    action_message = merge_result.message
+    if not merge_result.merged_batch_ids:
+        archived_candidate = find_archived_duplicate_candidate(db, merge_result.batch)
+        if archived_candidate:
+            merged_meta = dict(merge_result.batch.metadata_json or {})
+            warnings = list(merged_meta.get("metadata_warnings", []))
+            warnings.append("possible_archived_duplicate_candidate")
+            merged_meta["metadata_warnings"] = list(dict.fromkeys(warnings))
+            merged_meta["metadata_alerts"] = [
+                *list(merged_meta.get("metadata_alerts", [])),
+                {
+                    "type": "possible_archived_duplicate_candidate",
+                    "message": (
+                        f"Batch {archived_candidate.id} already archived this "
+                        "canonical release. It was not merged."
+                    ),
+                    "existing_batch_id": archived_candidate.id,
+                    "existing_path": archived_candidate.suggested_destination,
+                },
+            ]
+            merge_result.batch.metadata_json = merged_meta
+            action_message = (
+                "Metadata saved. Matching release is already archived in "
+                f"Batch {archived_candidate.id}; no merge was performed."
+            )
     db.commit()
-    return _batch_to_summary(batch)
+    return _batch_to_summary(
+        merge_result.batch,
+        action_message=action_message or "Metadata saved.",
+    )
 
 
 @router.post("/batches/{batch_id}/approve", response_model=ApproveResponse)
@@ -314,7 +351,11 @@ def library(db: Session = Depends(get_db)):
     return items
 
 
-def _batch_to_summary(batch: IngestBatch) -> BatchSummary:
+def _batch_to_summary(
+    batch: IngestBatch,
+    *,
+    action_message: str | None = None,
+) -> BatchSummary:
     meta = batch.metadata_json or {}
     return BatchSummary(
         id=batch.id,
@@ -333,5 +374,6 @@ def _batch_to_summary(batch: IngestBatch) -> BatchSummary:
         suggested_destination=batch.suggested_destination,
         suggested_metadata=batch.suggested_metadata,
         metadata_confirmed=batch.metadata_confirmed,
+        action_message=action_message,
         created_at=batch.created_at,
     )

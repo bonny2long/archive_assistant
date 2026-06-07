@@ -61,13 +61,13 @@ export default function App() {
     setError(null);
     try {
       const response = await api.listBatches();
-      setBatches(response.items);
+      setBatches(response.items.filter((batch) => batch.status !== "merged"));
       setDetails({});
       setMoveSummaries({});
     } catch (primaryError: unknown) {
       try {
         const fallback = await api.listPending();
-        setBatches(fallback.items);
+        setBatches(fallback.items.filter((batch) => batch.status !== "merged"));
         setDetails({});
         setMoveSummaries({});
       } catch {
@@ -185,8 +185,8 @@ export default function App() {
     if (!editingBatch) return;
     setSavingMetadata(true);
     try {
-      await api.updateBatchMetadata(editingBatch.id, update);
-      showToast(`Batch ${editingBatch.id} metadata updated`);
+      const result = await api.updateBatchMetadata(editingBatch.id, update);
+      showToast(result.action_message ?? `Batch ${editingBatch.id} metadata updated`);
       setEditingBatch(null);
       await loadBatches();
     } catch (saveError: unknown) {

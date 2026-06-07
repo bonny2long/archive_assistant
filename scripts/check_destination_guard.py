@@ -19,8 +19,12 @@ sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.core.config import settings  # noqa: E402
 from app.db.session import Base  # noqa: E402
-from app.models.archive import IngestBatch  # noqa: E402
-from app.services.mover import find_possible_existing_destination  # noqa: E402
+from app.models.archive import IngestBatch, IngestFile  # noqa: E402
+from app.services.mover import (  # noqa: E402
+    _destination_filename_conflicts,
+    find_possible_existing_destination,
+    resolve_confirmed_destination_alias,
+)
 
 
 def check(label: str, condition: bool) -> int:
@@ -92,6 +96,33 @@ def main() -> int:
                 "existing canonical artist alias is detected",
                 conflict is not None
                 and conflict.get("type") == "possible_artist_alias",
+            )
+            target.metadata_confirmed = True
+            resolved = resolve_confirmed_destination_alias(db, target)
+            failures += check(
+                "confirmed alias reuses existing canonical artist folder",
+                resolved is not None
+                and resolved.parent == alias_folder
+                and resolved.name == "2008 - Starring In Mardi Gras Bootleg",
+            )
+            target.files.append(
+                IngestFile(
+                    file_path="ingest/01.mp3",
+                    file_name="01.mp3",
+                    extension=".mp3",
+                    size_bytes=1,
+                    metadata_json={
+                        "title": "Intro",
+                        "tracknumber": "1",
+                        "discnumber": 1,
+                    },
+                )
+            )
+            resolved.mkdir(parents=True)
+            (resolved / "01 - Intro.mp3").write_bytes(b"existing")
+            failures += check(
+                "existing target filename blocks overwrite",
+                bool(_destination_filename_conflicts(target, resolved, 1)),
             )
 
             flac_target = batch(

@@ -216,6 +216,7 @@ archive-assistant-scaffold/
     check_metadata_parser.py   # PASS/FAIL checks for ugly folder names
     check_release_grouping.py  # Folder-first and loose-file grouping checks
     check_destination_guard.py # Canonical destination conflict checks
+    check_batch_merge.py       # Manual-confirm duplicate merge checks
     create_ugly_music_test_pack.py # Copies local audio into ugly ingest folders
     create_sample_tree.sh      # Creates empty data directory structure
   docker-compose.yml
@@ -314,6 +315,7 @@ Check the deterministic folder parser:
 backend/.venv/Scripts/python.exe scripts/check_metadata_parser.py
 backend/.venv/Scripts/python.exe scripts/check_release_grouping.py
 backend/.venv/Scripts/python.exe scripts/check_destination_guard.py
+backend/.venv/Scripts/python.exe scripts/check_batch_merge.py
 ```
 
 Create the five ugly ingest folders using existing local test audio:
@@ -337,6 +339,12 @@ conflicting embedded album tags. Files dropped directly into the music ingest
 root still use embedded artist/album grouping. Before moving, canonical
 artist/album comparison blocks obvious duplicate destinations or artist aliases
 for manual review instead of silently creating another library folder.
+
+When a manual metadata correction matches another active batch by canonical
+artist, album, compatible year, and format, the smaller batch is retained as a
+`merged` audit row and its files are reassigned to the largest batch. Confirmed
+artist aliases reuse an existing canonical library folder, while existing target
+filenames still block the move to prevent overwrites.
 
 ---
 

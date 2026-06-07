@@ -32,6 +32,7 @@ class BatchSummary(BaseModel):
     suggested_destination: str | None = None
     suggested_metadata: dict | None = None
     metadata_confirmed: bool = False
+    action_message: str | None = None
     created_at: datetime
 
     class Config:

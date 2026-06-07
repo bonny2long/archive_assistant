@@ -44,6 +44,10 @@ function readableWarning(value: string): string {
     track_artist_mismatch_detected: "Some track artist tags differ from the release folder",
     possible_duplicate_destination: "Possible duplicate destination",
     possible_artist_alias: "Possible artist alias",
+    manual_duplicate_batch_merge_performed: "Manual duplicate batch merge performed",
+    possible_artist_alias_resolved: "Artist alias resolved",
+    possible_archived_duplicate_candidate: "Matching release already archived",
+    destination_file_conflict: "Destination filename conflict",
   };
   return labels[value]
     ?? value.replace(/_/g, " ").replace(/^\w/, (letter: string) => letter.toUpperCase());

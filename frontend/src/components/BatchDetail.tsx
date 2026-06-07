@@ -37,6 +37,10 @@ const WARNING_LABELS: Record<string, string> = {
   release_folder_grouping_used: "Release folder grouping used",
   possible_duplicate_destination: "Possible duplicate destination",
   possible_artist_alias: "Possible artist alias",
+  manual_duplicate_batch_merge_performed: "Manual duplicate batch merge performed",
+  possible_artist_alias_resolved: "Artist alias resolved",
+  possible_archived_duplicate_candidate: "Matching release already archived",
+  destination_file_conflict: "Destination filename conflict",
 };
 
 function metadataWarnings(batch: IngestBatch): string[] {
@@ -102,6 +106,8 @@ function MovedBatchDetail({ batch, moveSummary }: Props) {
   const warnings = moveSummary?.moves.filter(
     (move) => move.status !== "completed" || move.error_message,
   ) ?? [];
+  const metadataWarningValues = metadataWarnings(batch);
+  const metadataAlerts = metadataAlertMessages(batch);
 
   return (
     <div className="batch-detail batch-detail--moved">
@@ -145,6 +151,23 @@ function MovedBatchDetail({ batch, moveSummary }: Props) {
         <span>Final destination</span>
         <strong>{readableLibraryPath(batch.suggested_destination)}</strong>
       </section>
+
+      {metadataWarningValues.length > 0 && (
+        <section className="metadata-warnings" aria-label="Metadata warnings">
+          <div className="metadata-warnings__list">
+            {metadataWarningValues.map((warning) => (
+              <span key={warning}><i className="ti ti-alert-triangle" />{warningLabel(warning)}</span>
+            ))}
+          </div>
+        </section>
+      )}
+      {metadataAlerts.length > 0 && (
+        <section className="metadata-alerts" aria-label="Metadata alerts">
+          {metadataAlerts.map((message) => (
+            <div key={message}><i className="ti ti-info-circle" />{message}</div>
+          ))}
+        </section>
+      )}
 
       <section className="move-log">
         <div className="move-log__header">

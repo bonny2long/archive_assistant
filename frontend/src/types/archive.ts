@@ -40,6 +40,7 @@ export type BatchSummary = {
   suggested_destination?: string | null;
   suggested_metadata?: SuggestedMetadata | null;
   metadata_confirmed: boolean;
+  action_message?: string | null;
   created_at: string;
 };
 
