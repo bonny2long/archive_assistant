@@ -124,6 +124,35 @@ export type BatchMoveSummary = {
   moves: MoveAction[];
 };
 
+export type BatchReviewTrack = {
+  position: number;
+  disc: number;
+  track?: number | null;
+  title: string;
+  source_filename: string;
+  destination_filename: string;
+  artist?: string | null;
+  album?: string | null;
+  warnings: string[];
+};
+
+export type BatchReview = {
+  batch_id: number;
+  artist?: string | null;
+  album?: string | null;
+  year?: string | null;
+  genre?: string | null;
+  format: string;
+  status: string;
+  confidence: number;
+  track_count: number;
+  disc_count: number;
+  warnings: string[];
+  source_path: string;
+  destination_preview?: string | null;
+  tracks: BatchReviewTrack[];
+};
+
 export type BatchActionResult = {
   batch_id: number;
   status: string;

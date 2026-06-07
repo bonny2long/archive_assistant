@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type {
   BatchMetadataUpdate,
   BatchMoveSummary,
+  BatchReview,
   BatchSummary,
   IngestBatch,
   LibrarySummary as LibrarySummaryData,
@@ -30,6 +31,7 @@ export default function App() {
   const [batches, setBatches] = useState<BatchSummary[]>([]);
   const [details, setDetails] = useState<Record<number, IngestBatch>>({});
   const [moveSummaries, setMoveSummaries] = useState<Record<number, BatchMoveSummary>>({});
+  const [reviews, setReviews] = useState<Record<number, BatchReview>>({});
   const [detailLoading, setDetailLoading] = useState<Set<number>>(new Set());
   const [detailErrors, setDetailErrors] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(false);
@@ -64,12 +66,14 @@ export default function App() {
       setBatches(response.items.filter((batch) => batch.status !== "merged"));
       setDetails({});
       setMoveSummaries({});
+      setReviews({});
     } catch (primaryError: unknown) {
       try {
         const fallback = await api.listPending();
         setBatches(fallback.items.filter((batch) => batch.status !== "merged"));
         setDetails({});
         setMoveSummaries({});
+        setReviews({});
       } catch {
         setError(primaryError instanceof Error ? primaryError.message : "Unable to load batches");
       }
@@ -133,8 +137,10 @@ export default function App() {
         api.getBatch(id),
         api.getBatchMoves(id),
       ]);
+      const review = await api.getBatchReview(id);
       setDetails((previous) => ({ ...previous, [id]: detail }));
       setMoveSummaries((previous) => ({ ...previous, [id]: moves }));
+      setReviews((previous) => ({ ...previous, [id]: review }));
     } catch (loadError: unknown) {
       const message = loadError instanceof Error ? loadError.message : "Unable to load batch details";
       setDetailErrors((previous) => ({ ...previous, [id]: message }));
@@ -310,6 +316,7 @@ export default function App() {
           selected={selected}
           details={details}
           moveSummaries={moveSummaries}
+          reviews={reviews}
           detailLoading={detailLoading}
           detailErrors={detailErrors}
           loading={loading}

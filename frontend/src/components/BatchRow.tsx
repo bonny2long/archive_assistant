@@ -1,10 +1,11 @@
-import type { BatchMoveSummary, BatchSummary, IngestBatch } from "../types/archive";
+import type { BatchMoveSummary, BatchReview, BatchSummary, IngestBatch } from "../types/archive";
 import BatchDetail from "./BatchDetail";
 
 type Props = {
   batch: BatchSummary;
   detail?: IngestBatch;
   moveSummary?: BatchMoveSummary;
+  review?: BatchReview;
   detailLoading: boolean;
   detailError?: string;
   index: number;
@@ -36,6 +37,7 @@ export default function BatchRow({
   batch,
   detail,
   moveSummary,
+  review,
   detailLoading,
   detailError,
   index,
@@ -134,7 +136,7 @@ export default function BatchRow({
             {detailError && (
               <div className="detail-state detail-state--error"><i className="ti ti-wifi-off" /> {detailError}</div>
             )}
-            {detail && <BatchDetail batch={detail} moveSummary={moveSummary} />}
+            {detail && <BatchDetail batch={detail} moveSummary={moveSummary} review={review} />}
           </td>
         </tr>
       )}

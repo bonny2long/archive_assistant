@@ -11,6 +11,7 @@ from app.services.music_metadata import (
     canonical_album_key,
     canonical_artist_key,
     evaluate_music_album_metadata,
+    sort_music_tracks,
 )
 
 
@@ -131,7 +132,7 @@ def find_archived_duplicate_candidate(
 def _combined_track_metadata(files: list[IngestFile]) -> tuple[list[dict], int]:
     tracks = []
     discs = set()
-    for ingest_file in files:
+    for ingest_file in sort_music_tracks(files):
         metadata = ingest_file.metadata_json or {}
         disc_number = metadata.get("discnumber", 1)
         normalized_disc = str(disc_number).split("/")[0].split(".")[0]

@@ -18,6 +18,7 @@ from app.services.music_metadata import (
     is_compilation_artist,
     metadata_mismatch_warnings,
     normalize_key,
+    sort_music_tracks,
     suggest_music_destination,
     UNKNOWN_VALUES,
 )
@@ -228,9 +229,10 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
         db.add(batch)
         db.flush()
 
+        ingest_files = []
         for path in new_paths:
             metadata = file_metadata[str(path)]
-            db.add(
+            ingest_files.append(
                 IngestFile(
                     batch_id=batch.id,
                     file_path=str(path),
@@ -242,11 +244,14 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
                     metadata_json=metadata,
                 )
             )
+        for ingest_file in sort_music_tracks(ingest_files):
+            db.add(ingest_file)
+            metadata = ingest_file.metadata_json or {}
             album_meta["tracks"].append(
                 {
-                    "title": metadata["title"],
-                    "track_number": metadata["tracknumber"],
-                    "disc_number": metadata["discnumber"],
+                    "title": metadata.get("title") or Path(ingest_file.file_name).stem,
+                    "track_number": metadata.get("tracknumber", "1"),
+                    "disc_number": metadata.get("discnumber", 1),
                 }
             )
 

@@ -50,6 +50,57 @@ def _parse_disc(value, path: Path | None = None) -> int:
     return 1
 
 
+def _positive_int(value, default: int | None = None) -> int | None:
+    match = re.search(r"\d+", str(value or ""))
+    if not match:
+        return default
+    parsed = int(match.group())
+    return parsed if parsed > 0 else default
+
+
+def music_track_numbers(
+    metadata: dict | None,
+    filename: str = "",
+) -> tuple[int, int | None]:
+    metadata = metadata or {}
+    raw_disc = metadata.get("discnumber")
+    raw_track = str(metadata.get("tracknumber") or "").strip()
+    disc = _positive_int(raw_disc, 1) or 1
+    track = None
+
+    combined = re.match(r"^\s*(\d+)\s*-\s*(\d+)", raw_track)
+    if combined:
+        if raw_disc in (None, "", "Unknown"):
+            disc = int(combined.group(1))
+        track = int(combined.group(2))
+    else:
+        track = _positive_int(raw_track)
+
+    filename_combined = re.match(r"^\s*(\d+)\s*-\s*(\d+)\b", filename)
+    filename_track = re.match(r"^\s*(\d+)\b", filename)
+    if filename_combined:
+        if raw_disc in (None, "", "Unknown"):
+            disc = int(filename_combined.group(1))
+        if track is None:
+            track = int(filename_combined.group(2))
+    elif track is None and filename_track:
+        track = int(filename_track.group(1))
+
+    return disc, track
+
+
+def music_track_sort_key(file) -> tuple[int, int, str, int]:
+    metadata = getattr(file, "metadata_json", None) or {}
+    filename = str(getattr(file, "file_name", "") or "")
+    disc, track = music_track_numbers(metadata, filename)
+    stable_id = int(getattr(file, "id", 0) or 0)
+    return disc, track if track is not None else 1_000_000, filename.lower(), stable_id
+
+
+def sort_music_tracks(files: list) -> list:
+    return sorted(files, key=music_track_sort_key)
+
+
 def normalize_key(value: str) -> str:
     return re.sub(r"\s+", " ", str(value).strip().lower())
 
@@ -324,10 +375,17 @@ def suggest_music_destination(metadata: dict, flac_root: Path, mp3_root: Path) -
     return root / artist / folder
 
 
-def music_track_filename(metadata: dict, extension: str, disc_count: int) -> str:
-    title = "".join(c if c not in '<>:"/\\|?*' else "_" for c in metadata["title"])
-    track = int(str(metadata.get("tracknumber", "1")).split("/")[0])
-    disc = int(metadata.get("discnumber", 1))
+def music_track_filename(
+    metadata: dict,
+    extension: str,
+    disc_count: int,
+    source_filename: str = "",
+) -> str:
+    fallback_title = Path(source_filename).stem or "Unknown Track"
+    title_value = str(metadata.get("title") or fallback_title)
+    title = "".join(c if c not in '<>:"/\\|?*' else "_" for c in title_value)
+    disc, parsed_track = music_track_numbers(metadata, source_filename)
+    track = parsed_track or 1
     if disc_count > 1:
         return f"{disc}-{track:02d} - {title}{extension}"
     return f"{track:02d} - {title}{extension}"

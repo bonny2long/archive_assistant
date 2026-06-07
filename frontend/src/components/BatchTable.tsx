@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { BatchMoveSummary, BatchSummary, IngestBatch } from "../types/archive";
+import type { BatchMoveSummary, BatchReview, BatchSummary, IngestBatch } from "../types/archive";
 import BatchRow from "./BatchRow";
 
 type Props = {
@@ -7,6 +7,7 @@ type Props = {
   selected: Set<number>;
   details: Record<number, IngestBatch>;
   moveSummaries: Record<number, BatchMoveSummary>;
+  reviews: Record<number, BatchReview>;
   detailLoading: Set<number>;
   detailErrors: Record<number, string>;
   loading?: boolean;
@@ -28,6 +29,7 @@ export default function BatchTable({
   selected,
   details,
   moveSummaries,
+  reviews,
   detailLoading,
   detailErrors,
   loading,
@@ -117,6 +119,7 @@ export default function BatchTable({
                 batch={batch}
                 detail={details[batch.id]}
                 moveSummary={moveSummaries[batch.id]}
+                review={reviews[batch.id]}
                 detailLoading={detailLoading.has(batch.id)}
                 detailError={detailErrors[batch.id]}
                 index={index + 1}

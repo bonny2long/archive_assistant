@@ -8,6 +8,8 @@ from app.schemas.archive import (
     ApproveResponse, 
     BatchMoveSummary,
     BatchMetadataUpdate,
+    BatchReview,
+    BatchReviewTrack,
     BatchSummary, 
     DevResetResponse,
     IngestBatchOut, 
@@ -24,7 +26,16 @@ from app.services.batch_merge import (
     find_merge_candidate_batches,
     merge_music_batches,
 )
-from app.services.music_metadata import evaluate_music_album_metadata, suggest_music_destination
+from app.services.music_metadata import (
+    canonical_album_key,
+    canonical_artist_key,
+    evaluate_music_album_metadata,
+    is_compilation_artist,
+    music_track_filename,
+    music_track_numbers,
+    sort_music_tracks,
+    suggest_music_destination,
+)
 from app.services.scanner import scan_music_ingest
 from app.services.mover import move_approved_batches
 from app.core.config import settings
@@ -125,12 +136,107 @@ def get_batch(batch_id: int, db: Session = Depends(get_db)):
     )
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
+    batch.files = sort_music_tracks(batch.files)
     return batch
+
+
+@router.get("/batches/{batch_id}/review", response_model=BatchReview)
+def get_batch_review(batch_id: int, db: Session = Depends(get_db)):
+    batch = (
+        db.query(IngestBatch)
+        .options(selectinload(IngestBatch.files))
+        .filter(IngestBatch.id == batch_id)
+        .first()
+    )
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+
+    metadata = batch.metadata_json or {}
+    artist = str(metadata.get("artist") or metadata.get("albumartist") or "") or None
+    album = str(metadata.get("album") or "") or None
+    year = str(metadata.get("year") or metadata.get("date") or "")[:4] or None
+    genre = str(metadata.get("genre") or "") or None
+    format_bucket = str(metadata.get("format") or "MP3").upper()
+    ordered_files = sort_music_tracks(batch.files)
+    parsed_discs = [
+        music_track_numbers(item.metadata_json or {}, item.file_name)[0]
+        for item in ordered_files
+    ]
+    disc_count = max(parsed_discs, default=1)
+    expected_artist_key = canonical_artist_key(artist or "")
+    expected_album_key = canonical_album_key(album or "")
+    compilation = is_compilation_artist(artist)
+
+    tracks = []
+    for position, ingest_file in enumerate(ordered_files, start=1):
+        track_metadata = ingest_file.metadata_json or {}
+        disc, track = music_track_numbers(track_metadata, ingest_file.file_name)
+        track_artist = str(
+            track_metadata.get("albumartist")
+            or track_metadata.get("artist")
+            or ""
+        ) or None
+        track_album = str(track_metadata.get("album") or "") or None
+        warnings = []
+        if (
+            expected_album_key
+            and track_album
+            and canonical_album_key(track_album) != expected_album_key
+        ):
+            warnings.append("album_tag_mismatch")
+        if (
+            not compilation
+            and expected_artist_key
+            and track_artist
+            and canonical_artist_key(track_artist) != expected_artist_key
+        ):
+            warnings.append("artist_tag_mismatch")
+
+        tracks.append(
+            BatchReviewTrack(
+                position=position,
+                disc=disc,
+                track=track,
+                title=str(
+                    track_metadata.get("title")
+                    or Path(ingest_file.file_name).stem
+                ),
+                source_filename=ingest_file.file_name,
+                destination_filename=music_track_filename(
+                    track_metadata,
+                    ingest_file.extension,
+                    disc_count,
+                    ingest_file.file_name,
+                ),
+                artist=track_artist,
+                album=track_album,
+                warnings=warnings,
+            )
+        )
+
+    return BatchReview(
+        batch_id=batch.id,
+        artist=artist,
+        album=album,
+        year=year,
+        genre=genre,
+        format=format_bucket,
+        status=batch.status,
+        confidence=batch.confidence,
+        track_count=len(tracks),
+        disc_count=disc_count,
+        warnings=list(metadata.get("metadata_warnings", [])),
+        source_path=batch.source_path,
+        destination_preview=batch.suggested_destination,
+        tracks=tracks,
+    )
 
 
 @router.get("/batches/{batch_id}/files", response_model=list[IngestFileOut])
 def get_batch_files(batch_id: int, db: Session = Depends(get_db)):
-    files = db.query(IngestFile).filter(IngestFile.batch_id == batch_id).all()
+    files = sort_music_tracks(
+        db.query(IngestFile).filter(IngestFile.batch_id == batch_id).all()
+    )
     if not files and not db.get(IngestBatch, batch_id):
         raise HTTPException(status_code=404, detail="Batch not found")
     return files

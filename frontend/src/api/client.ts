@@ -3,6 +3,7 @@ import type {
   BatchActionResult,
   BatchMetadataUpdate,
   BatchMoveSummary,
+  BatchReview,
   DevResetResponse,
   HealthResponse,
   IngestBatch,
@@ -33,6 +34,7 @@ export const api = {
   listBatches: () => request<PaginatedResponse<BatchSummary>>("/batches?page_size=100"),
   listPending: () => request<PaginatedResponse<BatchSummary>>("/batches/pending?page_size=100"),
   getBatch: (id: number) => request<IngestBatch>(`/batches/${id}`),
+  getBatchReview: (id: number) => request<BatchReview>(`/batches/${id}/review`),
   getBatchMoves: (id: number) => request<BatchMoveSummary>(`/batches/${id}/moves`),
   updateBatchMetadata: (id: number, update: BatchMetadataUpdate) =>
     request<BatchSummary>(`/batches/${id}/metadata`, "PATCH", update),

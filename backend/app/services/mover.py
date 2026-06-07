@@ -9,6 +9,7 @@ from app.services.music_metadata import (
     canonical_album_key,
     canonical_artist_key,
     music_track_filename,
+    sort_music_tracks,
 )
 
 
@@ -141,9 +142,14 @@ def _destination_filename_conflicts(
 ) -> list[str]:
     conflicts = []
     planned_names = set()
-    for ingest_file in batch.files:
+    for ingest_file in sort_music_tracks(batch.files):
         metadata = ingest_file.metadata_json or {}
-        name = music_track_filename(metadata, ingest_file.extension, disc_count)
+        name = music_track_filename(
+            metadata,
+            ingest_file.extension,
+            disc_count,
+            ingest_file.file_name,
+        )
         if name in planned_names:
             conflicts.append(f"Duplicate planned filename: {name}")
         planned_names.add(name)
@@ -331,14 +337,20 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
 
             destination_dir.mkdir(parents=True, exist_ok=True)
 
-            for ingest_file in batch.files:
+            ordered_files = sort_music_tracks(batch.files)
+            for ingest_file in ordered_files:
                 source = Path(ingest_file.file_path)
                 if not source.exists():
                     failed_files.append(f"Source not found: {source}")
                     continue
 
                 meta = ingest_file.metadata_json or {}
-                new_name = music_track_filename(meta, ingest_file.extension, disc_count)
+                new_name = music_track_filename(
+                    meta,
+                    ingest_file.extension,
+                    disc_count,
+                    ingest_file.file_name,
+                )
                 destination_file = destination_dir / new_name
 
                 action = MoveAction(
@@ -412,7 +424,9 @@ def _write_move_log(batch: IngestBatch, album_meta: dict, moved_files: list[str]
                 "batch_id": batch.id,
                 "media_type": "music_album",
                 "track_count": album_meta.get("track_count", len(moved_files)),
-                "source_paths": [str(f.file_path) for f in batch.files],
+                "source_paths": [
+                    str(f.file_path) for f in sort_music_tracks(batch.files)
+                ],
                 "destination_path": str(destination_dir),
                 "moved_files": moved_files,
                 "failed_files": failed_files,

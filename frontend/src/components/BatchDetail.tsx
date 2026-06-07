@@ -1,9 +1,10 @@
 import { useState } from "react";
-import type { BatchMoveSummary, IngestBatch } from "../types/archive";
+import type { BatchMoveSummary, BatchReview, IngestBatch } from "../types/archive";
 
 type Props = {
   batch: IngestBatch;
   moveSummary?: BatchMoveSummary;
+  review?: BatchReview;
 };
 
 function formatDate(value?: string | null): string {
@@ -41,6 +42,8 @@ const WARNING_LABELS: Record<string, string> = {
   possible_artist_alias_resolved: "Artist alias resolved",
   possible_archived_duplicate_candidate: "Matching release already archived",
   destination_file_conflict: "Destination filename conflict",
+  album_tag_mismatch: "Album tag mismatch",
+  artist_tag_mismatch: "Artist tag mismatch",
 };
 
 function metadataWarnings(batch: IngestBatch): string[] {
@@ -73,7 +76,7 @@ function warningLabel(warning: string): string {
     ?? warning.replace(/_/g, " ").replace(/^\w/, (value: string) => value.toUpperCase());
 }
 
-function DebugDetails({ batch, moveSummary }: Props) {
+function DebugDetails({ batch, moveSummary, review }: Props) {
   const [showJson, setShowJson] = useState(false);
 
   return (
@@ -89,10 +92,124 @@ function DebugDetails({ batch, moveSummary }: Props) {
             <div className="batch-detail__value batch-detail__path">{batch.source_path}</div>
           </div>
           <pre className="batch-detail__debug">
-            {JSON.stringify({ batch, move_summary: moveSummary }, null, 2)}
+            {JSON.stringify({ batch, review, move_summary: moveSummary }, null, 2)}
           </pre>
         </div>
       )}
+    </div>
+  );
+}
+
+function ReviewBatchDetail({ batch, moveSummary, review }: Props) {
+  const warnings = review?.warnings ?? metadataWarnings(batch);
+  const alerts = metadataAlertMessages(batch);
+  const destination = review?.destination_preview ?? batch.suggested_destination;
+
+  return (
+    <div className="batch-detail batch-detail--review">
+      <div className="library-status">
+        <div className="library-status__icon"><i className="ti ti-clipboard-check" /></div>
+        <div>
+          <div className="library-status__eyebrow">Library status</div>
+          <h2>Ready for review</h2>
+          <p>{review?.artist ?? metadataValue(batch, "artist")} · {review?.album ?? metadataValue(batch, "album")}</p>
+        </div>
+        <div className="library-status__facts">
+          <span>{Math.round(batch.confidence * 100)}% confidence</span>
+          <span>{batch.metadata_confirmed ? "Metadata confirmed" : "Review before approval"}</span>
+        </div>
+      </div>
+
+      <div className="library-detail__grid">
+        <section className="library-card">
+          <h3>Album</h3>
+          <dl className="library-fields">
+            <div><dt>Artist</dt><dd>{review?.artist ?? metadataValue(batch, "artist")}</dd></div>
+            <div><dt>Album</dt><dd>{review?.album ?? metadataValue(batch, "album")}</dd></div>
+            <div><dt>Year</dt><dd>{review?.year ?? metadataValue(batch, "year")}</dd></div>
+            <div><dt>Genre</dt><dd>{review?.genre ?? metadataValue(batch, "genre")}</dd></div>
+            <div><dt>Format</dt><dd>{review?.format ?? metadataValue(batch, "format")}</dd></div>
+            <div><dt>Tracks</dt><dd>{review?.track_count ?? batch.files.length}</dd></div>
+          </dl>
+        </section>
+        <section className="library-card">
+          <h3>Source</h3>
+          <dl className="library-fields library-fields--single">
+            <div><dt>Folder</dt><dd>{review?.source_path ?? batch.source_path}</dd></div>
+            <div><dt>Discs</dt><dd>{review?.disc_count ?? metadataValue(batch, "disc_count")}</dd></div>
+            <div><dt>Status</dt><dd>{review?.status ?? batch.status}</dd></div>
+          </dl>
+        </section>
+      </div>
+
+      {warnings.length > 0 && (
+        <section className="metadata-warnings" aria-label="Metadata warnings">
+          <div className="batch-detail__label">Warnings</div>
+          <div className="metadata-warnings__list">
+            {warnings.map((warning) => (
+              <span key={warning}><i className="ti ti-alert-triangle" />{warningLabel(warning)}</span>
+            ))}
+          </div>
+        </section>
+      )}
+      {alerts.length > 0 && (
+        <section className="metadata-alerts" aria-label="Metadata alerts">
+          {alerts.map((message) => (
+            <div key={message}><i className="ti ti-info-circle" />{message}</div>
+          ))}
+        </section>
+      )}
+
+      <section className="library-destination">
+        <span>Destination preview</span>
+        <strong>{readableLibraryPath(destination)}</strong>
+      </section>
+
+      {review?.tracks.length ? (
+        <section className="track-preview">
+          <div className="track-preview__header">
+            <h3>Track preview</h3>
+            <span>{review.tracks.length} track(s)</span>
+          </div>
+          <div className="track-preview__table">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Disc</th>
+                  <th>Track</th>
+                  <th>Title / source</th>
+                  <th>Destination filename</th>
+                  <th>Warn</th>
+                </tr>
+              </thead>
+              <tbody>
+                {review.tracks.map((track) => (
+                  <tr key={`${track.position}-${track.source_filename}`}>
+                    <td>{track.position}</td>
+                    <td>{track.disc}</td>
+                    <td>{track.track ?? "-"}</td>
+                    <td>
+                      <strong>{track.title}</strong>
+                      <small>{track.source_filename}</small>
+                    </td>
+                    <td>{track.destination_filename}</td>
+                    <td>
+                      {track.warnings.length ? (
+                        <span className="track-preview__warning" title={track.warnings.map(warningLabel).join(", ")}>
+                          <i className="ti ti-alert-triangle" />
+                        </span>
+                      ) : "-"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
+
+      <DebugDetails batch={batch} moveSummary={moveSummary} review={review} />
     </div>
   );
 }
@@ -202,9 +319,13 @@ function MovedBatchDetail({ batch, moveSummary }: Props) {
   );
 }
 
-export default function BatchDetail({ batch, moveSummary }: Props) {
+export default function BatchDetail({ batch, moveSummary, review }: Props) {
   if (batch.status === "moved") {
     return <MovedBatchDetail batch={batch} moveSummary={moveSummary} />;
+  }
+
+  if (batch.status === "pending_review" || batch.status === "needs_metadata_review" || batch.status === "approved") {
+    return <ReviewBatchDetail batch={batch} moveSummary={moveSummary} review={review} />;
   }
 
   const warnings = metadataWarnings(batch);

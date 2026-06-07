@@ -126,3 +126,32 @@ class BatchMoveSummary(BaseModel):
     completed: int
     failed: int
     moves: list[MoveActionOut]
+
+
+class BatchReviewTrack(BaseModel):
+    position: int
+    disc: int
+    track: int | None = None
+    title: str
+    source_filename: str
+    destination_filename: str
+    artist: str | None = None
+    album: str | None = None
+    warnings: list[str] = Field(default_factory=list)
+
+
+class BatchReview(BaseModel):
+    batch_id: int
+    artist: str | None = None
+    album: str | None = None
+    year: str | None = None
+    genre: str | None = None
+    format: str
+    status: str
+    confidence: float
+    track_count: int
+    disc_count: int
+    warnings: list[str]
+    source_path: str
+    destination_preview: str | None = None
+    tracks: list[BatchReviewTrack]
