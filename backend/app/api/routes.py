@@ -6,6 +6,9 @@ from app.db.session import get_db
 from app.models.archive import ArchiveItem, IngestBatch, IngestFile, MoveAction
 from app.schemas.archive import (
     ApproveResponse, 
+    BulkApproveError,
+    BulkApproveRequest,
+    BulkApproveResponse,
     BatchMoveSummary,
     BatchMetadataUpdate,
     BatchReview,
@@ -41,6 +44,13 @@ from app.services.mover import move_approved_batches
 from app.core.config import settings
 
 router = APIRouter(prefix="/api")
+
+BLOCKING_APPROVAL_WARNINGS = {
+    "possible_duplicate_destination",
+    "possible_artist_alias",
+    "possible_archived_duplicate_candidate",
+    "destination_file_conflict",
+}
 
 
 @router.get("/health")
@@ -411,6 +421,15 @@ def approve_batch(batch_id: int, db: Session = Depends(get_db)):
             metadata_quality=meta.get("metadata_quality"),
             metadata_warnings=meta.get("metadata_warnings", [])
         )
+    blocking_warnings = set(meta.get("metadata_warnings", [])) & BLOCKING_APPROVAL_WARNINGS
+    if blocking_warnings:
+        return ApproveResponse(
+            batch_id=batch.id,
+            status=batch.status,
+            message="Batch has a blocking warning that must be resolved before approval.",
+            metadata_quality=meta.get("metadata_quality"),
+            metadata_warnings=sorted(blocking_warnings),
+        )
 
     if batch.status != "pending_review":
         raise HTTPException(status_code=400, detail=f"Cannot approve batch with status {batch.status}")
@@ -423,11 +442,69 @@ def approve_batch(batch_id: int, db: Session = Depends(get_db)):
     return ApproveResponse(batch_id=batch.id, status=batch.status, message="Batch approved")
 
 
+@router.post("/batches/approve-selected", response_model=BulkApproveResponse)
+def approve_selected_batches(
+    request: BulkApproveRequest,
+    db: Session = Depends(get_db),
+):
+    approved = []
+    skipped = []
+    errors = []
+    batches = {
+        batch.id: batch
+        for batch in db.query(IngestBatch)
+        .filter(IngestBatch.id.in_(set(request.batch_ids)))
+        .all()
+    }
+
+    for batch_id in dict.fromkeys(request.batch_ids):
+        batch = batches.get(batch_id)
+        if not batch:
+            skipped.append(batch_id)
+            errors.append(BulkApproveError(batch_id=batch_id, reason="not_found"))
+            continue
+
+        metadata = batch.metadata_json or {}
+        quality = metadata.get("metadata_quality", "weak")
+        warnings = set(metadata.get("metadata_warnings", []))
+        if batch.status in {"needs_metadata_review", "metadata_recovery"} or quality in {
+            "weak",
+            "broken",
+        }:
+            reason = "metadata_not_confirmed"
+        elif warnings & BLOCKING_APPROVAL_WARNINGS:
+            reason = "blocking_warning"
+        elif batch.status != "pending_review":
+            reason = f"invalid_status:{batch.status}"
+        else:
+            batch.status = "approved"
+            batch.approved_at = datetime.utcnow()
+            batch.approved_by = "bonny-local"
+            batch.updated_at = datetime.utcnow()
+            approved.append(batch_id)
+            continue
+
+        skipped.append(batch_id)
+        errors.append(BulkApproveError(batch_id=batch_id, reason=reason))
+
+    db.commit()
+    return BulkApproveResponse(
+        approved=approved,
+        skipped=skipped,
+        errors=errors,
+    )
+
+
 @router.post("/batches/{batch_id}/reject", response_model=ApproveResponse)
 def reject_batch(batch_id: int, db: Session = Depends(get_db)):
     batch = db.get(IngestBatch, batch_id)
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
+    if batch.status in {"moved", "merged"}:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot reject batch with status {batch.status}",
+        )
     batch.status = "rejected"
     batch.updated_at = datetime.utcnow()
     db.commit()

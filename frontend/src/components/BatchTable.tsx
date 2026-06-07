@@ -2,6 +2,13 @@ import { useState } from "react";
 import type { BatchMoveSummary, BatchReview, BatchSummary, IngestBatch } from "../types/archive";
 import BatchRow from "./BatchRow";
 
+const BLOCKING_APPROVAL_WARNINGS = new Set([
+  "possible_duplicate_destination",
+  "possible_artist_alias",
+  "possible_archived_duplicate_candidate",
+  "destination_file_conflict",
+]);
+
 type Props = {
   batches: BatchSummary[];
   selected: Set<number>;
@@ -47,6 +54,16 @@ export default function BatchTable({
 }: Props) {
   const [expanded, setExpanded] = useState<number | null>(null);
   const allChecked = batches.length > 0 && batches.every((batch) => selected.has(batch.id));
+  const selectedBatches = batches.filter((batch) => selected.has(batch.id));
+  const approvableCount = selectedBatches.filter(
+    (batch) => batch.status === "pending_review"
+      && !batch.metadata_warnings.some(
+        (warning) => BLOCKING_APPROVAL_WARNINGS.has(warning),
+      ),
+  ).length;
+  const rejectableCount = selectedBatches.filter(
+    (batch) => batch.status !== "moved",
+  ).length;
 
   const handleToggle = (id: number) => {
     if (expanded === id) {
@@ -61,13 +78,20 @@ export default function BatchTable({
     <div className="batch-table-wrap">
       {selected.size > 0 && (
         <div className="selection-bar">
-          <span>{selected.size} selected</span>
-          <button className="btn btn--compact" disabled={bulkLoading} onClick={() => void onBulkApprove()}>
-            <i className={`ti ti-${bulkLoading ? "loader-2 spinner" : "check"}`} /> Approve selected
-          </button>
-          <button className="btn btn--compact" disabled={bulkLoading} onClick={() => void onBulkReject()}>
-            <i className="ti ti-x" /> Reject selected
-          </button>
+          <span>
+            {selected.size} selected
+            {approvableCount !== selected.size && ` · ${approvableCount} ready to approve`}
+          </span>
+          {approvableCount > 0 && (
+            <button className="btn btn--compact" disabled={bulkLoading} onClick={() => void onBulkApprove()}>
+              <i className={`ti ti-${bulkLoading ? "loader-2 spinner" : "check"}`} /> Approve selected
+            </button>
+          )}
+          {rejectableCount > 0 && (
+            <button className="btn btn--compact" disabled={bulkLoading} onClick={() => void onBulkReject()}>
+              <i className="ti ti-x" /> Reject selected
+            </button>
+          )}
           <button className="btn btn--compact" disabled={bulkLoading} onClick={() => onSelectAll(false)}>
             Clear
           </button>

@@ -218,6 +218,7 @@ archive-assistant-scaffold/
     check_destination_guard.py # Canonical destination conflict checks
     check_batch_merge.py       # Manual-confirm duplicate merge checks
     check_track_order.py       # Canonical track sorting and filename checks
+    check_bulk_approve.py      # Safe bulk approval skip-reason checks
     create_ugly_music_test_pack.py # Copies local audio into ugly ingest folders
     create_sample_tree.sh      # Creates empty data directory structure
   docker-compose.yml
@@ -318,6 +319,7 @@ backend/.venv/Scripts/python.exe scripts/check_release_grouping.py
 backend/.venv/Scripts/python.exe scripts/check_destination_guard.py
 backend/.venv/Scripts/python.exe scripts/check_batch_merge.py
 backend/.venv/Scripts/python.exe scripts/check_track_order.py
+backend/.venv/Scripts/python.exe scripts/check_bulk_approve.py
 ```
 
 Create the five ugly ingest folders using existing local test audio:

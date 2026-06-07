@@ -147,6 +147,23 @@ button:focus-visible, input:focus-visible {
   font-size: 10px;
 }
 .library-summary__pending + .library-summary__pending { margin-left: 0; }
+.qa-summary {
+  display: grid;
+  gap: 3px;
+  padding: 0.75rem 1rem;
+  border: 1px solid rgba(59,130,246,0.18);
+  border-radius: var(--radius-md);
+  background: rgba(59,130,246,0.06);
+}
+.qa-summary div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+.qa-summary strong { color: var(--accent-blue); font-size: 12px; }
+.qa-summary span,
+.qa-summary small { color: var(--text-secondary); font-size: 12px; }
 
 /* Tabs */
 .status-tabs {
@@ -518,13 +535,60 @@ button:focus-visible, input:focus-visible {
   background: rgba(4, 7, 12, 0.78);
   backdrop-filter: blur(4px);
 }
-.metadata-editor {
+.metadata-editor,
+.confirm-modal {
   width: min(520px, 100%);
   padding: 1.25rem;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
   background: var(--bg-surface);
   box-shadow: 0 20px 60px rgba(0,0,0,0.55);
+}
+.confirm-modal { width: min(560px, 100%); }
+.confirm-modal__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.confirm-modal__header h2 { font-size: 18px; }
+.confirm-modal__header p { margin-top: 3px; color: var(--text-secondary); font-size: 12px; }
+.confirm-modal__list {
+  display: grid;
+  gap: 0.45rem;
+  max-height: 260px;
+  overflow: auto;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-page);
+}
+.confirm-modal__list div {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 0.5rem;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.confirm-modal__list i { color: var(--accent-blue); }
+.confirm-modal__list strong,
+.confirm-modal__list small { display: block; }
+.confirm-modal__list small {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.confirm-modal__warning {
+  margin-top: 0.75rem;
+  color: var(--accent-amber);
+  font-size: 12px;
+}
+.confirm-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
 }
 .metadata-editor__header {
   display: flex;

@@ -77,6 +77,22 @@ class ApproveResponse(BaseModel):
     metadata_quality: str | None = None
     metadata_warnings: list[str] | None = None
 
+
+class BulkApproveRequest(BaseModel):
+    batch_ids: list[int] = Field(min_length=1, max_length=100)
+
+
+class BulkApproveError(BaseModel):
+    batch_id: int
+    reason: str
+
+
+class BulkApproveResponse(BaseModel):
+    approved: list[int]
+    skipped: list[int]
+    errors: list[BulkApproveError]
+
+
 class MoveResponse(BaseModel):
     moved: int
     errors: list[str]

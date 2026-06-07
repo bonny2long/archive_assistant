@@ -15,9 +15,15 @@ import StatusTabs from "./components/StatusTabs";
 import Toast from "./components/Toast";
 import MetadataEditor from "./components/MetadataEditor";
 import LibrarySummary from "./components/LibrarySummary";
+import BulkApproveModal from "./components/BulkApproveModal";
 
 type ToastState = { msg: string; type: "info" | "error" };
 type ActionKey = "refresh" | "scan" | "move" | "reset";
+type QaSummary = {
+  title: string;
+  text: string;
+  warnings?: string;
+};
 
 const EMPTY_LIBRARY_SUMMARY: LibrarySummaryData = {
   moved_albums: 0,
@@ -36,6 +42,7 @@ export default function App() {
   const [detailErrors, setDetailErrors] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [showBulkApprove, setShowBulkApprove] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>("all");
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -45,6 +52,7 @@ export default function App() {
   const [savingMetadata, setSavingMetadata] = useState(false);
   const [devToolsEnabled, setDevToolsEnabled] = useState(false);
   const [librarySummary, setLibrarySummary] = useState<LibrarySummaryData>(EMPTY_LIBRARY_SUMMARY);
+  const [qaSummary, setQaSummary] = useState<QaSummary | null>(null);
 
   const showToast = useCallback((msg: string, type: ToastState["type"] = "info") => {
     setToast({ msg, type });
@@ -58,24 +66,29 @@ export default function App() {
     }
   }, []);
 
-  const loadBatches = useCallback(async () => {
+  const loadBatches = useCallback(async (): Promise<BatchSummary[]> => {
     setLoading(true);
     setError(null);
     try {
       const response = await api.listBatches();
-      setBatches(response.items.filter((batch) => batch.status !== "merged"));
+      const items = response.items.filter((batch) => batch.status !== "merged");
+      setBatches(items);
       setDetails({});
       setMoveSummaries({});
       setReviews({});
+      return items;
     } catch (primaryError: unknown) {
       try {
         const fallback = await api.listPending();
-        setBatches(fallback.items.filter((batch) => batch.status !== "merged"));
+        const items = fallback.items.filter((batch) => batch.status !== "merged");
+        setBatches(items);
         setDetails({});
         setMoveSummaries({});
         setReviews({});
+        return items;
       } catch {
         setError(primaryError instanceof Error ? primaryError.message : "Unable to load batches");
+        return [];
       }
     } finally {
       await loadLibrarySummary();
@@ -123,6 +136,8 @@ export default function App() {
   const handleSelectAll = (checked: boolean) => {
     setSelected(checked ? new Set(filtered.map((batch) => batch.id)) : new Set());
   };
+
+  const selectedBatches = batches.filter((batch) => selected.has(batch.id));
 
   const handleLoadDetail = async (id: number) => {
     if (details[id] || detailLoading.has(id)) return;
@@ -205,21 +220,48 @@ export default function App() {
     }
   };
 
-  const runBulkAction = async (action: "approve" | "reject") => {
+  const runBulkApprove = async () => {
     const ids = [...selected];
     if (ids.length === 0) return;
     setBulkLoading(true);
     try {
-      const results = await Promise.allSettled(ids.map((id) => (
-        action === "approve" ? api.approveBatch(id) : api.rejectBatch(id)
-      )));
-      const failures = results.filter((result) => (
-        result.status === "rejected"
-        || (action === "approve" && result.status === "fulfilled" && result.value.status !== "approved")
-      )).length;
-      const completed = ids.length - failures;
+      const result = await api.approveSelected(ids);
+      const skippedMetadata = result.errors.filter(
+        (error) => error.reason === "metadata_not_confirmed",
+      ).length;
+      const skippedOther = result.skipped.length - skippedMetadata;
+      const parts = [`Approved ${result.approved.length} batch(es).`];
+      if (skippedMetadata) parts.push(`Skipped ${skippedMetadata} that need metadata.`);
+      if (skippedOther) parts.push(`Skipped ${skippedOther} blocked or invalid batch(es).`);
+      showToast(parts.join(" "), result.skipped.length ? "error" : "info");
+      setSelected(new Set());
+      setShowBulkApprove(false);
+      await loadBatches();
+    } catch (bulkError: unknown) {
       showToast(
-        `${completed} batch(es) ${action === "approve" ? "approved" : "rejected"}${failures ? `, ${failures} failed` : ""}`,
+        bulkError instanceof Error ? bulkError.message : "Bulk approval failed",
+        "error",
+      );
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  const runBulkReject = async () => {
+    const ids = selectedBatches
+      .filter((batch) => batch.status !== "moved")
+      .map((batch) => batch.id);
+    if (ids.length === 0) return;
+    if (!window.confirm(`Reject ${ids.length} selected batch(es)? No files will be deleted.`)) {
+      return;
+    }
+    setBulkLoading(true);
+    try {
+      const results = await Promise.allSettled(ids.map((id) => api.rejectBatch(id)));
+      const completed = results.filter((result) => result.status === "fulfilled").length;
+      const failures = results.length - completed;
+      showToast(
+        `Rejected ${completed} batch(es).${failures ? ` ${failures} failed.` : ""}`,
         failures ? "error" : "info",
       );
       setSelected(new Set());
@@ -242,10 +284,14 @@ export default function App() {
     setLoadingAction("scan");
     try {
       const result = await api.scanMusic();
-      showToast(
-        `Scan complete - ${result.created} new, ${result.skipped_duplicates} skipped duplicate(s)`,
-      );
-      await loadBatches();
+      const items = await loadBatches();
+      const warnings = items.flatMap((batch) => batch.metadata_warnings);
+      setQaSummary({
+        title: "Scan summary",
+        text: `${items.length} albums · ${items.reduce((sum, batch) => sum + batch.track_count, 0)} tracks · ${items.filter((batch) => batch.status === "needs_metadata_review").length} needs metadata · ${items.filter((batch) => batch.status === "move_failed").length} failed`,
+        warnings: `${warnings.filter((warning) => warning === "release_folder_grouping_used").length} release-folder grouping used · ${warnings.filter((warning) => warning === "manual_duplicate_batch_merge_performed").length} manual duplicate merge performed`,
+      });
+      showToast(`Scan complete - ${result.created} new, ${result.skipped_duplicates} skipped duplicate(s)`);
     } catch {
       showToast("Scan failed", "error");
     } finally {
@@ -264,6 +310,10 @@ export default function App() {
     try {
       const result = await api.resetMusicTest();
       showToast(result.message);
+      setQaSummary({
+        title: "Reset summary",
+        text: `${result.restored_tracks} tracks restored · ${result.cleared_batches} batches cleared · ${result.removed_move_logs} move logs removed`,
+      });
       setTab("all");
       setSelected(new Set());
       await loadBatches();
@@ -284,6 +334,12 @@ export default function App() {
       const errors = result.errors.length ? ` - ${result.errors.join(" | ")}` : "";
       showToast(`Moved ${result.moved} batch(es)${errors}`, result.errors.length ? "error" : "info");
       await loadBatches();
+      const summary = await api.getLibrarySummary();
+      setLibrarySummary(summary);
+      setQaSummary({
+        title: "Move summary",
+        text: `${summary.moved_albums} albums moved · ${summary.moved_tracks} tracks · ${summary.failed_moves} failed moves`,
+      });
     } catch {
       showToast("Move failed", "error");
     } finally {
@@ -303,6 +359,15 @@ export default function App() {
       />
       <div className="app-content">
         <LibrarySummary summary={librarySummary} />
+        {qaSummary && (
+          <section className="qa-summary">
+            <div>
+              <strong>{qaSummary.title}</strong>
+              <span>{qaSummary.text}</span>
+            </div>
+            {qaSummary.warnings && <small>Warnings: {qaSummary.warnings}</small>}
+          </section>
+        )}
         <StatusTabs
           active={tab}
           counts={counts}
@@ -329,8 +394,11 @@ export default function App() {
           onReject={(id) => void handleReject(id)}
           onRecovery={(id) => void handleRecovery(id)}
           onEdit={setEditingBatch}
-          onBulkApprove={() => runBulkAction("approve")}
-          onBulkReject={() => runBulkAction("reject")}
+          onBulkApprove={() => {
+            setShowBulkApprove(true);
+            return Promise.resolve();
+          }}
+          onBulkReject={runBulkReject}
         />
       </div>
       {toast && (
@@ -348,6 +416,16 @@ export default function App() {
           onSave={handleMetadataSave}
           onClose={() => {
             if (!savingMetadata) setEditingBatch(null);
+          }}
+        />
+      )}
+      {showBulkApprove && (
+        <BulkApproveModal
+          batches={selectedBatches}
+          loading={bulkLoading}
+          onConfirm={() => void runBulkApprove()}
+          onClose={() => {
+            if (!bulkLoading) setShowBulkApprove(false);
           }}
         />
       )}

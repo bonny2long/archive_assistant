@@ -161,4 +161,15 @@ export type BatchActionResult = {
   metadata_warnings?: string[] | null;
 };
 
+export type BulkApproveError = {
+  batch_id: number;
+  reason: string;
+};
+
+export type BulkApproveResult = {
+  approved: number[];
+  skipped: number[];
+  errors: BulkApproveError[];
+};
+
 export type TabKey = "all" | "pending" | "needs_metadata" | "approved" | "moved";
