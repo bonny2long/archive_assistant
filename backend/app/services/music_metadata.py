@@ -54,6 +54,27 @@ def normalize_key(value: str) -> str:
     return re.sub(r"\s+", " ", str(value).strip().lower())
 
 
+def canonical_text_key(value: str) -> str:
+    """Normalize text for duplicate comparison, not display."""
+    normalized = str(value or "").lower().replace("_", " ")
+    normalized = re.sub(r"['’]", "", normalized)
+    normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def canonical_artist_key(value: str) -> str:
+    """Normalize obvious artist aliases for destination comparison."""
+    normalized = str(value or "").lower().replace("_", " ")
+    normalized = re.sub(r"\b(?:and|x|feat(?:uring)?|ft)\.?\b", " ", normalized)
+    normalized = normalized.replace("&", " ")
+    return canonical_text_key(normalized)
+
+
+def canonical_album_key(value: str) -> str:
+    """Normalize album names for destination comparison."""
+    return canonical_text_key(value)
+
+
 def normalize_compilation_artist(value: str | None) -> str | None:
     if not value:
         return None
@@ -143,6 +164,46 @@ def has_mixed_track_artists(track_metadata: list[dict]) -> bool:
         if normalize_key(str(metadata.get("artist") or "")) not in UNKNOWN_VALUES
     }
     return len(artists) > 1 and common_track_artist(track_metadata) is None
+
+
+def metadata_mismatch_warnings(
+    track_metadata: list[dict],
+    suggested_metadata: dict,
+) -> list[str]:
+    warnings = []
+    albums = {
+        canonical_album_key(str(metadata.get("album") or ""))
+        for metadata in track_metadata
+        if normalize_key(str(metadata.get("album") or "")) not in UNKNOWN_VALUES
+    }
+    if len(albums) > 1:
+        warnings.append("mixed_embedded_metadata_detected")
+
+    suggested_album = canonical_album_key(str(suggested_metadata.get("album") or ""))
+    if suggested_album and any(album != suggested_album for album in albums):
+        warnings.append("track_album_mismatch_detected")
+
+    if not suggested_metadata.get("compilation"):
+        suggested_artist = canonical_artist_key(
+            str(suggested_metadata.get("artist") or "")
+        )
+        track_artists = set()
+        for metadata in track_metadata:
+            album_artist = str(metadata.get("albumartist") or "")
+            artist = str(metadata.get("artist") or "")
+            value = (
+                album_artist
+                if normalize_key(album_artist) not in UNKNOWN_VALUES
+                else artist
+            )
+            if normalize_key(value) not in UNKNOWN_VALUES:
+                track_artists.add(canonical_artist_key(value))
+        if suggested_artist and any(
+            artist != suggested_artist for artist in track_artists
+        ):
+            warnings.append("track_artist_mismatch_detected")
+
+    return warnings
 
 
 def build_suggested_metadata(

@@ -31,6 +31,12 @@ const WARNING_LABELS: Record<string, string> = {
   raw_folder_name_detected: "Raw folder name detected",
   partial_duplicate_tracks_detected: "Partial duplicate tracks detected",
   compilation_suspected: "Compilation suspected",
+  mixed_embedded_metadata_detected: "Mixed embedded metadata detected",
+  track_album_mismatch_detected: "Some track album tags differ from the release folder",
+  track_artist_mismatch_detected: "Some track artist tags differ from the release folder",
+  release_folder_grouping_used: "Release folder grouping used",
+  possible_duplicate_destination: "Possible duplicate destination",
+  possible_artist_alias: "Possible artist alias",
 };
 
 function metadataWarnings(batch: IngestBatch): string[] {
@@ -38,6 +44,24 @@ function metadataWarnings(batch: IngestBatch): string[] {
   return Array.isArray(warnings)
     ? warnings.filter((warning): warning is string => typeof warning === "string")
     : [];
+}
+
+function metadataAlertMessages(batch: IngestBatch): string[] {
+  const alerts = batch.metadata_json?.metadata_alerts;
+  if (!Array.isArray(alerts)) return [];
+  return alerts
+    .map((alert) => {
+      if (
+        alert
+        && typeof alert === "object"
+        && "message" in alert
+        && typeof alert.message === "string"
+      ) {
+        return alert.message;
+      }
+      return null;
+    })
+    .filter((message): message is string => Boolean(message));
 }
 
 function warningLabel(warning: string): string {
@@ -161,6 +185,7 @@ export default function BatchDetail({ batch, moveSummary }: Props) {
   }
 
   const warnings = metadataWarnings(batch);
+  const alerts = metadataAlertMessages(batch);
 
   return (
     <div className="batch-detail">
@@ -206,6 +231,13 @@ export default function BatchDetail({ batch, moveSummary }: Props) {
               <span key={warning}><i className="ti ti-alert-triangle" />{warningLabel(warning)}</span>
             ))}
           </div>
+        </section>
+      )}
+      {alerts.length > 0 && (
+        <section className="metadata-alerts" aria-label="Metadata alerts">
+          {alerts.map((message) => (
+            <div key={message}><i className="ti ti-info-circle" />{message}</div>
+          ))}
         </section>
       )}
       <DebugDetails batch={batch} moveSummary={moveSummary} />

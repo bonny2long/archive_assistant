@@ -298,6 +298,18 @@ button:focus-visible, input:focus-visible {
   color: var(--accent-amber);
   font-size: 11px;
 }
+.metadata-alerts { display: grid; gap: 0.4rem; margin-top: 0.75rem; }
+.metadata-alerts div {
+  display: flex;
+  gap: 6px;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid rgba(59,130,246,0.25);
+  border-radius: var(--radius-md);
+  background: rgba(59,130,246,0.08);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.metadata-alerts i { color: var(--accent-blue); }
 
 /* Moved library detail */
 .batch-detail--moved {
@@ -468,6 +480,22 @@ button:focus-visible, input:focus-visible {
 }
 .metadata-editor__header h2 { font-size: 18px; }
 .metadata-editor__header p { margin-top: 2px; color: var(--text-secondary); font-size: 12px; }
+.metadata-editor__warnings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.85rem;
+}
+.metadata-editor__warnings span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: rgba(245,158,11,0.08);
+  color: var(--accent-amber);
+  font-size: 10px;
+}
 .metadata-editor label { display: grid; gap: 5px; margin-bottom: 0.85rem; }
 .metadata-editor label span,
 .metadata-editor__preview > span {

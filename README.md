@@ -214,6 +214,8 @@ archive-assistant-scaffold/
   scripts/
     reset_music_test.py        # Test data reset utility
     check_metadata_parser.py   # PASS/FAIL checks for ugly folder names
+    check_release_grouping.py  # Folder-first and loose-file grouping checks
+    check_destination_guard.py # Canonical destination conflict checks
     create_ugly_music_test_pack.py # Copies local audio into ugly ingest folders
     create_sample_tree.sh      # Creates empty data directory structure
   docker-compose.yml
@@ -310,6 +312,8 @@ Check the deterministic folder parser:
 
 ```bash
 backend/.venv/Scripts/python.exe scripts/check_metadata_parser.py
+backend/.venv/Scripts/python.exe scripts/check_release_grouping.py
+backend/.venv/Scripts/python.exe scripts/check_destination_guard.py
 ```
 
 Create the five ugly ingest folders using existing local test audio:
@@ -327,6 +331,12 @@ python scripts/create_ugly_music_test_pack.py --source-root "C:\path\to\test-aud
 
 The pack script copies files only. It does not download content, modify embedded
 tags, delete source files, or overwrite existing test targets.
+
+Release folders are grouped as one batch even when individual tracks contain
+conflicting embedded album tags. Files dropped directly into the music ingest
+root still use embedded artist/album grouping. Before moving, canonical
+artist/album comparison blocks obvious duplicate destinations or artist aliases
+for manual review instead of silently creating another library folder.
 
 ---
 

@@ -37,6 +37,18 @@ function destinationRoot(destination?: string | null): string {
   return "data/Music/Library/MP3";
 }
 
+function readableWarning(value: string): string {
+  const labels: Record<string, string> = {
+    mixed_embedded_metadata_detected: "Mixed embedded metadata detected",
+    track_album_mismatch_detected: "Some track album tags differ from the release folder",
+    track_artist_mismatch_detected: "Some track artist tags differ from the release folder",
+    possible_duplicate_destination: "Possible duplicate destination",
+    possible_artist_alias: "Possible artist alias",
+  };
+  return labels[value]
+    ?? value.replace(/_/g, " ").replace(/^\w/, (letter: string) => letter.toUpperCase());
+}
+
 export default function MetadataEditor({ batch, saving, onSave, onClose }: Props) {
   const [artist, setArtist] = useState(() => metadataValue(batch, "artist"));
   const [album, setAlbum] = useState(() => metadataValue(batch, "album"));
@@ -86,6 +98,13 @@ export default function MetadataEditor({ batch, saving, onSave, onClose }: Props
             <i className="ti ti-x" />
           </button>
         </div>
+        {batch.metadata_warnings.length > 0 && (
+          <div className="metadata-editor__warnings">
+            {batch.metadata_warnings.map((warning) => (
+              <span key={warning}><i className="ti ti-alert-triangle" />{readableWarning(warning)}</span>
+            ))}
+          </div>
+        )}
         <label>
           <span>Artist</span>
           <input value={artist} onChange={(event) => setArtist(event.target.value)} autoFocus />

@@ -201,6 +201,7 @@ def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Sessio
     meta["album"] = update.album.strip()
     meta["year"] = update.year.strip()
     meta["date"] = update.year.strip()
+    meta.pop("metadata_alerts", None)
     if update.primary_genre is not None:
         meta["genre"] = update.primary_genre.strip() or "Unknown"
     if update.format is not None:
@@ -224,6 +225,18 @@ def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Sessio
     
     batch.metadata_json = meta
     batch.suggested_destination = str(new_dest)
+    batch.suggested_metadata = {
+        "artist": meta["artist"],
+        "album": meta["album"],
+        "year": meta["year"],
+        "genre": meta.get("genre"),
+        "sources": {
+            "artist": "manual correction",
+            "album": "manual correction",
+            "year": "manual correction",
+            "genre": "manual correction",
+        },
+    }
     batch.confidence = quality_res["confidence"]
     batch.metadata_confirmed = True
 

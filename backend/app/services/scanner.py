@@ -1,4 +1,4 @@
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 import re
@@ -16,9 +16,10 @@ from app.services.music_metadata import (
     has_mixed_track_artists,
     is_audio_file,
     is_compilation_artist,
+    metadata_mismatch_warnings,
     normalize_key,
-    parse_music_folder_name,
     suggest_music_destination,
+    UNKNOWN_VALUES,
 )
 from app.services.report_writer import write_json_report
 
@@ -56,17 +57,22 @@ def _release_source_path(path: Path) -> Path:
 
 def _group_key(path: Path, metadata: dict) -> str:
     source_path = _release_source_path(path)
-    folder = parse_music_folder_name(source_path.name)
-    folder_album = folder.get("album")
-    folder_artist = folder.get("artist")
-    metadata_album = str(metadata.get("album") or "")
-    metadata_artist = str(metadata.get("albumartist") or metadata.get("artist") or "")
-
-    if folder_album and normalize_key(folder_album) != normalize_key(metadata_album):
-        return f"source|{source_path.resolve()}"
-    if folder_artist and normalize_key(folder_artist) != normalize_key(metadata_artist):
+    if source_path.resolve() != settings.ingest_music_dir.resolve():
         return f"source|{source_path.resolve()}"
     return album_group_key(metadata)
+
+
+def _representative_value(track_metadata: list[dict], key: str, default: str) -> str:
+    values = [
+        str(metadata.get(key) or "").strip()
+        for metadata in track_metadata
+        if normalize_key(str(metadata.get(key) or "")) not in UNKNOWN_VALUES
+    ]
+    if not values:
+        return default
+    counts = Counter(normalize_key(value) for value in values)
+    winner = counts.most_common(1)[0][0]
+    return next(value for value in values if normalize_key(value) == winner)
 
 
 def scan_music_ingest(db: Session) -> ScanMusicResult:
@@ -119,10 +125,18 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
         }
         track_metadata = [file_metadata[str(path)] for path in paths]
         album_meta = {
-            "artist": sample_meta["albumartist"],
-            "album": sample_meta["album"],
-            "year": sample_meta["date"],
-            "genre": sample_meta.get("genre"),
+            "artist": _representative_value(
+                track_metadata, "albumartist", sample_meta["albumartist"]
+            ),
+            "album": _representative_value(
+                track_metadata, "album", sample_meta["album"]
+            ),
+            "year": _representative_value(
+                track_metadata, "date", sample_meta["date"]
+            ),
+            "genre": _representative_value(
+                track_metadata, "genre", sample_meta.get("genre") or "Unknown"
+            ),
             "disc_count": len(discs),
             "track_count": len(paths),
             "format": "FLAC" if "flac" in sample_meta.get("extension", "") else "MP3",
@@ -138,6 +152,14 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
             track_metadata,
             album_meta,
         )
+        warnings = list(album_meta.get("metadata_warnings", []))
+        if source_path.resolve() != settings.ingest_music_dir.resolve():
+            warnings.append("release_folder_grouping_used")
+            warnings.extend(
+                metadata_mismatch_warnings(track_metadata, suggested_metadata)
+            )
+        album_meta["metadata_warnings"] = list(dict.fromkeys(warnings))
+
         mixed_track_artists = has_mixed_track_artists(track_metadata)
         if suggested_metadata.get("compilation") or mixed_track_artists:
             warnings = list(album_meta.get("metadata_warnings", []))

@@ -5,7 +5,145 @@ from pathlib import Path
 from sqlalchemy.orm import Session, selectinload
 from app.core.config import settings
 from app.models.archive import ArchiveItem, IngestBatch, MoveAction
-from app.services.music_metadata import music_track_filename
+from app.services.music_metadata import (
+    canonical_album_key,
+    canonical_artist_key,
+    music_track_filename,
+)
+
+
+def _format_bucket_for_path(path: Path) -> str:
+    parts = {part.upper() for part in path.parts}
+    return "FLAC" if "FLAC" in parts else "MP3"
+
+
+def _destination_parts(destination: Path) -> tuple[str, str, str | None]:
+    album_folder = destination.name
+    artist_folder = destination.parent.name
+    year = None
+    album = album_folder
+    if len(album_folder) >= 7 and album_folder[:4].isdigit() and album_folder[4:7] == " - ":
+        year = album_folder[:4]
+        album = album_folder[7:]
+    return artist_folder, album, year
+
+
+def _destination_conflict_payload(
+    conflict_type: str,
+    target_artist: str,
+    target_album: str,
+    existing_path: Path,
+) -> dict:
+    if conflict_type == "possible_artist_alias":
+        return {
+            "type": conflict_type,
+            "message": (
+                "Artist looks similar to existing folder: "
+                f"{existing_path.name}."
+            ),
+            "existing_artist_folder": existing_path.name,
+        }
+    return {
+        "type": conflict_type,
+        "message": (
+            "Possible duplicate destination found for "
+            f"{target_artist} / {target_album}."
+        ),
+        "existing_path": str(existing_path),
+    }
+
+
+def _same_batch_retry(db: Session, batch_id: int, destination: Path) -> bool:
+    prefix = str(destination)
+    return (
+        db.query(MoveAction)
+        .filter(
+            MoveAction.batch_id == batch_id,
+            MoveAction.destination_path.like(f"{prefix}%"),
+        )
+        .count()
+        > 0
+    )
+
+
+def find_possible_existing_destination(db: Session, batch: IngestBatch) -> dict | None:
+    if not batch.suggested_destination:
+        return None
+    destination = Path(batch.suggested_destination)
+
+    metadata = batch.metadata_json or {}
+    target_artist = str(metadata.get("artist") or metadata.get("albumartist") or "")
+    target_album = str(metadata.get("album") or "")
+    target_year = str(metadata.get("year") or metadata.get("date") or "")[:4] or None
+    if not target_artist or not target_album:
+        return None
+
+    target_format = _format_bucket_for_path(destination)
+    target_artist_key = canonical_artist_key(target_artist)
+    target_album_key = canonical_album_key(target_album)
+
+    moved_batches = (
+        db.query(IngestBatch)
+        .filter(IngestBatch.id != batch.id, IngestBatch.status == "moved")
+        .all()
+    )
+    for existing in moved_batches:
+        existing_destination = Path(existing.suggested_destination or "")
+        existing_meta = existing.metadata_json or {}
+        existing_artist = str(
+            existing_meta.get("artist") or existing_meta.get("albumartist") or ""
+        )
+        existing_album = str(existing_meta.get("album") or "")
+        existing_year = (
+            str(existing_meta.get("year") or existing_meta.get("date") or "")[:4]
+            or None
+        )
+        if (
+            _format_bucket_for_path(existing_destination) == target_format
+            and canonical_artist_key(existing_artist) == target_artist_key
+            and canonical_album_key(existing_album) == target_album_key
+            and (not target_year or not existing_year or existing_year == target_year)
+        ):
+            return _destination_conflict_payload(
+                "possible_duplicate_destination",
+                target_artist,
+                target_album,
+                existing_destination,
+            )
+
+    root = settings.music_flac_dir if target_format == "FLAC" else settings.music_mp3_dir
+    if not root.exists():
+        return None
+
+    for artist_dir in sorted(path for path in root.iterdir() if path.is_dir()):
+        artist_key = canonical_artist_key(artist_dir.name)
+        if artist_key != target_artist_key:
+            continue
+        if artist_dir.resolve() != destination.parent.resolve():
+            return _destination_conflict_payload(
+                "possible_artist_alias",
+                target_artist,
+                target_album,
+                artist_dir,
+            )
+        for album_dir in sorted(path for path in artist_dir.iterdir() if path.is_dir()):
+            existing_artist, existing_album, existing_year = _destination_parts(album_dir)
+            if (
+                canonical_artist_key(existing_artist) == target_artist_key
+                and canonical_album_key(existing_album) == target_album_key
+                and (not target_year or not existing_year or existing_year == target_year)
+                and (
+                    album_dir.resolve() != destination.resolve()
+                    or not _same_batch_retry(db, batch.id, destination)
+                )
+            ):
+                return _destination_conflict_payload(
+                    "possible_duplicate_destination",
+                    target_artist,
+                    target_album,
+                    album_dir,
+                )
+    return None
 
 
 def move_approved_batches(db: Session) -> tuple[int, list[str]]:
@@ -34,9 +172,24 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                 errors.append(f"Batch {batch.id}: weak metadata must be confirmed before move")
                 continue
 
-            destination_dir = Path(batch.suggested_destination or "")
-            if not destination_dir:
+            if not batch.suggested_destination:
                 raise ValueError("Missing suggested destination")
+            destination_dir = Path(batch.suggested_destination)
+
+            conflict = find_possible_existing_destination(db, batch)
+            if conflict:
+                warnings = list(album_meta.get("metadata_warnings", []))
+                warnings.append(conflict["type"])
+                album_meta["metadata_warnings"] = list(dict.fromkeys(warnings))
+                alerts = list(album_meta.get("metadata_alerts", []))
+                alerts.append(conflict)
+                album_meta["metadata_alerts"] = alerts
+                batch.metadata_json = album_meta
+                batch.status = "needs_metadata_review"
+                batch.updated_at = datetime.utcnow()
+                db.commit()
+                errors.append(f"Batch {batch.id}: {conflict['message']}")
+                continue
 
             destination_dir.mkdir(parents=True, exist_ok=True)
 
