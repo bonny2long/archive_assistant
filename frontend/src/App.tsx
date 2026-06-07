@@ -4,6 +4,7 @@ import type {
   BatchMoveSummary,
   BatchSummary,
   IngestBatch,
+  LibrarySummary as LibrarySummaryData,
   TabKey,
 } from "./types/archive";
 import { api } from "./api/client";
@@ -12,9 +13,18 @@ import BatchTable from "./components/BatchTable";
 import StatusTabs from "./components/StatusTabs";
 import Toast from "./components/Toast";
 import MetadataEditor from "./components/MetadataEditor";
+import LibrarySummary from "./components/LibrarySummary";
 
 type ToastState = { msg: string; type: "info" | "error" };
-type ActionKey = "refresh" | "scan" | "move";
+type ActionKey = "refresh" | "scan" | "move" | "reset";
+
+const EMPTY_LIBRARY_SUMMARY: LibrarySummaryData = {
+  moved_albums: 0,
+  moved_tracks: 0,
+  failed_moves: 0,
+  approved_waiting: 0,
+  needs_metadata: 0,
+};
 
 export default function App() {
   const [batches, setBatches] = useState<BatchSummary[]>([]);
@@ -31,9 +41,19 @@ export default function App() {
   const [loadingAction, setLoadingAction] = useState<ActionKey | null>(null);
   const [editingBatch, setEditingBatch] = useState<BatchSummary | null>(null);
   const [savingMetadata, setSavingMetadata] = useState(false);
+  const [devToolsEnabled, setDevToolsEnabled] = useState(false);
+  const [librarySummary, setLibrarySummary] = useState<LibrarySummaryData>(EMPTY_LIBRARY_SUMMARY);
 
   const showToast = useCallback((msg: string, type: ToastState["type"] = "info") => {
     setToast({ msg, type });
+  }, []);
+
+  const loadLibrarySummary = useCallback(async () => {
+    try {
+      setLibrarySummary(await api.getLibrarySummary());
+    } catch {
+      setLibrarySummary(EMPTY_LIBRARY_SUMMARY);
+    }
   }, []);
 
   const loadBatches = useCallback(async () => {
@@ -54,12 +74,16 @@ export default function App() {
         setError(primaryError instanceof Error ? primaryError.message : "Unable to load batches");
       }
     } finally {
+      await loadLibrarySummary();
       setLoading(false);
     }
-  }, []);
+  }, [loadLibrarySummary]);
 
   useEffect(() => {
     void loadBatches();
+    void api.health()
+      .then((health) => setDevToolsEnabled(health.dev_tools_enabled))
+      .catch(() => setDevToolsEnabled(false));
   }, [loadBatches]);
 
   const filtered = batches.filter((batch) => {
@@ -212,10 +236,36 @@ export default function App() {
     setLoadingAction("scan");
     try {
       const result = await api.scanMusic();
-      showToast(`Scan complete - ${result.length} new batch(es)`);
+      showToast(
+        `Scan complete - ${result.created} new, ${result.skipped_duplicates} skipped duplicate(s)`,
+      );
       await loadBatches();
     } catch {
       showToast("Scan failed", "error");
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const handleReset = async () => {
+    const confirmed = window.confirm(
+      "Reset local music test data? This restores moved test tracks to _INGEST "
+      + "and clears music test batches. It will not delete your source tracks.",
+    );
+    if (!confirmed) return;
+
+    setLoadingAction("reset");
+    try {
+      const result = await api.resetMusicTest();
+      showToast(result.message);
+      setTab("all");
+      setSelected(new Set());
+      await loadBatches();
+    } catch (resetError: unknown) {
+      showToast(
+        resetError instanceof Error ? resetError.message : "Reset failed",
+        "error",
+      );
     } finally {
       setLoadingAction(null);
     }
@@ -241,9 +291,12 @@ export default function App() {
         onScan={handleScan}
         onMove={handleMove}
         onRefresh={handleRefresh}
+        onReset={handleReset}
         loadingAction={loadingAction}
+        devToolsEnabled={devToolsEnabled}
       />
       <div className="app-content">
+        <LibrarySummary summary={librarySummary} />
         <StatusTabs
           active={tab}
           counts={counts}

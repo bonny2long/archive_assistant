@@ -1,13 +1,22 @@
-type ActionKey = "refresh" | "scan" | "move";
+type ActionKey = "refresh" | "scan" | "move" | "reset";
 
 type Props = {
   onScan: () => Promise<void>;
   onMove: () => Promise<void>;
   onRefresh: () => Promise<void>;
+  onReset: () => Promise<void>;
   loadingAction: ActionKey | null;
+  devToolsEnabled: boolean;
 };
 
-export default function ActionBar({ onScan, onMove, onRefresh, loadingAction }: Props) {
+export default function ActionBar({
+  onScan,
+  onMove,
+  onRefresh,
+  onReset,
+  loadingAction,
+  devToolsEnabled,
+}: Props) {
   const disabled = loadingAction !== null;
 
   return (
@@ -26,6 +35,11 @@ export default function ActionBar({ onScan, onMove, onRefresh, loadingAction }: 
         <button className="btn btn--green" disabled={disabled} onClick={() => void onMove()}>
           <i className={`ti ti-circle-arrow-right ${loadingAction === "move" ? "spinner" : ""}`} /> Move approved
         </button>
+        {devToolsEnabled && (
+          <button className="btn btn--warning" disabled={disabled} onClick={() => void onReset()}>
+            <i className={`ti ti-restore ${loadingAction === "reset" ? "spinner" : ""}`} /> Reset test data
+          </button>
+        )}
       </div>
     </div>
   );

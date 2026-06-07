@@ -164,6 +164,7 @@ Settings are defined in `backend/app/core/config.py` using `pydantic-settings`. 
 |---|---|---|
 | `app_name` | `"Archive Assistant"` | FastAPI application title |
 | `debug` | `True` | Enable debug mode |
+| `dev_tools_enabled` | `True` | Show local reset tools when debug mode is also enabled |
 | `data_root` | `project_root / "data"` | Root data directory |
 | `ingest_music_dir` | `data/_INGEST/music/` | Incoming music files |
 | `reports_dir` | `data/_REPORTS/ingest-reports/` | JSON scan reports |
@@ -225,6 +226,8 @@ The dashboard is a **React + TypeScript** SPA built with **Vite**. Features:
 - **Status tabs**: filter batches by All, Pending, Needs Metadata, Approved, Moved.
 - **Batch table**: selectable rows, expandable detail panels, inline status badges.
 - **Moved library detail**: final destination, metadata used, timeline, move counts, and per-file move history.
+- **Library summary**: moved albums, moved tracks, failed moves, and review counts.
+- **Dev reset**: restores moved test tracks and clears music test rows from the frontend in local debug mode.
 - **Bulk actions**: select all / approve multiple / reject multiple.
 - **Metadata editor**: modal form with artist, album, year, genre fields and live destination preview.
 - **Dark theme**: fully customizable via CSS custom properties in `style.css`.
@@ -250,13 +253,15 @@ Available scripts (`cd frontend`):
 | `GET` | `/api/batches/needs-metadata-review` | List batches needing metadata review |
 | `GET` | `/api/batches/{id}` | Get batch details |
 | `GET` | `/api/batches/{id}/moves` | Get per-file move history and completion summary |
+| `GET` | `/api/library/summary` | Get library and workflow totals |
 | `PATCH` | `/api/batches/{id}/metadata` | Update batch metadata |
 | `POST` | `/api/batches/{id}/approve` | Approve a batch |
 | `POST` | `/api/batches/{id}/send-to-recovery` | Send batch to metadata recovery |
 | `POST` | `/api/batches/{id}/reject` | Reject a batch |
 | `POST` | `/api/batches/bulk-approve` | Bulk approve by IDs |
-| `POST` | `/api/scan/music` | Trigger music scan |
+| `POST` | `/api/scan/music` | Trigger scan and report created/skipped duplicate counts |
 | `POST` | `/api/move/approved` | Move all approved batches |
+| `POST` | `/api/dev/reset/music-test` | Reset local music test data; debug/dev mode only |
 
 Interactive docs are disabled by default. Enable with `API_DOCS_ENABLED=true` in `backend/.env`.
 
@@ -292,6 +297,23 @@ python scripts/reset_music_test.py --apply
 ```
 
 This restores moved tracks to their original `data/_INGEST/music` paths, removes generated music reports and move logs, and clears music records without dropping or recreating database tables.
+
+In local debug mode, the same guarded reset is available from the dashboard using
+**Reset test data**. The button asks for confirmation and is hidden when debug
+tools are disabled.
+
+### Worse metadata test folders
+
+Use copied files only. Useful generic folder patterns include:
+
+```text
+Unknown_Artist_-_Random_Mixtape
+Some_Artist_-_Some_Album_2011_320kbps_[PMEDIA]
+Various_Artists_-_Summer_Tape_2005
+```
+
+These exercise missing years, release-name cleanup, and mixed track artists.
+Do not add special-case rules for the example names.
 
 ---
 

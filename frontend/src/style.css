@@ -106,6 +106,8 @@ button:focus-visible, input:focus-visible {
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn--green { border-color: rgba(34,197,94,0.4); color: var(--accent-green); }
 .btn--green:hover { background: rgba(34,197,94,0.1); }
+.btn--warning { border-color: rgba(245,158,11,0.4); color: var(--accent-amber); }
+.btn--warning:hover { background: rgba(245,158,11,0.1); }
 .btn--compact { font-size: 12px; padding: 4px 10px; }
 .btn-sm {
   padding: 4px 8px;
@@ -119,6 +121,32 @@ button:focus-visible, input:focus-visible {
 }
 .btn-sm:hover { background: var(--bg-hover); }
 .btn-sm:disabled { cursor: not-allowed; opacity: 0.3; }
+
+/* Library summary */
+.library-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.85rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: rgba(59,130,246,0.04);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.library-summary > i { color: var(--accent-blue); font-size: 16px; }
+.library-summary strong { color: var(--text-secondary); font-weight: 600; }
+.library-summary__warning { color: var(--accent-red) !important; }
+.library-summary__pending {
+  margin-left: auto;
+  padding: 2px 7px;
+  border-radius: 9px;
+  background: var(--pill-pending-bg);
+  color: var(--pill-pending-fg);
+  font-size: 10px;
+}
+.library-summary__pending + .library-summary__pending { margin-left: 0; }
 
 /* Tabs */
 .status-tabs {
@@ -447,11 +475,23 @@ button:focus-visible, input:focus-visible {
 .metadata-editor__row { display: grid; grid-template-columns: 0.65fr 1.35fr; gap: 0.75rem; }
 .metadata-editor__preview {
   display: grid;
-  gap: 5px;
+  gap: 0.65rem;
   padding: 0.75rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-page);
+}
+.metadata-editor__preview > div { display: grid; gap: 2px; }
+.metadata-editor__preview small {
+  color: var(--text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.metadata-editor__preview strong {
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
 }
 .metadata-editor__preview code {
   overflow-wrap: anywhere;
@@ -483,6 +523,8 @@ button:focus-visible, input:focus-visible {
   .action-bar { align-items: flex-start; flex-direction: column; gap: 1rem; }
   .action-bar__buttons { width: 100%; flex-wrap: wrap; }
   .app-content { padding: 0 1rem; }
+  .library-summary { flex-wrap: wrap; }
+  .library-summary__pending { margin-left: 0; }
   .status-tabs { overflow-x: auto; }
   .status-tabs__tab { flex: 0 0 auto; }
   .selection-bar { align-items: flex-start; flex-wrap: wrap; }

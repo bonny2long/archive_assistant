@@ -7,7 +7,10 @@ if __name__ == "__main__":
     init_db()
     db = SessionLocal()
     try:
-        batches = scan_music_ingest(db)
-        print(f"Created {len(batches)} new batch(es).")
+        result = scan_music_ingest(db)
+        print(
+            f"Created {result.created} new batch(es); "
+            f"skipped {result.skipped_duplicates} duplicate(s)."
+        )
     finally:
         db.close()

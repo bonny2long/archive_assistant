@@ -9,12 +9,16 @@ from app.schemas.archive import (
     BatchMoveSummary,
     BatchMetadataUpdate,
     BatchSummary, 
+    DevResetResponse,
     IngestBatchOut, 
     IngestFileOut,
+    LibrarySummary,
     MoveActionOut,
     MoveResponse,
-    PaginatedResponse
+    PaginatedResponse,
+    ScanMusicResponse,
 )
+from app.services.dev_reset import DevResetBlockedError, reset_music_test_data
 from app.services.music_metadata import evaluate_music_album_metadata, suggest_music_destination
 from app.services.scanner import scan_music_ingest
 from app.services.mover import move_approved_batches
@@ -25,12 +29,33 @@ router = APIRouter(prefix="/api")
 
 @router.get("/health")
 def health():
-    return {"status": "ok", "service": "archive-assistant"}
+    return {
+        "status": "ok",
+        "service": "archive-assistant",
+        "debug": settings.debug,
+        "dev_tools_enabled": settings.debug and settings.dev_tools_enabled,
+    }
 
 
-@router.post("/scan/music", response_model=list[IngestBatchOut])
+@router.post("/scan/music", response_model=ScanMusicResponse)
 def scan_music(db: Session = Depends(get_db)):
-    return scan_music_ingest(db)
+    result = scan_music_ingest(db)
+    return ScanMusicResponse(
+        created=result.created,
+        skipped_duplicates=result.skipped_duplicates,
+        batches=result.batches,
+    )
+
+
+@router.post("/dev/reset/music-test", response_model=DevResetResponse)
+def dev_reset_music_test(db: Session = Depends(get_db)):
+    if not (settings.debug and settings.dev_tools_enabled):
+        raise HTTPException(status_code=404, detail="Dev reset is not available")
+    try:
+        summary = reset_music_test_data(db, apply=True)
+    except DevResetBlockedError as exc:
+        raise HTTPException(status_code=409, detail=exc.errors) from exc
+    return DevResetResponse(**summary.__dict__)
 
 
 @router.get("/batches", response_model=PaginatedResponse[BatchSummary])
@@ -136,6 +161,26 @@ def get_batch_moves(batch_id: int, db: Session = Depends(get_db)):
         completed=sum(move.status == "completed" for move in moves),
         failed=sum(move.status == "failed" for move in moves),
         moves=moves,
+    )
+
+
+@router.get("/library/summary", response_model=LibrarySummary)
+def library_summary(db: Session = Depends(get_db)):
+    moved_albums = db.query(IngestBatch).filter(IngestBatch.status == "moved").count()
+    moved_tracks = db.query(MoveAction).filter(MoveAction.status == "completed").count()
+    failed_moves = db.query(MoveAction).filter(MoveAction.status == "failed").count()
+    approved_waiting = db.query(IngestBatch).filter(IngestBatch.status == "approved").count()
+    needs_metadata = (
+        db.query(IngestBatch)
+        .filter(IngestBatch.status.in_(["needs_metadata_review", "metadata_recovery"]))
+        .count()
+    )
+    return LibrarySummary(
+        moved_albums=moved_albums,
+        moved_tracks=moved_tracks,
+        failed_moves=failed_moves,
+        approved_waiting=approved_waiting,
+        needs_metadata=needs_metadata,
     )
 
 

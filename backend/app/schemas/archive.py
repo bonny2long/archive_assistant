@@ -81,6 +81,30 @@ class MoveResponse(BaseModel):
     errors: list[str]
 
 
+class ScanMusicResponse(BaseModel):
+    created: int
+    skipped_duplicates: int
+    batches: list[IngestBatchOut]
+
+
+class DevResetResponse(BaseModel):
+    status: str
+    restored_tracks: int
+    removed_reports: int
+    removed_move_logs: int
+    removed_empty_dirs: int
+    cleared_batches: int
+    message: str
+
+
+class LibrarySummary(BaseModel):
+    moved_albums: int
+    moved_tracks: int
+    failed_moves: int
+    approved_waiting: int
+    needs_metadata: int
+
+
 class MoveActionOut(BaseModel):
     id: int
     source_path: str

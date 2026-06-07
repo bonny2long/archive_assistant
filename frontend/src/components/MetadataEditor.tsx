@@ -20,9 +20,13 @@ function sanitizePathPart(value: string): string {
 }
 
 function destinationRoot(destination?: string | null): string {
-  if (!destination) return "Music/Library/MP3";
-  const match = destination.match(/^(.*?[\\/]Music[\\/]Library[\\/](?:MP3|FLAC))/i);
-  return match?.[1] ?? "Music/Library/MP3";
+  if (!destination) return "data/Music/Library/MP3";
+  const normalized = destination.replace(/\\/g, "/");
+  const dataIndex = normalized.toLowerCase().indexOf("data/music/library/");
+  if (dataIndex >= 0) return normalized.slice(dataIndex).split("/").slice(0, 4).join("/");
+  const libraryIndex = normalized.toLowerCase().indexOf("music/library/");
+  if (libraryIndex >= 0) return normalized.slice(libraryIndex).split("/").slice(0, 3).join("/");
+  return "data/Music/Library/MP3";
 }
 
 export default function MetadataEditor({ batch, saving, onSave, onClose }: Props) {
@@ -33,8 +37,15 @@ export default function MetadataEditor({ batch, saving, onSave, onClose }: Props
 
   const preview = useMemo(() => {
     const root = destinationRoot(batch.suggested_destination);
-    const folder = year.trim() ? `${year.trim()} - ${sanitizePathPart(album)}` : sanitizePathPart(album);
-    return `${root}\\${sanitizePathPart(artist)}\\${folder}`;
+    const artistFolder = sanitizePathPart(artist);
+    const albumFolder = year.trim()
+      ? `${year.trim()} - ${sanitizePathPart(album)}`
+      : sanitizePathPart(album);
+    return {
+      artistFolder,
+      albumFolder,
+      fullPath: `${root}/${artistFolder}/${albumFolder}`,
+    };
   }, [album, artist, batch.suggested_destination, year]);
 
   const valid = artist.trim() !== ""
@@ -87,7 +98,9 @@ export default function MetadataEditor({ batch, saving, onSave, onClose }: Props
         </div>
         <div className="metadata-editor__preview">
           <span>Destination preview</span>
-          <code>{preview}</code>
+          <div><small>Artist folder</small><strong>{preview.artistFolder || "-"}</strong></div>
+          <div><small>Album folder</small><strong>{preview.albumFolder || "-"}</strong></div>
+          <div><small>Full path</small><code>{preview.fullPath}</code></div>
         </div>
         {!valid && <p className="metadata-editor__error">Artist, album, and a four-digit year are required.</p>}
         <div className="metadata-editor__actions">

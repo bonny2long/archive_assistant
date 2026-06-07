@@ -71,6 +71,37 @@ export type MoveResult = {
   errors: string[];
 };
 
+export type ScanMusicResponse = {
+  created: number;
+  skipped_duplicates: number;
+  batches: IngestBatch[];
+};
+
+export type DevResetResponse = {
+  status: string;
+  restored_tracks: number;
+  removed_reports: number;
+  removed_move_logs: number;
+  removed_empty_dirs: number;
+  cleared_batches: number;
+  message: string;
+};
+
+export type LibrarySummary = {
+  moved_albums: number;
+  moved_tracks: number;
+  failed_moves: number;
+  approved_waiting: number;
+  needs_metadata: number;
+};
+
+export type HealthResponse = {
+  status: string;
+  service: string;
+  debug: boolean;
+  dev_tools_enabled: boolean;
+};
+
 export type MoveAction = {
   id: number;
   source_path: string;
