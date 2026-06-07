@@ -1,78 +1,100 @@
 # Archive Assistant Scaffold
 
-Local-first scaffold for Bonny's Archive Assistant.
+Local-first scaffold for Bonny's Archive Assistant -- a self-hosted, NAS-friendly tool for managing personal media archives starting with music.
 
-V1 goal: scan copied music files in `data/_INGEST/music`, read metadata, create pending reports, wait for approval, then move files into a clean `data/Music/Library/...` folder structure.
+**V1 goal**: scan copied music files in `data/_INGEST/music`, read metadata, create pending reports, wait for approval, then move files into a clean `data/Music/Library/...` folder structure.
 
-Safety rules:
+**Design philosophy**: deterministic tools with human approval gates. AI metadata recovery comes later.
+
+### Safety rules
 
 - Do not test on your only copy of a file.
 - V1 never deletes files.
 - V1 only moves files after approval.
 - Rejected files stay in place or can be moved to quarantine later.
 
+---
+
+## Table of Contents
+
+- [Quick Start](#quick-start)
+- [Usage Flow](#usage-flow)
+- [Metadata Quality](#metadata-quality)
+- [Configuration](#configuration)
+- [Project Structure](#project-structure)
+- [Frontend Overview](#frontend-overview)
+- [API Endpoints](#api-endpoints)
+- [Docker Compose](#docker-compose)
+- [Reset Test Data](#reset-test-data)
+- [Project Status](#project-status)
+- [Development](#development)
+- [License](#license)
+
+---
+
 ## Quick Start
 
-### 1. Backend setup
+### Backend setup
 
 ```bash
 cd backend
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 python -m app.db.init_db
 uvicorn app.main:app --reload
 ```
 
-Backend runs at:
+Backend runs at: `http://127.0.0.1:8000`
 
-```text
-http://127.0.0.1:8000
+API docs: `http://127.0.0.1:8000/docs`
+
+### Frontend setup
+
+```bash
+cd frontend
+npm install
+npm run dev
 ```
 
-API docs:
+Frontend runs at: `http://localhost:5173` (proxies `/api` to the backend).
 
-```text
-http://127.0.0.1:8000/docs
-```
+### Put copied music files into ingest
 
-### 2. Put copied music files into ingest
-
-Use copies only.
+Use copies only -- never place your only copy of a file in the ingest folder.
 
 ```text
 data/_INGEST/music/
 ```
 
-### 3. Scan music
-
-Use API:
+### Scan music
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/scan/music
 ```
 
-Or script:
+Or run the worker directly:
 
 ```bash
 cd backend
 python -m app.workers.scan_music_worker
 ```
 
-### 4. Review pending batches
+### Review pending batches
+
+Open the dashboard at `http://localhost:5173` or use:
 
 ```bash
 curl http://127.0.0.1:8000/api/batches/pending
 ```
 
-### 5. Approve a batch
+### Approve a batch
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/batches/1/approve
 ```
 
-Weak batches must be corrected before approval. Use the pencil button in the
-dashboard, or update metadata directly:
+Weak or broken batches must be corrected before approval. Use the pencil button in the dashboard, or update metadata via API:
 
 ```bash
 curl -X PATCH http://127.0.0.1:8000/api/batches/1/metadata \
@@ -80,61 +102,252 @@ curl -X PATCH http://127.0.0.1:8000/api/batches/1/metadata \
   -d '{"artist":"DJ Cinema & Lil Wayne","album":"Starring In Mardi Gras Bootleg","year":"2008","primary_genre":"Mixtape","format":"MP3"}'
 ```
 
-Folder and track-tag suggestions are stored separately from detected metadata.
-Saving confirms the correction, recalculates metadata quality and destination,
-and moves a valid batch back to `pending_review`.
+Folder and track-tag suggestions are stored separately from detected metadata. Saving confirms the correction, recalculates metadata quality and destination, and moves a valid batch back to `pending_review`.
 
-### 6. Move approved batches
+### Move approved batches
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/move/approved
 ```
 
-Or script:
+Or run the worker directly:
 
 ```bash
 cd backend
 python -m app.workers.move_approved_worker
 ```
 
-### Reset music test data
+---
 
-Preview a reset:
+## Usage Flow
+
+1. Copy music files (copies only) into `data/_INGEST/music/`.
+2. Click **Scan music** on the dashboard or POST `/api/scan/music`.
+3. Review batches in the dashboard tabs (All / Pending / Needs Metadata / Approved / Moved).
+4. Edit metadata via the pencil icon if needed.
+5. Approve batches (checkmark icon or bulk approve).
+6. Click **Move approved** to relocate files.
+7. Monitor move logs in `data/_REPORTS/move-logs/`.
+
+---
+
+## Metadata Quality
+
+Each scanned album is classified into one of four quality levels:
+
+| Level | Criteria |
+|---|---|
+| **good** | Artist, album title, and year are all present and valid. |
+| **fair** | Some metadata present but missing one or more fields. |
+| **weak** | Artist or album is missing; derived from folder name fallback. |
+| **broken** | No usable metadata could be extracted. |
+
+- **good / fair** batches are placed in `pending_review` immediately.
+- **weak / broken** batches are placed in `needs_metadata_review` and require metadata correction before they can be approved.
+
+---
+
+## Configuration
+
+Settings are defined in `backend/app/core/config.py` using `pydantic-settings`. Loaded from environment variables or a `.env` file (gitignored).
+
+| Setting | Default | Description |
+|---|---|---|
+| `app_name` | `"Archive Assistant"` | FastAPI application title |
+| `debug` | `True` | Enable debug mode |
+| `data_root` | `project_root / "data"` | Root data directory |
+| `ingest_music_dir` | `data/_INGEST/music/` | Incoming music files |
+| `reports_dir` | `data/_REPORTS/ingest-reports/` | JSON scan reports |
+| `move_logs_dir` | `data/_REPORTS/move-logs/` | Move action logs |
+| `music_flac_dir` | `data/Music/Library/FLAC/` | FLAC library destination |
+| `music_mp3_dir` | `data/Music/Library/MP3/` | MP3 library destination |
+| `database_url` | `sqlite:///.../archive_assistant.db` | SQLite connection string |
+
+---
+
+## Project Structure
+
+```text
+archive-assistant-scaffold/
+  backend/
+    app/
+      main.py                  # FastAPI entry point
+      core/config.py           # App settings
+      api/routes.py            # REST API endpoints
+      db/                      # SQLAlchemy session, init, migrations
+      models/                  # SQLAlchemy ORM models
+      schemas/                 # Pydantic request/response schemas
+      services/                # Scanner, metadata extractor, mover, checksum
+      workers/                 # CLI worker scripts
+    Dockerfile
+    requirements.txt
+  frontend/
+    src/
+      api/                     # HTTP client
+      components/              # React components (ActionBar, BatchTable, MetadataEditor, etc.)
+      types/                   # TypeScript interfaces
+      App.tsx                  # Root component
+      main.tsx                 # Entry point
+      style.css                # Dark theme via CSS custom properties
+    package.json
+    vite.config.ts
+  data/
+    _INGEST/music/             # Drop zone for copied music
+    _STAGING/                  # Reserved for future use
+    _QUARANTINE/               # Rejected / unclear files
+    _REPORTS/                  # JSON scan reports and move logs
+    Music/Library/FLAC/        # Organized FLAC output
+    Music/Library/MP3/         # Organized MP3 output
+  docs/
+    ARCHITECTURE.md            # System architecture and permission design
+    ROADMAP.md                 # Future milestones
+  scripts/
+    reset_music_test.py        # Test data reset utility
+    create_sample_tree.sh      # Creates empty data directory structure
+  docker-compose.yml
+```
+
+---
+
+## Frontend Overview
+
+The dashboard is a **React + TypeScript** SPA built with **Vite**. Features:
+
+- **Status tabs**: filter batches by All, Pending, Needs Metadata, Approved, Moved.
+- **Batch table**: selectable rows, expandable detail panels, inline status badges.
+- **Bulk actions**: select all / approve multiple / reject multiple.
+- **Metadata editor**: modal form with artist, album, year, genre fields and live destination preview.
+- **Dark theme**: fully customizable via CSS custom properties in `style.css`.
+
+Icons: [Tabler Icons](https://tabler.io/icons) (loaded from CDN).
+
+Available scripts (`cd frontend`):
+
+| Command | Description |
+|---|---|
+| `npm run dev` | Start Vite dev server with hot-reload |
+| `npm run build` | Type-check and production build |
+| `npm run preview` | Preview production build |
+
+---
+
+## API Endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/batches` | List all batches |
+| `GET` | `/api/batches/pending` | List pending batches |
+| `GET` | `/api/batches/needs-metadata-review` | List batches needing metadata review |
+| `GET` | `/api/batches/{id}` | Get batch details |
+| `PATCH` | `/api/batches/{id}/metadata` | Update batch metadata |
+| `POST` | `/api/batches/{id}/approve` | Approve a batch |
+| `POST` | `/api/batches/{id}/send-to-recovery` | Send batch to metadata recovery |
+| `POST` | `/api/batches/{id}/reject` | Reject a batch |
+| `POST` | `/api/batches/bulk-approve` | Bulk approve by IDs |
+| `POST` | `/api/scan/music` | Trigger music scan |
+| `POST` | `/api/move/approved` | Move all approved batches |
+
+Full interactive docs at `http://127.0.0.1:8000/docs`.
+
+---
+
+## Docker Compose
+
+```bash
+docker-compose up
+```
+
+Starts two services:
+
+- **archive-backend** (port 8000): Python 3.12-slim, runs `init_db` then `uvicorn`.
+- **archive-frontend** (port 5173): Node 22-alpine, runs `npm install && npm run dev -- --host 0.0.0.0`.
+
+The `./data` directory and SQLite database file are mounted as volumes for persistence.
+
+---
+
+## Reset Test Data
+
+Preview what will be reset (dry run):
 
 ```bash
 python scripts/reset_music_test.py
 ```
 
-Apply it:
+Apply the reset:
 
 ```bash
 python scripts/reset_music_test.py --apply
 ```
 
-This restores moved tracks to their original `data/_INGEST/music` paths, removes
-generated music reports and move logs, and clears music records without dropping
-or recreating database tables.
+This restores moved tracks to their original `data/_INGEST/music` paths, removes generated music reports and move logs, and clears music records without dropping or recreating database tables.
 
-## Local folder layout
+---
 
-```text
-archive-assistant-scaffold/
-  backend/
-  frontend/
-  data/
-    _INGEST/music/
-    _STAGING/
-    _QUARANTINE/
-    _REPORTS/
-    Music/Library/FLAC/
-    Music/Library/MP3/
-  docs/
+## Project Status
+
+**Current phase**: V1 scaffold -- music-only, SQLite, deterministic tools.
+
+See [docs/ROADMAP.md](docs/ROADMAP.md) for future milestones including:
+
+- Milestone 2: Movies / TV support
+- Milestone 3: Full-text search
+- Milestone 4: PostgreSQL migration and NAS deployment
+- Milestone 5: AI-assisted metadata recovery
+- Milestone 6: Plugin system
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for system architecture details.
+
+---
+
+## Development
+
+### Prerequisites
+
+- **Python** 3.12+
+- **Node.js** 22+ (for frontend)
+- **npm** (comes with Node.js)
+
+### Backend
+
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python -m app.db.init_db
+uvicorn app.main:app --reload   # Omit --reload in production
 ```
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+### Creating the data directory structure
+
+```bash
+bash scripts/create_sample_tree.sh
+```
+
+### Troubleshooting
+
+| Issue | Likely fix |
+|---|---|
+| Port 8000 already in use | Change port: `uvicorn app.main:app --reload --port 8001` |
+| Port 5173 already in use | Vite will auto-switch to next available port |
+| Database errors on startup | Run `python -m app.db.init_db` to create/update tables |
+| Files not appearing in ingest | Ensure files are inside `data/_INGEST/music/` (not a subfolder with different name) |
+| CORS errors in browser | Check backend is running on port 8000 and frontend on port 5173 |
+
+---
 
 ## V1 scope
 
-Included:
-
+**Included:**
 - Music scan
 - Metadata extraction using mutagen
 - SQLite database
@@ -144,9 +357,8 @@ Included:
 - Basic FastAPI backend
 - Basic React dashboard scaffold
 
-Not included yet:
-
+**Not included yet:**
 - AI metadata recovery
-- Movies/books/audiobooks
+- Movies / books / audiobooks
 - PostgreSQL production schema
 - TrueNAS container deployment
