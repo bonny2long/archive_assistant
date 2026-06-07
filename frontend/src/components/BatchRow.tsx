@@ -51,7 +51,9 @@ export default function BatchRow({
   onEdit,
 }: Props) {
   const artist = batch.artist ?? "-";
-  const album = batch.album ?? "-";
+  const album = batch.detected_type === "music_discography"
+    ? `${batch.album_count} album discography`
+    : batch.album ?? "-";
   const year = batch.year ?? "-";
   const tracks = batch.track_count || "-";
   const percent = Math.round((batch.confidence ?? 0) * 100);

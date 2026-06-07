@@ -14,6 +14,7 @@ from app.schemas.archive import (
     BatchReview,
     BatchReviewTrack,
     BatchSummary, 
+    DiscographyMetadataUpdate,
     DevResetResponse,
     IngestBatchOut, 
     IngestFileOut,
@@ -50,6 +51,8 @@ BLOCKING_APPROVAL_WARNINGS = {
     "possible_artist_alias",
     "possible_archived_duplicate_candidate",
     "destination_file_conflict",
+    "child_album_metadata_missing",
+    "discography_destination_exists",
 }
 
 
@@ -405,6 +408,53 @@ def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Sessio
     )
 
 
+@router.patch("/batches/{batch_id}/discography", response_model=BatchSummary)
+def update_discography_metadata(
+    batch_id: int,
+    update: DiscographyMetadataUpdate,
+    db: Session = Depends(get_db),
+):
+    batch = db.get(IngestBatch, batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    if batch.detected_type != "music_discography":
+        raise HTTPException(status_code=400, detail="Batch is not a discography")
+    if batch.status in {"moved", "merged"}:
+        raise HTTPException(status_code=400, detail="Moved batches cannot be edited")
+
+    artist = update.artist.strip()
+    metadata = dict(batch.metadata_json or {})
+    metadata["artist"] = artist
+    albums = []
+    for album in metadata.get("albums", []):
+        album_copy = dict(album)
+        album_copy["artist"] = artist
+        albums.append(album_copy)
+    metadata["albums"] = albums
+    warnings = [
+        warning
+        for warning in metadata.get("metadata_warnings", [])
+        if warning != "artist_missing"
+    ]
+    blocking = "child_album_metadata_missing" in warnings
+    metadata["metadata_warnings"] = warnings
+    metadata["metadata_quality"] = "weak" if blocking else "good"
+    metadata["confidence"] = 0.6 if blocking else 1.0
+
+    batch.metadata_json = metadata
+    batch.suggested_metadata = {
+        "artist": artist,
+        "sources": {"artist": "manual correction"},
+    }
+    batch.suggested_destination = str(settings.music_discographies_dir / artist)
+    batch.metadata_confirmed = True
+    batch.confidence = metadata["confidence"]
+    batch.status = "needs_metadata_review" if blocking else "pending_review"
+    batch.updated_at = datetime.utcnow()
+    db.commit()
+    return _batch_to_summary(batch, action_message="Discography metadata saved.")
+
+
 @router.post("/batches/{batch_id}/approve", response_model=ApproveResponse)
 def approve_batch(batch_id: int, db: Session = Depends(get_db)):
     batch = db.get(IngestBatch, batch_id)
@@ -548,8 +598,9 @@ def _batch_to_summary(
         album=meta.get("album"),
         year=str(meta.get("year") or meta.get("date") or "")[:4] or None,
         primary_genre=meta.get("genre"),
-        format=meta.get("format", "MP3"),
+        format=meta.get("format") or ", ".join(meta.get("format_summary", [])) or "MP3",
         track_count=meta.get("track_count", 0),
+        album_count=meta.get("album_count", 0),
         disc_count=meta.get("disc_count", 1),
         confidence=batch.confidence,
         metadata_quality=meta.get("metadata_quality", "weak"),

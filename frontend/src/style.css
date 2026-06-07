@@ -337,7 +337,8 @@ button:focus-visible, input:focus-visible {
 }
 .batch-detail--review .library-status__eyebrow { color: var(--accent-blue); }
 .library-fields--single { grid-template-columns: 1fr; }
-.track-preview {
+.track-preview,
+.discography-albums {
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -352,9 +353,12 @@ button:focus-visible, input:focus-visible {
 .track-preview__header h3 { font-size: 12px; }
 .track-preview__header span { color: var(--text-muted); font-size: 11px; }
 .track-preview__table { max-height: 320px; overflow: auto; }
-.track-preview table { width: 100%; border-collapse: collapse; }
+.track-preview table,
+.discography-albums table { width: 100%; border-collapse: collapse; }
 .track-preview th,
-.track-preview td {
+.track-preview td,
+.discography-albums th,
+.discography-albums td {
   padding: 7px 9px;
   border-top: 1px solid var(--border);
   color: var(--text-secondary);
@@ -362,7 +366,8 @@ button:focus-visible, input:focus-visible {
   text-align: left;
   vertical-align: top;
 }
-.track-preview th {
+.track-preview th,
+.discography-albums th {
   position: sticky;
   top: 0;
   z-index: 1;
@@ -380,6 +385,7 @@ button:focus-visible, input:focus-visible {
   min-width: 180px;
   overflow-wrap: anywhere;
 }
+.discography-albums td:nth-child(2) { min-width: 180px; }
 .track-preview__warning { color: var(--accent-amber); }
 
 /* Moved library detail */

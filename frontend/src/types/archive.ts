@@ -33,6 +33,7 @@ export type BatchSummary = {
   primary_genre?: string | null;
   format?: string | null;
   track_count: number;
+  album_count: number;
   disc_count: number;
   confidence: number;
   metadata_quality: string;
@@ -59,6 +60,10 @@ export type BatchMetadataUpdate = {
   year: string;
   primary_genre?: string | null;
   format?: string | null;
+};
+
+export type DiscographyMetadataUpdate = {
+  artist: string;
 };
 
 export type PaginatedResponse<T> = {

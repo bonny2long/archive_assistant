@@ -6,6 +6,7 @@ import type {
   BatchReview,
   BulkApproveResult,
   DevResetResponse,
+  DiscographyMetadataUpdate,
   HealthResponse,
   IngestBatch,
   LibrarySummary,
@@ -39,6 +40,8 @@ export const api = {
   getBatchMoves: (id: number) => request<BatchMoveSummary>(`/batches/${id}/moves`),
   updateBatchMetadata: (id: number, update: BatchMetadataUpdate) =>
     request<BatchSummary>(`/batches/${id}/metadata`, "PATCH", update),
+  updateDiscographyMetadata: (id: number, update: DiscographyMetadataUpdate) =>
+    request<BatchSummary>(`/batches/${id}/discography`, "PATCH", update),
   scanMusic: () => request<ScanMusicResponse>("/scan/music", "POST"),
   approveBatch: (id: number) => request<BatchActionResult>(`/batches/${id}/approve`, "POST"),
   approveSelected: (batchIds: number[]) =>

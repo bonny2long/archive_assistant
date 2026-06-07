@@ -8,9 +8,143 @@ from app.models.archive import ArchiveItem, IngestBatch, MoveAction
 from app.services.music_metadata import (
     canonical_album_key,
     canonical_artist_key,
+    music_track_numbers,
     music_track_filename,
     sort_music_tracks,
 )
+
+
+def _safe_path_part(value: str) -> str:
+    return "".join(c if c not in '<>:"/\\|?*' else "_" for c in value).strip()
+
+
+def _discography_album_destination(root: Path, album_metadata: dict) -> Path:
+    album = _safe_path_part(
+        str(album_metadata.get("album") or album_metadata.get("source_folder") or "Unknown Album")
+    )
+    year = str(album_metadata.get("year") or "")[:4]
+    folder = f"{year} - {album}" if year.isdigit() else album
+    return root / folder
+
+
+def _move_discography_batch(
+    db: Session,
+    batch: IngestBatch,
+) -> tuple[list[str], list[str]]:
+    destination = Path(batch.suggested_destination or "")
+    if not batch.suggested_destination:
+        return [], ["Missing suggested discography destination"]
+    if destination.exists():
+        metadata = dict(batch.metadata_json or {})
+        warnings = list(metadata.get("metadata_warnings", []))
+        warnings.append("discography_destination_exists")
+        metadata["metadata_warnings"] = list(dict.fromkeys(warnings))
+        metadata["metadata_alerts"] = [
+            *list(metadata.get("metadata_alerts", [])),
+            {
+                "type": "discography_destination_exists",
+                "message": "Discography folder already exists. Review required before merging.",
+                "existing_path": str(destination),
+            },
+        ]
+        batch.metadata_json = metadata
+        batch.status = "needs_metadata_review"
+        batch.updated_at = datetime.utcnow()
+        db.commit()
+        return [], ["Discography destination already exists"]
+
+    planned = []
+    seen_destinations = set()
+    album_disc_counts: dict[str, int] = {}
+    for ingest_file in batch.files:
+        metadata = ingest_file.metadata_json or {}
+        album_metadata = metadata.get("_discography_album") or {}
+        source_folder = str(album_metadata.get("source_folder") or "")
+        disc, _ = music_track_numbers(metadata, ingest_file.file_name)
+        album_disc_counts[source_folder] = max(
+            album_disc_counts.get(source_folder, 1),
+            disc,
+        )
+
+    for ingest_file in sort_music_tracks(batch.files):
+        metadata = ingest_file.metadata_json or {}
+        album_metadata = metadata.get("_discography_album") or {}
+        album_destination = _discography_album_destination(destination, album_metadata)
+        disc_count = album_disc_counts.get(
+            str(album_metadata.get("source_folder") or ""),
+            1,
+        )
+        destination_file = album_destination / music_track_filename(
+            metadata,
+            ingest_file.extension,
+            disc_count,
+            ingest_file.file_name,
+        )
+        destination_key = str(destination_file).lower()
+        if destination_key in seen_destinations or destination_file.exists():
+            batch_metadata = dict(batch.metadata_json or {})
+            warnings = list(batch_metadata.get("metadata_warnings", []))
+            warnings.append("destination_file_conflict")
+            batch_metadata["metadata_warnings"] = list(dict.fromkeys(warnings))
+            batch.metadata_json = batch_metadata
+            batch.status = "needs_metadata_review"
+            batch.updated_at = datetime.utcnow()
+            db.commit()
+            return [], [f"Destination file conflict: {destination_file}"]
+        seen_destinations.add(destination_key)
+        planned.append((ingest_file, destination_file))
+
+    moved_files = []
+    failed_files = []
+    for ingest_file, destination_file in planned:
+        source = Path(ingest_file.file_path)
+        if not source.exists():
+            failed_files.append(f"Source not found: {source}")
+            continue
+        destination_file.parent.mkdir(parents=True, exist_ok=True)
+        action = MoveAction(
+            batch_id=batch.id,
+            source_path=str(source),
+            destination_path=str(destination_file),
+            status="running",
+        )
+        db.add(action)
+        db.flush()
+        try:
+            shutil.move(str(source), str(destination_file))
+            action.status = "completed"
+            action.completed_at = datetime.utcnow()
+            moved_files.append(str(destination_file))
+        except Exception as exc:
+            action.status = "failed"
+            action.error_message = str(exc)
+            failed_files.append(f"Failed to move {source}: {exc}")
+            db.flush()
+
+    metadata_dir = destination / "metadata"
+    metadata_dir.mkdir(parents=True, exist_ok=True)
+    metadata = batch.metadata_json or {}
+    (metadata_dir / "discography-move-log.json").write_text(
+        json.dumps(
+            {
+                "type": "discography_move",
+                "batch_id": batch.id,
+                "artist": metadata.get("artist"),
+                "albums_completed": metadata.get("album_count", 0),
+                "tracks_completed": len(moved_files),
+                "failed_moves": len(failed_files),
+                "warnings": metadata.get("metadata_warnings", []),
+                "destination": str(destination),
+                "moved_files": moved_files,
+                "failed_files": failed_files,
+                "moved_at": datetime.utcnow().isoformat(),
+            },
+            indent=2,
+            default=str,
+        ),
+        encoding="utf-8",
+    )
+    return moved_files, failed_files
 
 
 def _format_bucket_for_path(path: Path) -> str:
@@ -262,6 +396,38 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                 batch.updated_at = datetime.utcnow()
                 db.commit()
                 errors.append(f"Batch {batch.id}: weak metadata must be confirmed before move")
+                continue
+
+            if batch.detected_type == "music_discography":
+                moved_files, failed_files = _move_discography_batch(db, batch)
+                if not moved_files:
+                    if batch.status != "needs_metadata_review":
+                        batch.status = "move_failed"
+                    batch.updated_at = datetime.utcnow()
+                    db.commit()
+                    errors.extend(f"Batch {batch.id}: {error}" for error in failed_files)
+                    continue
+
+                batch.status = "move_failed" if failed_files else "moved"
+                batch.updated_at = datetime.utcnow()
+                for dest_path in moved_files:
+                    dest = Path(dest_path)
+                    metadata = batch.metadata_json or {}
+                    db.add(
+                        ArchiveItem(
+                            media_type="music",
+                            title=dest.parent.name,
+                            creator=metadata.get("artist"),
+                            year=dest.parent.name[:4] if dest.parent.name[:4].isdigit() else None,
+                            source_kind=batch.source_kind,
+                            final_path=str(dest),
+                            metadata_status="discography",
+                        )
+                    )
+                db.commit()
+                moved += 1
+                if failed_files:
+                    errors.extend(f"Batch {batch.id}: {error}" for error in failed_files)
                 continue
 
             if not batch.suggested_destination:

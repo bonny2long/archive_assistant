@@ -67,22 +67,27 @@ def _remove_move_logs() -> int:
     removed = 0
     roots = [
         settings.data_root / "Music" / "Library",
+        settings.music_discographies_dir,
         settings.move_logs_dir,
     ]
     for root in roots:
         if not root.exists():
             continue
-        for path in root.rglob("batch-*-move-log.json"):
-            if path.is_file():
-                path.unlink()
-                removed += 1
+        for pattern in ("batch-*-move-log.json", "discography-move-log.json"):
+            for path in root.rglob(pattern):
+                if path.is_file():
+                    path.unlink()
+                    removed += 1
     return removed
 
 
 def _validate_moves(moves: list[MoveAction]) -> list[str]:
     errors: list[str] = []
     seen_sources: set[Path] = set()
-    library_root = settings.data_root / "Music" / "Library"
+    library_roots = [
+        settings.data_root / "Music" / "Library",
+        settings.music_discographies_dir,
+    ]
 
     for move in moves:
         if move.status != "completed":
@@ -92,7 +97,7 @@ def _validate_moves(moves: list[MoveAction]) -> list[str]:
         destination = Path(move.destination_path)
         if not _is_within(source, settings.ingest_music_dir):
             errors.append(f"Source is outside music ingest: {source}")
-        if not _is_within(destination, library_root):
+        if not any(_is_within(destination, root) for root in library_roots):
             errors.append(f"Destination is outside music library: {destination}")
         if source in seen_sources:
             errors.append(f"Duplicate restore target: {source}")
@@ -106,7 +111,7 @@ def _validate_moves(moves: list[MoveAction]) -> list[str]:
 def reset_music_test_data(db: Session, *, apply: bool) -> DevResetSummary:
     batches = (
         db.query(IngestBatch)
-        .filter(IngestBatch.detected_type == "music_album")
+        .filter(IngestBatch.detected_type.in_(["music_album", "music_discography"]))
         .order_by(IngestBatch.id.asc())
         .all()
     )
@@ -153,7 +158,13 @@ def reset_music_test_data(db: Session, *, apply: bool) -> DevResetSummary:
 
     removed_reports = _remove_batch_reports(batch_ids)
     removed_move_logs = _remove_move_logs()
-    removed_empty_dirs = _remove_empty_directories(settings.data_root / "Music" / "Library")
+    removed_empty_dirs = sum(
+        _remove_empty_directories(root)
+        for root in (
+            settings.data_root / "Music" / "Library",
+            settings.music_discographies_dir,
+        )
+    )
 
     if batch_ids:
         db.query(MoveAction).filter(MoveAction.batch_id.in_(batch_ids)).delete(

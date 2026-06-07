@@ -4,6 +4,7 @@ import type {
   BatchMoveSummary,
   BatchReview,
   BatchSummary,
+  DiscographyMetadataUpdate,
   IngestBatch,
   LibrarySummary as LibrarySummaryData,
   TabKey,
@@ -16,6 +17,7 @@ import Toast from "./components/Toast";
 import MetadataEditor from "./components/MetadataEditor";
 import LibrarySummary from "./components/LibrarySummary";
 import BulkApproveModal from "./components/BulkApproveModal";
+import DiscographyEditor from "./components/DiscographyEditor";
 
 type ToastState = { msg: string; type: "info" | "error" };
 type ActionKey = "refresh" | "scan" | "move" | "reset";
@@ -220,6 +222,24 @@ export default function App() {
     }
   };
 
+  const handleDiscographySave = async (update: DiscographyMetadataUpdate) => {
+    if (!editingBatch) return;
+    setSavingMetadata(true);
+    try {
+      const result = await api.updateDiscographyMetadata(editingBatch.id, update);
+      showToast(result.action_message ?? "Discography metadata updated");
+      setEditingBatch(null);
+      await loadBatches();
+    } catch (saveError: unknown) {
+      showToast(
+        saveError instanceof Error ? saveError.message : "Discography update failed",
+        "error",
+      );
+    } finally {
+      setSavingMetadata(false);
+    }
+  };
+
   const runBulkApprove = async () => {
     const ids = [...selected];
     if (ids.length === 0) return;
@@ -409,11 +429,21 @@ export default function App() {
           onHide={() => setToast(null)}
         />
       )}
-      {editingBatch && (
+      {editingBatch && editingBatch.detected_type !== "music_discography" && (
         <MetadataEditor
           batch={editingBatch}
           saving={savingMetadata}
           onSave={handleMetadataSave}
+          onClose={() => {
+            if (!savingMetadata) setEditingBatch(null);
+          }}
+        />
+      )}
+      {editingBatch?.detected_type === "music_discography" && (
+        <DiscographyEditor
+          batch={editingBatch}
+          saving={savingMetadata}
+          onSave={handleDiscographySave}
           onClose={() => {
             if (!savingMetadata) setEditingBatch(null);
           }}

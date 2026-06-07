@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     move_logs_dir: Path = data_root / "_REPORTS" / "move-logs"
     music_flac_dir: Path = data_root / "Music" / "Library" / "FLAC"
     music_mp3_dir: Path = data_root / "Music" / "Library" / "MP3"
+    music_discographies_dir: Path = data_root / "Music" / "Discographies"
 
     database_url: str = f"sqlite:///{backend_dir / 'archive_assistant.db'}"
 

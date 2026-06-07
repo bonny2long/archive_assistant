@@ -22,10 +22,68 @@ TRAILING_RELEASE_NOISE = re.compile(
     re.IGNORECASE | re.VERBOSE,
 )
 COMPILATION_ARTISTS = {"va", "v.a.", "various", "various artists", "ost", "soundtrack"}
+DISCOGRAPHY_TOKENS = {
+    "discography",
+    "collection",
+    "complete",
+    "albums",
+    "studio albums",
+}
 
 
 def is_audio_file(path: Path) -> bool:
     return path.suffix.lower() in AUDIO_EXTENSIONS
+
+
+def is_disc_folder_name(value: str) -> bool:
+    return bool(
+        re.fullmatch(
+            r"(?:cd|disc|disk)\s*\d+|side\s*[a-z]",
+            value.strip(),
+            flags=re.IGNORECASE,
+        )
+    )
+
+
+def discography_artist_from_folder(value: str) -> str | None:
+    cleaned = re.sub(
+        r"(?i)\b(?:complete\s+)?(?:discography|collection|studio\s+albums|albums)\b",
+        "",
+        value,
+    )
+    cleaned = _clean_spacing(cleaned)
+    return cleaned or None
+
+
+def looks_like_discography_parent(
+    parent: Path,
+    child_audio_folders: list[Path],
+    child_track_metadata: dict[str, list[dict]],
+) -> bool:
+    eligible = [
+        child for child in child_audio_folders
+        if not is_disc_folder_name(child.name)
+    ]
+    if len(eligible) < 2:
+        return False
+
+    parent_key = canonical_text_key(parent.name)
+    if any(token in parent_key for token in DISCOGRAPHY_TOKENS):
+        return True
+
+    year_pattern_count = sum(
+        bool(YEAR_PATTERN.search(child.name))
+        for child in eligible
+    )
+    if year_pattern_count >= 2:
+        return True
+
+    artists = []
+    for child in eligible:
+        common = common_track_artist(child_track_metadata.get(str(child), []))
+        if common:
+            artists.append(canonical_artist_key(common))
+    return len(artists) >= 2 and len(set(artists)) == 1
 
 
 def _first(value, default="Unknown"):

@@ -171,6 +171,7 @@ Settings are defined in `backend/app/core/config.py` using `pydantic-settings`. 
 | `move_logs_dir` | `data/_REPORTS/move-logs/` | Move action logs |
 | `music_flac_dir` | `data/Music/Library/FLAC/` | FLAC library destination |
 | `music_mp3_dir` | `data/Music/Library/MP3/` | MP3 library destination |
+| `music_discographies_dir` | `data/Music/Discographies/` | Multi-album artist collection destination |
 | `database_url` | `sqlite:///.../archive_assistant.db` | SQLite connection string |
 
 ---
@@ -208,6 +209,7 @@ archive-assistant-scaffold/
     _REPORTS/                  # JSON scan reports and move logs
     Music/Library/FLAC/        # Organized FLAC output
     Music/Library/MP3/         # Organized MP3 output
+    Music/Discographies/       # Artist discographies with child album folders
   docs/
     ARCHITECTURE.md            # System architecture and permission design
     ROADMAP.md                 # Future milestones
@@ -219,6 +221,7 @@ archive-assistant-scaffold/
     check_batch_merge.py       # Manual-confirm duplicate merge checks
     check_track_order.py       # Canonical track sorting and filename checks
     check_bulk_approve.py      # Safe bulk approval skip-reason checks
+    check_discography_intake.py # Discography detection, move, and reset checks
     create_ugly_music_test_pack.py # Copies local audio into ugly ingest folders
     create_sample_tree.sh      # Creates empty data directory structure
   docker-compose.yml
@@ -237,6 +240,7 @@ The dashboard is a **React + TypeScript** SPA built with **Vite**. Features:
 - **Dev reset**: restores moved test tracks and clears music test rows from the frontend in local debug mode.
 - **Bulk actions**: select all / approve multiple / reject multiple.
 - **Metadata editor**: modal form with artist, album, year, genre fields and live destination preview.
+- **Discography intake**: deterministic collection detection, album summary table, artist correction, and guarded moves.
 - **Dark theme**: fully customizable via CSS custom properties in `style.css`.
 
 Icons: [Tabler Icons](https://tabler.io/icons) (loaded from CDN).
@@ -262,6 +266,7 @@ Available scripts (`cd frontend`):
 | `GET` | `/api/batches/{id}/moves` | Get per-file move history and completion summary |
 | `GET` | `/api/library/summary` | Get library and workflow totals |
 | `PATCH` | `/api/batches/{id}/metadata` | Update batch metadata |
+| `PATCH` | `/api/batches/{id}/discography` | Correct a discography artist and recalculate its destination |
 | `POST` | `/api/batches/{id}/approve` | Approve a batch |
 | `POST` | `/api/batches/{id}/send-to-recovery` | Send batch to metadata recovery |
 | `POST` | `/api/batches/{id}/reject` | Reject a batch |
@@ -320,6 +325,7 @@ backend/.venv/Scripts/python.exe scripts/check_destination_guard.py
 backend/.venv/Scripts/python.exe scripts/check_batch_merge.py
 backend/.venv/Scripts/python.exe scripts/check_track_order.py
 backend/.venv/Scripts/python.exe scripts/check_bulk_approve.py
+backend/.venv/Scripts/python.exe scripts/check_discography_intake.py
 ```
 
 Create the five ugly ingest folders using existing local test audio:

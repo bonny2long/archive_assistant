@@ -11,6 +11,8 @@ from app.services.checksum import file_sha256
 from app.services.music_metadata import (
     album_group_key,
     build_suggested_metadata,
+    common_track_artist,
+    discography_artist_from_folder,
     evaluate_music_album_metadata,
     extract_music_metadata,
     has_mixed_track_artists,
@@ -18,6 +20,8 @@ from app.services.music_metadata import (
     is_compilation_artist,
     metadata_mismatch_warnings,
     normalize_key,
+    looks_like_discography_parent,
+    parse_music_folder_name,
     sort_music_tracks,
     suggest_music_destination,
     UNKNOWN_VALUES,
@@ -76,6 +80,173 @@ def _representative_value(track_metadata: list[dict], key: str, default: str) ->
     return next(value for value in values if normalize_key(value) == winner)
 
 
+def _discography_groups(
+    audio_files: list[Path],
+    file_metadata: dict[str, dict],
+) -> dict[Path, dict[Path, list[Path]]]:
+    candidates: dict[Path, dict[Path, list[Path]]] = {}
+    ingest_root = settings.ingest_music_dir.resolve()
+    top_level_dirs = sorted(
+        path for path in settings.ingest_music_dir.iterdir()
+        if path.is_dir()
+    )
+    for parent in top_level_dirs:
+        child_groups: dict[Path, list[Path]] = {}
+        for child in sorted(path for path in parent.iterdir() if path.is_dir()):
+            child_files = [
+                path for path in audio_files
+                if path.resolve().is_relative_to(child.resolve())
+            ]
+            if child_files:
+                child_groups[child] = child_files
+        child_metadata = {
+            str(child): [file_metadata[str(path)] for path in paths]
+            for child, paths in child_groups.items()
+        }
+        if (
+            parent.resolve().parent == ingest_root
+            and looks_like_discography_parent(
+                parent,
+                list(child_groups),
+                child_metadata,
+            )
+        ):
+            candidates[parent] = child_groups
+    return candidates
+
+
+def _create_discography_batch(
+    db: Session,
+    parent: Path,
+    child_groups: dict[Path, list[Path]],
+    file_metadata: dict[str, dict],
+    file_checksums: dict[str, str],
+) -> IngestBatch | None:
+    all_paths = [path for paths in child_groups.values() for path in paths]
+    checksums = {file_checksums[str(path)] for path in all_paths}
+    existing_checksums = {
+        row.checksum
+        for row in db.query(IngestFile)
+        .filter(IngestFile.checksum.in_(checksums))
+        .all()
+        if row.checksum
+    }
+    if checksums and checksums.issubset(existing_checksums):
+        return None
+
+    all_track_metadata = [file_metadata[str(path)] for path in all_paths]
+    artist = (
+        discography_artist_from_folder(parent.name)
+        or common_track_artist(all_track_metadata)
+        or "Unknown Artist"
+    )
+    album_summaries = []
+    formats = set()
+    warnings = ["discography_grouping_used"]
+    ingest_files = []
+
+    for child, paths in sorted(child_groups.items(), key=lambda item: item[0].name.lower()):
+        folder = parse_music_folder_name(child.name)
+        track_metadata = [file_metadata[str(path)] for path in paths]
+        album = folder.get("album") or child.name
+        year = folder.get("year")
+        extensions = {path.suffix.lower() for path in paths}
+        child_formats = {
+            "FLAC" if extension == ".flac" else "MP3"
+            for extension in extensions
+        }
+        formats.update(child_formats)
+        album_format = ", ".join(sorted(child_formats))
+        child_warnings = []
+        if not year:
+            child_warnings.append("album_missing_year")
+        if not album or normalize_key(album) in UNKNOWN_VALUES:
+            child_warnings.append("album_missing_title")
+        if len(extensions) > 1:
+            child_warnings.append("mixed_formats")
+        if child_warnings:
+            warnings.append("child_album_metadata_missing")
+
+        album_summaries.append(
+            {
+                "source_folder": child.name,
+                "artist": artist,
+                "album": album,
+                "year": year,
+                "format": album_format,
+                "track_count": len(paths),
+                "status": "needs_review" if child_warnings else "ready",
+                "warnings": child_warnings,
+            }
+        )
+        for path in paths:
+            if file_checksums[str(path)] in existing_checksums:
+                continue
+            metadata = dict(file_metadata[str(path)])
+            metadata["_discography_album"] = {
+                "source_folder": child.name,
+                "album": album,
+                "year": year,
+                "format": album_format,
+            }
+            ingest_files.append(
+                IngestFile(
+                    file_path=str(path),
+                    file_name=path.name,
+                    extension=path.suffix.lower(),
+                    size_bytes=path.stat().st_size,
+                    checksum=file_checksums[str(path)],
+                    detected_role="discography_track",
+                    metadata_json=metadata,
+                )
+            )
+
+    if len(formats) > 1:
+        warnings.append("mixed_formats")
+    if existing_checksums:
+        warnings.append("partial_duplicate_tracks_detected")
+
+    blocking = (
+        normalize_key(artist) in UNKNOWN_VALUES
+        or "child_album_metadata_missing" in warnings
+        or bool(existing_checksums)
+    )
+    destination = settings.music_discographies_dir / artist
+    metadata = {
+        "artist": artist,
+        "collection_type": "discography",
+        "album_count": len(album_summaries),
+        "track_count": len(ingest_files),
+        "format_summary": sorted(formats),
+        "albums": album_summaries,
+        "metadata_quality": "weak" if blocking else "good",
+        "metadata_warnings": list(dict.fromkeys(warnings)),
+        "confidence": 0.6 if blocking else 1.0,
+    }
+    batch = IngestBatch(
+        source_kind="manual-drop",
+        source_path=str(parent),
+        detected_type="music_discography",
+        status="needs_metadata_review" if blocking else "pending_review",
+        confidence=metadata["confidence"],
+        suggested_destination=str(destination),
+        suggested_metadata={
+            "artist": artist,
+            "sources": {"artist": "discography folder"},
+        },
+        metadata_json=metadata,
+    )
+    db.add(batch)
+    db.flush()
+    for ingest_file in sort_music_tracks(ingest_files):
+        ingest_file.batch_id = batch.id
+        db.add(ingest_file)
+    db.commit()
+    db.refresh(batch)
+    write_json_report(settings.reports_dir, batch.id, metadata)
+    return batch
+
+
 def scan_music_ingest(db: Session) -> ScanMusicResult:
     settings.ingest_music_dir.mkdir(parents=True, exist_ok=True)
     audio_files = [
@@ -86,7 +257,6 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
     if not audio_files:
         return ScanMusicResult(created=0, skipped_duplicates=0, batches=[])
 
-    groups: dict[str, list[Path]] = defaultdict(list)
     file_metadata: dict[str, dict] = {}
     file_checksums: dict[str, str] = {}
 
@@ -94,10 +264,34 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
         metadata = extract_music_metadata(path)
         file_metadata[str(path)] = metadata
         file_checksums[str(path)] = file_sha256(path)
-        groups[_group_key(path, metadata)].append(path)
+
+    discography_groups = _discography_groups(audio_files, file_metadata)
+    discography_paths = {
+        path.resolve()
+        for child_groups in discography_groups.values()
+        for paths in child_groups.values()
+        for path in paths
+    }
+    groups: dict[str, list[Path]] = defaultdict(list)
+    for path in audio_files:
+        if path.resolve() in discography_paths:
+            continue
+        groups[_group_key(path, file_metadata[str(path)])].append(path)
 
     batches: list[IngestBatch] = []
     skipped_duplicates = 0
+    for parent, child_groups in discography_groups.items():
+        batch = _create_discography_batch(
+            db,
+            parent,
+            child_groups,
+            file_metadata,
+            file_checksums,
+        )
+        if batch:
+            batches.append(batch)
+        else:
+            skipped_duplicates += 1
 
     for paths in groups.values():
         if not paths:

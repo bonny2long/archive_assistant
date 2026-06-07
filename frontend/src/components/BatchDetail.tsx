@@ -44,6 +44,12 @@ const WARNING_LABELS: Record<string, string> = {
   destination_file_conflict: "Destination filename conflict",
   album_tag_mismatch: "Album tag mismatch",
   artist_tag_mismatch: "Artist tag mismatch",
+  discography_grouping_used: "Discography grouping used",
+  child_album_metadata_missing: "Child album metadata needs review",
+  album_missing_year: "Album missing year",
+  album_missing_title: "Album missing title",
+  mixed_formats: "Mixed formats",
+  discography_destination_exists: "Discography folder already exists",
 };
 
 function metadataWarnings(batch: IngestBatch): string[] {
@@ -214,6 +220,103 @@ function ReviewBatchDetail({ batch, moveSummary, review }: Props) {
   );
 }
 
+type DiscographyAlbum = {
+  year?: string | null;
+  album?: string | null;
+  track_count?: number;
+  format?: string;
+  status?: string;
+  warnings?: string[];
+};
+
+function DiscographyBatchDetail({ batch, moveSummary }: Props) {
+  const metadata = batch.metadata_json ?? {};
+  const albums = Array.isArray(metadata.albums)
+    ? metadata.albums.filter(
+      (album): album is DiscographyAlbum => Boolean(album) && typeof album === "object",
+    )
+    : [];
+  const warnings = metadataWarnings(batch);
+  const moved = batch.status === "moved";
+
+  return (
+    <div className={`batch-detail ${moved ? "batch-detail--moved" : "batch-detail--review"}`}>
+      <div className="library-status">
+        <div className="library-status__icon"><i className="ti ti-folders" /></div>
+        <div>
+          <div className="library-status__eyebrow">Discography detected</div>
+          <h2>{String(metadata.artist ?? "Unknown Artist")}</h2>
+          <p>{albums.length} albums · {String(metadata.track_count ?? batch.files.length)} tracks</p>
+        </div>
+        <div className="library-status__facts">
+          <span>{Array.isArray(metadata.format_summary) ? metadata.format_summary.join(", ") : "-"}</span>
+          <span>{batch.status.replace(/_/g, " ")}</span>
+        </div>
+      </div>
+
+      <section className="library-destination">
+        <span>{moved ? "Final destination" : "Destination preview"}</span>
+        <strong>{readableLibraryPath(batch.suggested_destination)}</strong>
+      </section>
+
+      {warnings.length > 0 && (
+        <section className="metadata-warnings">
+          <div className="batch-detail__label">Warnings</div>
+          <div className="metadata-warnings__list">
+            {warnings.map((warning) => (
+              <span key={warning}><i className="ti ti-alert-triangle" />{warningLabel(warning)}</span>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="discography-albums">
+        <div className="track-preview__header">
+          <h3>Albums found</h3>
+          <span>{albums.length} album(s)</span>
+        </div>
+        <div className="track-preview__table">
+          <table>
+            <thead>
+              <tr>
+                <th>Year</th>
+                <th>Album</th>
+                <th>Tracks</th>
+                <th>Format</th>
+                <th>Status</th>
+                <th>Warnings</th>
+              </tr>
+            </thead>
+            <tbody>
+              {albums.map((album, index) => (
+                <tr key={`${album.year ?? "unknown"}-${album.album ?? index}`}>
+                  <td>{album.year ?? "-"}</td>
+                  <td>{album.album ?? "Unknown Album"}</td>
+                  <td>{album.track_count ?? 0}</td>
+                  <td>{album.format ?? "-"}</td>
+                  <td>{(album.status ?? "ready").replace(/_/g, " ")}</td>
+                  <td>
+                    {album.warnings?.length
+                      ? album.warnings.map(warningLabel).join(", ")
+                      : "-"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {moved && moveSummary && (
+        <div className="move-log__empty">
+          {moveSummary.completed} tracks completed, {moveSummary.failed} failed.
+        </div>
+      )}
+      <DebugDetails batch={batch} moveSummary={moveSummary} />
+    </div>
+  );
+}
+
 function MovedBatchDetail({ batch, moveSummary }: Props) {
   const completedDates = moveSummary?.moves
     .filter((move) => move.completed_at)
@@ -320,6 +423,9 @@ function MovedBatchDetail({ batch, moveSummary }: Props) {
 }
 
 export default function BatchDetail({ batch, moveSummary, review }: Props) {
+  if (batch.detected_type === "music_discography") {
+    return <DiscographyBatchDetail batch={batch} moveSummary={moveSummary} />;
+  }
   if (batch.status === "moved") {
     return <MovedBatchDetail batch={batch} moveSummary={moveSummary} />;
   }

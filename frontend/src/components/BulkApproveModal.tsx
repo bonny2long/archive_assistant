@@ -12,6 +12,8 @@ const BLOCKING_WARNINGS = new Set([
   "possible_artist_alias",
   "possible_archived_duplicate_candidate",
   "destination_file_conflict",
+  "child_album_metadata_missing",
+  "discography_destination_exists",
 ]);
 
 function isApprovable(batch: BatchSummary): boolean {

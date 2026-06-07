@@ -25,6 +25,7 @@ class BatchSummary(BaseModel):
     primary_genre: str | None = None
     format: str | None = None
     track_count: int = 0
+    album_count: int = 0
     disc_count: int = 0
     confidence: float
     metadata_quality: str
@@ -62,6 +63,10 @@ class BatchMetadataUpdate(BaseModel):
     year: str = Field(pattern=r"^(19|20)\d{2}$")
     primary_genre: str | None = None
     format: str | None = None
+
+
+class DiscographyMetadataUpdate(BaseModel):
+    artist: str = Field(min_length=1)
 
 class PaginatedResponse(BaseModel, Generic[T]):
     items: list[T]
