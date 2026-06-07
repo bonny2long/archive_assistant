@@ -29,6 +29,12 @@ DISCOGRAPHY_TOKENS = {
     "albums",
     "studio albums",
 }
+DISCOGRAPHY_YEAR_RANGE = re.compile(r"(?<!\d)(19\d{2}|20\d{2})\s*[-–]\s*(19\d{2}|20\d{2})(?!\d)")
+DISCOGRAPHY_FORMAT_TAG = re.compile(
+    r"(?i)(?:[\[(]\s*)?(flac(?:\s+songs)?|mp3|320\s*kbps|(?:16|24)\s*bit|"
+    r"(?:44[.]1|48)\s*khz)(?:\s*[\])])?"
+)
+DECORATIVE_SYMBOLS = re.compile(r"[^\w\s&'.,()\-]+", re.UNICODE)
 
 
 def is_audio_file(path: Path) -> bool:
@@ -46,13 +52,70 @@ def is_disc_folder_name(value: str) -> bool:
 
 
 def discography_artist_from_folder(value: str) -> str | None:
-    cleaned = re.sub(
+    return parse_discography_parent_folder(value)["artist"]
+
+
+def parse_discography_parent_folder(folder_name: str) -> dict:
+    raw = folder_name.strip()
+    removed_tokens: list[str] = []
+
+    year_match = DISCOGRAPHY_YEAR_RANGE.search(raw)
+    year_range = year_match.group(0) if year_match else None
+    if year_range:
+        removed_tokens.append(year_range)
+
+    format_matches = [match.group(0) for match in DISCOGRAPHY_FORMAT_TAG.finditer(raw)]
+    format_hint = None
+    for token in format_matches:
+        normalized = token.lower()
+        if "flac" in normalized:
+            format_hint = "FLAC"
+        elif normalized.strip("[]() ").lower() == "mp3":
+            format_hint = format_hint or "MP3"
+        removed_tokens.append(token)
+
+    collection_matches = re.findall(
         r"(?i)\b(?:complete\s+)?(?:discography|collection|studio\s+albums|albums)\b",
-        "",
-        value,
+        raw,
     )
+    removed_tokens.extend(collection_matches)
+
+    bracketed_source_tags = re.findall(r"\[[^\]]+\]", raw)
+    for token in bracketed_source_tags:
+        if token not in removed_tokens:
+            removed_tokens.append(token)
+
+    cleaned = raw
+    for token in removed_tokens:
+        cleaned = cleaned.replace(token, " ")
+    decorative_tokens = [
+        token.strip()
+        for token in DECORATIVE_SYMBOLS.findall(cleaned)
+        if token.strip()
+    ]
+    removed_tokens.extend(decorative_tokens)
+    cleaned = DECORATIVE_SYMBOLS.sub(" ", cleaned)
     cleaned = _clean_spacing(cleaned)
-    return cleaned or None
+
+    # A trailing release username is only removed after other pack markers were found.
+    trailing_source = None
+    if removed_tokens:
+        source_match = re.search(r"(?:^|\s)([A-Za-z]*\d+[A-Za-z0-9_-]*)$", cleaned)
+        if source_match:
+            trailing_source = source_match.group(1)
+            cleaned = cleaned[:source_match.start(1)]
+            removed_tokens.append(trailing_source)
+
+    artist = _clean_spacing(cleaned.rstrip(" -"))
+    clean_collection_name = f"{artist} Discography" if artist else "Discography"
+    return {
+        "artist": artist or None,
+        "clean_collection_name": clean_collection_name,
+        "removed_tokens": list(dict.fromkeys(token.strip() for token in removed_tokens if token.strip())),
+        "year_range": year_range,
+        "format_hint": format_hint,
+        "warnings": [] if artist else ["artist_missing"],
+    }
 
 
 def looks_like_discography_parent(
@@ -233,7 +296,7 @@ def parse_music_folder_name(folder_name: str) -> dict[str, str | None]:
             "",
             without_noise,
             count=1,
-        ).strip(" .-_()[]")
+        ).strip(" .-_")
     without_noise = TRAILING_RELEASE_NOISE.sub("", without_noise).strip(" .-_")
 
     parts = re.split(r"\s+-\s+|_-_", without_noise, maxsplit=1)
@@ -264,6 +327,32 @@ def common_track_artist(track_metadata: list[dict]) -> str | None:
     if count < threshold:
         return None
     return next(artist for artist in artists if normalize_key(artist) == winner)
+
+
+def common_album_artist(track_metadata: list[dict]) -> str | None:
+    artists = []
+    for metadata in track_metadata:
+        artist = str(metadata.get("albumartist") or "").strip()
+        if normalize_key(artist) not in UNKNOWN_VALUES:
+            artists.append(artist)
+    if not artists:
+        return None
+    counts = Counter(canonical_artist_key(artist) for artist in artists)
+    winner, count = counts.most_common(1)[0]
+    threshold = max(1, (len(track_metadata) * 7 + 9) // 10)
+    if count < threshold:
+        return None
+    return next(artist for artist in artists if canonical_artist_key(artist) == winner)
+
+
+def music_folder_release_tags(folder_name: str) -> list[str]:
+    tags = []
+    for match in BRACKETED_TEXT.finditer(folder_name):
+        tags.append(match.group(0))
+    trailing = TRAILING_RELEASE_NOISE.search(folder_name)
+    if trailing:
+        tags.append(trailing.group(0).strip())
+    return list(dict.fromkeys(tag for tag in tags if tag))
 
 
 def has_mixed_track_artists(track_metadata: list[dict]) -> bool:

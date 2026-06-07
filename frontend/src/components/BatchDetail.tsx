@@ -50,6 +50,12 @@ const WARNING_LABELS: Record<string, string> = {
   album_missing_title: "Album missing title",
   mixed_formats: "Mixed formats",
   discography_destination_exists: "Discography folder already exists",
+  one_track_release: "One-track release",
+  possible_single_or_ep: "Possible single/EP",
+  suspicious_year: "Suspicious year",
+  folder_artist_mismatch: "Folder artist mismatch",
+  album_title_from_folder_cleanup: "Album title cleaned",
+  release_tag_removed: "Release tag removed",
 };
 
 function metadataWarnings(batch: IngestBatch): string[] {
@@ -229,6 +235,12 @@ type DiscographyAlbum = {
   warnings?: string[];
 };
 
+type DiscographyParentCleanup = {
+  removed_tokens?: string[];
+  year_range?: string | null;
+  format_hint?: string | null;
+};
+
 function DiscographyBatchDetail({ batch, moveSummary }: Props) {
   const metadata = batch.metadata_json ?? {};
   const albums = Array.isArray(metadata.albums)
@@ -236,6 +248,10 @@ function DiscographyBatchDetail({ batch, moveSummary }: Props) {
       (album): album is DiscographyAlbum => Boolean(album) && typeof album === "object",
     )
     : [];
+  const cleanup = metadata.parent_cleanup && typeof metadata.parent_cleanup === "object"
+    ? metadata.parent_cleanup as DiscographyParentCleanup
+    : null;
+  const removedTokens = cleanup?.removed_tokens?.filter(Boolean) ?? [];
   const warnings = metadataWarnings(batch);
   const moved = batch.status === "moved";
 
@@ -246,7 +262,7 @@ function DiscographyBatchDetail({ batch, moveSummary }: Props) {
         <div>
           <div className="library-status__eyebrow">Discography detected</div>
           <h2>{String(metadata.artist ?? "Unknown Artist")}</h2>
-          <p>{albums.length} albums · {String(metadata.track_count ?? batch.files.length)} tracks</p>
+          <p>{albums.length} album discography · {String(metadata.track_count ?? batch.files.length)} tracks</p>
         </div>
         <div className="library-status__facts">
           <span>{Array.isArray(metadata.format_summary) ? metadata.format_summary.join(", ") : "-"}</span>
@@ -258,6 +274,26 @@ function DiscographyBatchDetail({ batch, moveSummary }: Props) {
         <span>{moved ? "Final destination" : "Destination preview"}</span>
         <strong>{readableLibraryPath(batch.suggested_destination)}</strong>
       </section>
+
+      {(removedTokens.length > 0 || cleanup?.year_range || metadata.artist_source) && (
+        <section className="library-card discography-cleanup">
+          <h3>Source folder cleanup</h3>
+          <dl className="library-fields library-fields--single">
+            {removedTokens.length > 0 && (
+              <div><dt>Removed</dt><dd>{removedTokens.join(", ")}</dd></div>
+            )}
+            {cleanup?.year_range && (
+              <div><dt>Year range</dt><dd>{cleanup.year_range}</dd></div>
+            )}
+            {cleanup?.format_hint && (
+              <div><dt>Format hint</dt><dd>{cleanup.format_hint}</dd></div>
+            )}
+            {metadata.artist_source && (
+              <div><dt>Artist selected from</dt><dd>{String(metadata.artist_source)}</dd></div>
+            )}
+          </dl>
+        </section>
+      )}
 
       {warnings.length > 0 && (
         <section className="metadata-warnings">
@@ -296,9 +332,13 @@ function DiscographyBatchDetail({ batch, moveSummary }: Props) {
                   <td>{album.format ?? "-"}</td>
                   <td>{(album.status ?? "ready").replace(/_/g, " ")}</td>
                   <td>
-                    {album.warnings?.length
-                      ? album.warnings.map(warningLabel).join(", ")
-                      : "-"}
+                    {album.warnings?.length ? (
+                      <div className="metadata-warnings__list metadata-warnings__list--compact">
+                        {album.warnings.map((warning) => (
+                          <span key={warning}>{warningLabel(warning)}</span>
+                        ))}
+                      </div>
+                    ) : "-"}
                   </td>
                 </tr>
               ))}

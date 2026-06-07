@@ -11,16 +11,19 @@ from app.services.checksum import file_sha256
 from app.services.music_metadata import (
     album_group_key,
     build_suggested_metadata,
+    canonical_artist_key,
+    common_album_artist,
     common_track_artist,
-    discography_artist_from_folder,
     evaluate_music_album_metadata,
     extract_music_metadata,
     has_mixed_track_artists,
     is_audio_file,
     is_compilation_artist,
     metadata_mismatch_warnings,
+    music_folder_release_tags,
     normalize_key,
     looks_like_discography_parent,
+    parse_discography_parent_folder,
     parse_music_folder_name,
     sort_music_tracks,
     suggest_music_destination,
@@ -135,11 +138,23 @@ def _create_discography_batch(
         return None
 
     all_track_metadata = [file_metadata[str(path)] for path in all_paths]
-    artist = (
-        discography_artist_from_folder(parent.name)
-        or common_track_artist(all_track_metadata)
-        or "Unknown Artist"
-    )
+    parent_parse = parse_discography_parent_folder(parent.name)
+    parent_artist = parent_parse.get("artist")
+    embedded_artist = common_album_artist(all_track_metadata)
+    if embedded_artist and (
+        not parent_artist
+        or canonical_artist_key(embedded_artist) == canonical_artist_key(parent_artist)
+        or bool(parent_parse.get("removed_tokens"))
+    ):
+        artist = embedded_artist
+        artist_source = "common embedded albumartist + cleaned parent folder"
+    else:
+        artist = parent_artist or common_track_artist(all_track_metadata) or "Unknown Artist"
+        artist_source = (
+            "cleaned parent folder"
+            if parent_artist
+            else "common embedded track artist"
+        )
     album_summaries = []
     formats = set()
     warnings = ["discography_grouping_used"]
@@ -158,13 +173,37 @@ def _create_discography_batch(
         formats.update(child_formats)
         album_format = ", ".join(sorted(child_formats))
         child_warnings = []
+        release_tags = music_folder_release_tags(child.name)
         if not year:
             child_warnings.append("album_missing_year")
         if not album or normalize_key(album) in UNKNOWN_VALUES:
             child_warnings.append("album_missing_title")
+        if len(paths) == 1:
+            child_warnings.extend(["one_track_release", "possible_single_or_ep"])
+        embedded_years = [
+            str(metadata.get("date") or "")[:4]
+            for metadata in track_metadata
+            if re.fullmatch(r"(?:19|20)\d{2}", str(metadata.get("date") or "")[:4])
+        ]
+        if year and embedded_years:
+            common_year, common_year_count = Counter(embedded_years).most_common(1)[0]
+            if common_year_count * 10 >= len(track_metadata) * 7 and common_year != year:
+                child_warnings.append("suspicious_year")
+        folder_artist = folder.get("artist")
+        if (
+            folder_artist
+            and not is_compilation_artist(folder_artist)
+            and canonical_artist_key(folder_artist) != canonical_artist_key(artist)
+            and canonical_artist_key(artist) not in canonical_artist_key(folder_artist)
+        ):
+            child_warnings.append("folder_artist_mismatch")
+        if release_tags:
+            child_warnings.append("release_tag_removed")
+        if album != child.name:
+            child_warnings.append("album_title_from_folder_cleanup")
         if len(extensions) > 1:
             child_warnings.append("mixed_formats")
-        if child_warnings:
+        if {"album_missing_year", "album_missing_title"} & set(child_warnings):
             warnings.append("child_album_metadata_missing")
 
         album_summaries.append(
@@ -176,7 +215,8 @@ def _create_discography_batch(
                 "format": album_format,
                 "track_count": len(paths),
                 "status": "needs_review" if child_warnings else "ready",
-                "warnings": child_warnings,
+                "warnings": list(dict.fromkeys(child_warnings)),
+                "release_tags_removed": release_tags,
             }
         )
         for path in paths:
@@ -219,6 +259,8 @@ def _create_discography_batch(
         "track_count": len(ingest_files),
         "format_summary": sorted(formats),
         "albums": album_summaries,
+        "parent_cleanup": parent_parse,
+        "artist_source": artist_source,
         "metadata_quality": "weak" if blocking else "good",
         "metadata_warnings": list(dict.fromkeys(warnings)),
         "confidence": 0.6 if blocking else 1.0,
@@ -232,7 +274,7 @@ def _create_discography_batch(
         suggested_destination=str(destination),
         suggested_metadata={
             "artist": artist,
-            "sources": {"artist": "discography folder"},
+            "sources": {"artist": artist_source},
         },
         metadata_json=metadata,
     )

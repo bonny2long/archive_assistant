@@ -431,6 +431,7 @@ def update_discography_metadata(
         album_copy["artist"] = artist
         albums.append(album_copy)
     metadata["albums"] = albums
+    metadata["artist_source"] = "manual correction"
     warnings = [
         warning
         for warning in metadata.get("metadata_warnings", [])

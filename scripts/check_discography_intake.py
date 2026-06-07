@@ -21,7 +21,11 @@ from app.core.config import settings  # noqa: E402
 from app.db.session import Base  # noqa: E402
 from app.services.dev_reset import reset_music_test_data  # noqa: E402
 from app.services.mover import move_approved_batches  # noqa: E402
-from app.services.music_metadata import looks_like_discography_parent  # noqa: E402
+from app.services.music_metadata import (  # noqa: E402
+    looks_like_discography_parent,
+    parse_discography_parent_folder,
+    parse_music_folder_name,
+)
 from app.services.scanner import _create_discography_batch  # noqa: E402
 
 
@@ -112,6 +116,29 @@ def main() -> int:
                 [cd_one, cd_two],
                 {str(cd_one): [], str(cd_two): []},
             ),
+        )
+        kanye = parse_discography_parent_folder(
+            "Kanye West - Discography [FLAC Songs] [PMEDIA] ⭐️"
+        )
+        weeknd = parse_discography_parent_folder(
+            "The Weeknd Discography 2012-2022 (FLAC) vtwin88cube"
+        )
+        failures += check(
+            "Kanye release-pack noise is removed from collection artist",
+            kanye["artist"] == "Kanye West"
+            and kanye["format_hint"] == "FLAC"
+            and "[PMEDIA]" in kanye["removed_tokens"],
+        )
+        failures += check(
+            "Weeknd year range and source username are removed",
+            weeknd["artist"] == "The Weeknd"
+            and weeknd["year_range"] == "2012-2022"
+            and "vtwin88cube" in weeknd["removed_tokens"],
+        )
+        failures += check(
+            "normal album title parentheses are preserved",
+            parse_music_folder_name("(2018) The Weeknd - My Dear Melancholy (EP)")["album"]
+            == "My Dear Melancholy (EP)",
         )
 
         engine = create_engine("sqlite:///:memory:")
