@@ -36,12 +36,20 @@ Local-first scaffold for Bonny's Archive Assistant -- a self-hosted, NAS-friendl
 
 ### Backend setup
 
+**One-time setup:**
+
 ```bash
 cd backend
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 python -m app.db.init_db
+```
+
+**Every session** (start the server):
+
+```bash
+cd backend
+source .venv/bin/activate        # Windows: .venv\Scripts\Activate.ps1
 uvicorn app.main:app --reload
 ```
 
@@ -311,11 +319,14 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for system architecture details
 ### Backend
 
 ```bash
+# One-time setup
 cd backend
 python -m venv .venv
-source .venv/bin/activate
 pip install -r requirements.txt
 python -m app.db.init_db
+
+# Every session
+source .venv/bin/activate        # Windows: .venv\Scripts\Activate.ps1
 uvicorn app.main:app --reload   # Omit --reload in production
 ```
 
