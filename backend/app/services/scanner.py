@@ -1,6 +1,7 @@
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
+import re
 
 from sqlalchemy.orm import Session
 
@@ -12,7 +13,11 @@ from app.services.music_metadata import (
     build_suggested_metadata,
     evaluate_music_album_metadata,
     extract_music_metadata,
+    has_mixed_track_artists,
     is_audio_file,
+    is_compilation_artist,
+    normalize_key,
+    parse_music_folder_name,
     suggest_music_destination,
 )
 from app.services.report_writer import write_json_report
@@ -43,6 +48,27 @@ def _destination_contains_all_checksums(
     return False
 
 
+def _release_source_path(path: Path) -> Path:
+    if re.fullmatch(r"(?:cd|disc|disk)\s*\d+", path.parent.name, flags=re.IGNORECASE):
+        return path.parent.parent
+    return path.parent
+
+
+def _group_key(path: Path, metadata: dict) -> str:
+    source_path = _release_source_path(path)
+    folder = parse_music_folder_name(source_path.name)
+    folder_album = folder.get("album")
+    folder_artist = folder.get("artist")
+    metadata_album = str(metadata.get("album") or "")
+    metadata_artist = str(metadata.get("albumartist") or metadata.get("artist") or "")
+
+    if folder_album and normalize_key(folder_album) != normalize_key(metadata_album):
+        return f"source|{source_path.resolve()}"
+    if folder_artist and normalize_key(folder_artist) != normalize_key(metadata_artist):
+        return f"source|{source_path.resolve()}"
+    return album_group_key(metadata)
+
+
 def scan_music_ingest(db: Session) -> ScanMusicResult:
     settings.ingest_music_dir.mkdir(parents=True, exist_ok=True)
     audio_files = [
@@ -61,7 +87,7 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
         metadata = extract_music_metadata(path)
         file_metadata[str(path)] = metadata
         file_checksums[str(path)] = file_sha256(path)
-        groups[album_group_key(metadata)].append(path)
+        groups[_group_key(path, metadata)].append(path)
 
     batches: list[IngestBatch] = []
     skipped_duplicates = 0
@@ -106,14 +132,28 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
         quality = evaluate_music_album_metadata(album_meta)
         album_meta.update(quality)
 
-        source_path = sample_path.parent
-        if len(discs) > 1:
-            source_path = source_path.parent
+        source_path = _release_source_path(sample_path)
         suggested_metadata = build_suggested_metadata(
             source_path,
             track_metadata,
             album_meta,
         )
+        mixed_track_artists = has_mixed_track_artists(track_metadata)
+        if suggested_metadata.get("compilation") or mixed_track_artists:
+            warnings = list(album_meta.get("metadata_warnings", []))
+            if "compilation_suspected" not in warnings:
+                warnings.append("compilation_suspected")
+            album_meta["metadata_warnings"] = warnings
+        if (
+            mixed_track_artists
+            and not suggested_metadata.get("artist")
+            and not is_compilation_artist(album_meta.get("artist"))
+        ):
+            quality["metadata_quality"] = "weak"
+            quality["confidence"] = min(float(quality["confidence"]), 0.6)
+            quality["metadata_warnings"] = album_meta["metadata_warnings"]
+            album_meta.update(quality)
+
         destination_metadata = {
             "albumartist": suggested_metadata.get("artist") or album_meta["artist"],
             "album": suggested_metadata.get("album") or album_meta["album"],

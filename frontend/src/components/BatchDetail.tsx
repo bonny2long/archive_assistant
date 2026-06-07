@@ -22,6 +22,29 @@ function readableLibraryPath(value?: string | null): string {
   return libraryIndex >= 0 ? normalized.slice(libraryIndex) : normalized;
 }
 
+const WARNING_LABELS: Record<string, string> = {
+  artist_missing: "Artist missing",
+  album_missing: "Album missing",
+  year_missing: "Year missing",
+  year_invalid: "Year invalid",
+  genre_missing: "Genre missing",
+  raw_folder_name_detected: "Raw folder name detected",
+  partial_duplicate_tracks_detected: "Partial duplicate tracks detected",
+  compilation_suspected: "Compilation suspected",
+};
+
+function metadataWarnings(batch: IngestBatch): string[] {
+  const warnings = batch.metadata_json?.metadata_warnings;
+  return Array.isArray(warnings)
+    ? warnings.filter((warning): warning is string => typeof warning === "string")
+    : [];
+}
+
+function warningLabel(warning: string): string {
+  return WARNING_LABELS[warning]
+    ?? warning.replace(/_/g, " ").replace(/^\w/, (value: string) => value.toUpperCase());
+}
+
 function DebugDetails({ batch, moveSummary }: Props) {
   const [showJson, setShowJson] = useState(false);
 
@@ -137,9 +160,19 @@ export default function BatchDetail({ batch, moveSummary }: Props) {
     return <MovedBatchDetail batch={batch} moveSummary={moveSummary} />;
   }
 
+  const warnings = metadataWarnings(batch);
+
   return (
     <div className="batch-detail">
       <div className="batch-detail__grid">
+        <div>
+          <div className="batch-detail__label">Artist</div>
+          <div className="batch-detail__value">{metadataValue(batch, "artist")}</div>
+        </div>
+        <div>
+          <div className="batch-detail__label">Album</div>
+          <div className="batch-detail__value">{metadataValue(batch, "album")}</div>
+        </div>
         <div>
           <div className="batch-detail__label">Source path</div>
           <div className="batch-detail__value batch-detail__path">{batch.source_path}</div>
@@ -165,6 +198,16 @@ export default function BatchDetail({ batch, moveSummary }: Props) {
           <div className="batch-detail__value">{formatDate(batch.approved_at)}</div>
         </div>
       </div>
+      {warnings.length > 0 && (
+        <section className="metadata-warnings" aria-label="Metadata warnings">
+          <div className="batch-detail__label">Metadata warnings</div>
+          <div className="metadata-warnings__list">
+            {warnings.map((warning) => (
+              <span key={warning}><i className="ti ti-alert-triangle" />{warningLabel(warning)}</span>
+            ))}
+          </div>
+        </section>
+      )}
       <DebugDetails batch={batch} moveSummary={moveSummary} />
     </div>
   );

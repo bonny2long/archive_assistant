@@ -7,17 +7,21 @@ from mutagen import File as MutagenFile
 
 AUDIO_EXTENSIONS = {".mp3", ".flac", ".m4a", ".aac", ".wav", ".ogg", ".opus"}
 UNKNOWN_VALUES = {"", "unknown", "unknown artist", "unknown album", "unknown year"}
-RELEASE_NOISE = re.compile(
+YEAR_PATTERN = re.compile(r"(?<!\d)(19\d{2}|20\d{2})(?!\d)")
+BRACKETED_TEXT = re.compile(r"[\[(][^\])]*(?:mp3|flac|pmedia|lossless|web|cd|vinyl|kbps|bit|remaster|deluxe)[^\])]*[\])]", re.IGNORECASE)
+TRAILING_RELEASE_NOISE = re.compile(
     r"""
-    \s*
-    (?:
-        \[[^\]]*\] |
-        \b(?:mp3|flac|lossless|web(?:-?dl)?|cd(?:rip)?|vinyl|remaster(?:ed)?|deluxe)\b |
-        \b(?:v0|v2|\d{3,4}\s*kbps)\b
-    ).*$
+    (?:[\s._-]+
+        (?:
+            mp3|flac|pmedia|lossless|web(?:-?dl)?|cd(?:rip)?|vinyl|
+            remaster(?:ed)?|deluxe(?:\s+edition)?|expanded\s+edition|
+            anniversary\s+edition|(?:16|24)\s*bit|v0|v2|\d{3,4}\s*kbps
+        )
+    )+$
     """,
     re.IGNORECASE | re.VERBOSE,
 )
+COMPILATION_ARTISTS = {"va", "v.a.", "various", "various artists", "ost", "soundtrack"}
 
 
 def is_audio_file(path: Path) -> bool:
@@ -50,35 +54,64 @@ def normalize_key(value: str) -> str:
     return re.sub(r"\s+", " ", str(value).strip().lower())
 
 
-def _clean_release_text(value: str) -> str:
-    value = value.replace("_and_", " & ").replace("_&_ ", " & ")
+def normalize_compilation_artist(value: str | None) -> str | None:
+    if not value:
+        return None
+    normalized = normalize_key(value).replace("v a", "v.a.")
+    if normalized in COMPILATION_ARTISTS:
+        return "Various Artists"
+    return value
+
+
+def is_compilation_artist(value: str | None) -> bool:
+    return normalize_compilation_artist(value) == "Various Artists"
+
+
+def _clean_spacing(value: str) -> str:
     value = value.replace("_", " ")
     value = re.sub(r"\s+", " ", value).strip(" .-_")
+    return value
+
+
+def _clean_artist_text(value: str) -> str:
+    value = re.sub(r"(?i)(?:_|\s)+(?:and|x|&)(?:_|\s)+", " & ", value)
+    value = _clean_spacing(value)
+    return normalize_compilation_artist(value) or value
+
+
+def _clean_album_text(value: str) -> str:
+    value = BRACKETED_TEXT.sub("", value)
+    value = _clean_spacing(value)
+    previous = None
+    while previous != value:
+        previous = value
+        value = TRAILING_RELEASE_NOISE.sub("", value).strip(" .-_")
+        value = _clean_spacing(value)
     return value
 
 
 def parse_music_folder_name(folder_name: str) -> dict[str, str | None]:
     """Extract a conservative artist/album/year suggestion from a release folder."""
     raw = folder_name.strip()
-    year_match = re.search(r"(?<!\d)(19\d{2}|20\d{2})(?!\d)", raw)
+    year_match = YEAR_PATTERN.search(raw)
     year = year_match.group(1) if year_match else None
 
-    without_noise = RELEASE_NOISE.sub("", raw).strip(" .-_")
+    without_noise = BRACKETED_TEXT.sub("", raw).strip(" .-_")
     if year_match:
         without_noise = re.sub(
-            rf"[\s._-]*(?:\(|\[)?{re.escape(year_match.group(1))}(?:\)|\])?",
+            rf"(?:^|[\s._-]+)(?:\(|\[)?{re.escape(year_match.group(1))}(?:\)|\])?",
             "",
             without_noise,
             count=1,
-        ).strip(" .-_")
+        ).strip(" .-_()[]")
+    without_noise = TRAILING_RELEASE_NOISE.sub("", without_noise).strip(" .-_")
 
     parts = re.split(r"\s+-\s+|_-_", without_noise, maxsplit=1)
     if len(parts) == 1 and " - " in raw:
         parts = raw.split(" - ", 1)
 
-    artist = _clean_release_text(parts[0]) if len(parts) == 2 else None
-    album = _clean_release_text(parts[-1])
-    album = re.sub(r"\s+(?:mp3|flac)$", "", album, flags=re.IGNORECASE).strip()
+    artist = _clean_artist_text(parts[0]) if len(parts) == 2 else None
+    album = _clean_album_text(parts[-1])
 
     return {
         "artist": artist or None,
@@ -97,15 +130,19 @@ def common_track_artist(track_metadata: list[dict]) -> str | None:
         return None
     counts = Counter(normalize_key(artist) for artist in artists)
     winner, count = counts.most_common(1)[0]
-    if count < max(2, (len(track_metadata) + 1) // 2):
+    threshold = max(1, (len(track_metadata) * 7 + 9) // 10)
+    if count < threshold:
         return None
     return next(artist for artist in artists if normalize_key(artist) == winner)
 
 
-def _artist_tokens(value: str | None) -> set[str]:
-    if not value:
-        return set()
-    return set(re.findall(r"[a-z0-9]+", value.lower().replace("'", ""))) - {"and"}
+def has_mixed_track_artists(track_metadata: list[dict]) -> bool:
+    artists = {
+        normalize_key(str(metadata.get("artist") or ""))
+        for metadata in track_metadata
+        if normalize_key(str(metadata.get("artist") or "")) not in UNKNOWN_VALUES
+    }
+    return len(artists) > 1 and common_track_artist(track_metadata) is None
 
 
 def build_suggested_metadata(
@@ -116,17 +153,34 @@ def build_suggested_metadata(
     folder = parse_music_folder_name(source_folder.name)
     common_artist = common_track_artist(track_metadata)
     folder_artist = folder["artist"]
-    if folder_artist and common_artist and _artist_tokens(folder_artist) == _artist_tokens(common_artist):
+    sources = {}
+    if folder_artist:
         artist = folder_artist
+        sources["artist"] = "folder name"
+    elif common_artist:
+        artist = common_artist
+        sources["artist"] = "common track artist"
     else:
-        artist = common_artist or folder_artist
+        artist = None
+    if folder["album"]:
+        sources["album"] = "folder name"
+    if folder["year"]:
+        sources["year"] = "folder name"
+    if detected_metadata.get("genre"):
+        sources["genre"] = "track tags"
+
     suggestion = {
         "artist": artist,
         "album": folder["album"],
         "year": folder["year"],
         "genre": detected_metadata.get("genre"),
     }
-    return {key: value for key, value in suggestion.items() if value}
+    cleaned = {key: value for key, value in suggestion.items() if value}
+    if sources:
+        cleaned["sources"] = sources
+    if is_compilation_artist(artist):
+        cleaned["compilation"] = True
+    return cleaned
 
 
 def extract_music_metadata(path: Path) -> dict:

@@ -213,6 +213,8 @@ archive-assistant-scaffold/
     ROADMAP.md                 # Future milestones
   scripts/
     reset_music_test.py        # Test data reset utility
+    check_metadata_parser.py   # PASS/FAIL checks for ugly folder names
+    create_ugly_music_test_pack.py # Copies local audio into ugly ingest folders
     create_sample_tree.sh      # Creates empty data directory structure
   docker-compose.yml
 ```
@@ -304,16 +306,27 @@ tools are disabled.
 
 ### Worse metadata test folders
 
-Use copied files only. Useful generic folder patterns include:
+Check the deterministic folder parser:
 
-```text
-Unknown_Artist_-_Random_Mixtape
-Some_Artist_-_Some_Album_2011_320kbps_[PMEDIA]
-Various_Artists_-_Summer_Tape_2005
+```bash
+backend/.venv/Scripts/python.exe scripts/check_metadata_parser.py
 ```
 
-These exercise missing years, release-name cleanup, and mixed track artists.
-Do not add special-case rules for the example names.
+Create the five ugly ingest folders using existing local test audio:
+
+```bash
+python scripts/create_ugly_music_test_pack.py
+```
+
+If the repository data folders do not contain at least five audio files, provide
+another local test source:
+
+```bash
+python scripts/create_ugly_music_test_pack.py --source-root "C:\path\to\test-audio"
+```
+
+The pack script copies files only. It does not download content, modify embedded
+tags, delete source files, or overwrite existing test targets.
 
 ---
 

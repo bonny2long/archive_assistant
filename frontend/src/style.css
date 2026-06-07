@@ -285,6 +285,19 @@ button:focus-visible, input:focus-visible {
 }
 .batch-debug { margin-top: 1rem; }
 .batch-debug__content { display: grid; gap: 0.75rem; margin-top: 0.75rem; }
+.metadata-warnings { display: grid; gap: 0.45rem; margin-top: 0.75rem; }
+.metadata-warnings__list { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.metadata-warnings__list span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 7px;
+  border: 1px solid rgba(245,158,11,0.25);
+  border-radius: 999px;
+  background: rgba(245,158,11,0.08);
+  color: var(--accent-amber);
+  font-size: 11px;
+}
 
 /* Moved library detail */
 .batch-detail--moved {
@@ -471,6 +484,10 @@ button:focus-visible, input:focus-visible {
   border-radius: var(--radius-md);
   background: var(--bg-raised);
   color: var(--text-primary);
+}
+.metadata-editor label > small {
+  color: var(--accent-blue);
+  font-size: 10px;
 }
 .metadata-editor__row { display: grid; grid-template-columns: 0.65fr 1.35fr; gap: 0.75rem; }
 .metadata-editor__preview {

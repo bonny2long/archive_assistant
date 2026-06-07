@@ -48,6 +48,8 @@ export type SuggestedMetadata = {
   album?: string | null;
   year?: string | null;
   genre?: string | null;
+  sources?: Partial<Record<"artist" | "album" | "year" | "genre", string>>;
+  compilation?: boolean;
 };
 
 export type BatchMetadataUpdate = {

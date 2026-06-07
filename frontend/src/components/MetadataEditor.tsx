@@ -15,6 +15,14 @@ function metadataValue(batch: BatchSummary, key: "artist" | "album" | "year" | "
   return batch[key] ?? "";
 }
 
+function suggestionSource(
+  batch: BatchSummary,
+  key: "artist" | "album" | "year" | "genre",
+): string | null {
+  const source = batch.suggested_metadata?.sources?.[key];
+  return source ? `Suggested from ${source}` : null;
+}
+
 function sanitizePathPart(value: string): string {
   return value.replace(/[<>:"/\\|?*]/g, "_").trim();
 }
@@ -81,19 +89,23 @@ export default function MetadataEditor({ batch, saving, onSave, onClose }: Props
         <label>
           <span>Artist</span>
           <input value={artist} onChange={(event) => setArtist(event.target.value)} autoFocus />
+          {suggestionSource(batch, "artist") && <small>{suggestionSource(batch, "artist")}</small>}
         </label>
         <label>
           <span>Album</span>
           <input value={album} onChange={(event) => setAlbum(event.target.value)} />
+          {suggestionSource(batch, "album") && <small>{suggestionSource(batch, "album")}</small>}
         </label>
         <div className="metadata-editor__row">
           <label>
             <span>Year</span>
             <input value={year} maxLength={4} onChange={(event) => setYear(event.target.value)} />
+            {suggestionSource(batch, "year") && <small>{suggestionSource(batch, "year")}</small>}
           </label>
           <label>
             <span>Genre</span>
             <input value={genre} onChange={(event) => setGenre(event.target.value)} />
+            {suggestionSource(batch, "genre") && <small>{suggestionSource(batch, "genre")}</small>}
           </label>
         </div>
         <div className="metadata-editor__preview">
