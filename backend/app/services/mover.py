@@ -19,6 +19,46 @@ def _safe_path_part(value: str) -> str:
     return "".join(c if c not in '<>:"/\\|?*' else "_" for c in value).strip()
 
 
+def _path_key(path: Path) -> str:
+    return str(path.resolve()).casefold()
+
+
+def _unique_artwork_destination(
+    preferred: Path,
+    reserved: set[str],
+) -> Path:
+    if _path_key(preferred) not in reserved and not preferred.exists():
+        return preferred
+    for index in range(2, 1000):
+        candidate = preferred.with_name(
+            f"{preferred.stem}__{index:02d}{preferred.suffix}"
+        )
+        if _path_key(candidate) not in reserved and not candidate.exists():
+            return candidate
+    raise RuntimeError(f"Could not allocate artwork destination for {preferred}")
+
+
+def _completed_move_destination(
+    db: Session,
+    batch_id: int,
+    source: Path,
+) -> Path | None:
+    action = (
+        db.query(MoveAction)
+        .filter(
+            MoveAction.batch_id == batch_id,
+            MoveAction.source_path == str(source),
+            MoveAction.status == "completed",
+        )
+        .order_by(MoveAction.id.desc())
+        .first()
+    )
+    if not action:
+        return None
+    destination = Path(action.destination_path)
+    return destination if destination.exists() else None
+
+
 def _discography_album_destination(root: Path, album_metadata: dict) -> Path:
     album = _safe_path_part(
         str(album_metadata.get("album") or album_metadata.get("source_folder") or "Unknown Album")
@@ -63,7 +103,7 @@ def _move_discography_batch(
     destination = Path(batch.suggested_destination or "")
     if not batch.suggested_destination:
         return [], [], ["Missing suggested discography destination"]
-    if destination.exists():
+    if destination.exists() and not _same_batch_retry(db, batch.id, destination):
         metadata = dict(batch.metadata_json or {})
         warnings = list(metadata.get("metadata_warnings", []))
         warnings.append("discography_destination_exists")
@@ -84,6 +124,7 @@ def _move_discography_batch(
 
     planned = []
     seen_destinations = set()
+    already_completed = []
     collection_artist = str((batch.metadata_json or {}).get("artist") or "Unknown Artist")
     album_disc_counts: dict[str, int] = {}
     for ingest_file in batch.files:
@@ -99,6 +140,7 @@ def _move_discography_batch(
         )
 
     for ingest_file in sort_music_tracks(batch.files):
+        source = Path(ingest_file.file_path)
         metadata = ingest_file.metadata_json or {}
         album_metadata = metadata.get("_discography_album") or {}
         included = bool(album_metadata.get("include", True))
@@ -130,7 +172,31 @@ def _move_discography_batch(
                 )
             )
             quarantined = False
-        destination_key = str(destination_file).lower()
+
+        completed_destination = _completed_move_destination(
+            db,
+            batch.id,
+            source,
+        )
+        if not source.exists() and completed_destination:
+            already_completed.append(
+                (
+                    ingest_file,
+                    completed_destination,
+                    quarantined,
+                    release_type,
+                )
+            )
+            seen_destinations.add(_path_key(completed_destination))
+            continue
+
+        if ingest_file.detected_role == "artwork":
+            destination_file = _unique_artwork_destination(
+                destination_file,
+                seen_destinations,
+            )
+
+        destination_key = _path_key(destination_file)
         if destination_key in seen_destinations or destination_file.exists():
             batch_metadata = dict(batch.metadata_json or {})
             warnings = list(batch_metadata.get("metadata_warnings", []))
@@ -149,6 +215,26 @@ def _move_discography_batch(
     failed_files = []
     release_type_counts: dict[str, int] = {}
     completed_release_folders: set[tuple[str, str]] = set()
+    for ingest_file, destination_file, quarantined, release_type in already_completed:
+        if quarantined:
+            quarantined_files.append(str(destination_file))
+        else:
+            moved_files.append(str(destination_file))
+            if ingest_file.detected_role != "artwork":
+                album_metadata = (ingest_file.metadata_json or {}).get(
+                    "_discography_album",
+                    {},
+                )
+                release_key = (
+                    release_type,
+                    str(album_metadata.get("source_folder") or ""),
+                )
+                if release_key not in completed_release_folders:
+                    completed_release_folders.add(release_key)
+                    release_type_counts[release_type] = (
+                        release_type_counts.get(release_type, 0) + 1
+                    )
+
     for ingest_file, destination_file, quarantined, release_type in planned:
         source = Path(ingest_file.file_path)
         if not source.exists():
@@ -394,20 +480,26 @@ def _destination_filename_conflicts(
     batch: IngestBatch,
     destination: Path,
     disc_count: int,
+    db: Session | None = None,
 ) -> list[str]:
     conflicts = []
     planned_names = set()
     for ingest_file in sort_music_tracks(batch.files):
+        source = Path(ingest_file.file_path)
+        if (
+            db
+            and not source.exists()
+            and _completed_move_destination(db, batch.id, source)
+        ):
+            continue
+        if ingest_file.detected_role == "artwork":
+            continue
         metadata = ingest_file.metadata_json or {}
-        name = (
-            ingest_file.file_name
-            if ingest_file.detected_role == "artwork"
-            else music_track_filename(
-                metadata,
-                ingest_file.extension,
-                disc_count,
-                ingest_file.file_name,
-            )
+        name = music_track_filename(
+            metadata,
+            ingest_file.extension,
+            disc_count,
+            ingest_file.file_name,
         )
         if name in planned_names:
             conflicts.append(f"Duplicate planned filename: {name}")
@@ -542,6 +634,12 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                     if is_artwork_file(dest):
                         continue
                     metadata = batch.metadata_json or {}
+                    if (
+                        db.query(ArchiveItem)
+                        .filter(ArchiveItem.final_path == str(dest))
+                        .first()
+                    ):
+                        continue
                     db.add(
                         ArchiveItem(
                             media_type="music",
@@ -608,6 +706,7 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                 batch,
                 destination_dir,
                 disc_count,
+                db,
             )
             if filename_conflicts:
                 warnings = list(album_meta.get("metadata_warnings", []))
@@ -633,8 +732,18 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
             destination_dir.mkdir(parents=True, exist_ok=True)
 
             ordered_files = sort_music_tracks(batch.files)
+            reserved_destinations: set[str] = set()
             for ingest_file in ordered_files:
                 source = Path(ingest_file.file_path)
+                completed_destination = _completed_move_destination(
+                    db,
+                    batch.id,
+                    source,
+                )
+                if not source.exists() and completed_destination:
+                    moved_files.append(str(completed_destination))
+                    reserved_destinations.add(_path_key(completed_destination))
+                    continue
                 if not source.exists():
                     failed_files.append(f"Source not found: {source}")
                     continue
@@ -651,6 +760,12 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                     )
                 )
                 destination_file = destination_dir / new_name
+                if ingest_file.detected_role == "artwork":
+                    destination_file = _unique_artwork_destination(
+                        destination_file,
+                        reserved_destinations,
+                    )
+                reserved_destinations.add(_path_key(destination_file))
 
                 action = MoveAction(
                     batch_id=batch.id,
@@ -688,6 +803,12 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                 if is_artwork_file(dest):
                     continue
                 metadata = batch.metadata_json or {}
+                if (
+                    db.query(ArchiveItem)
+                    .filter(ArchiveItem.final_path == str(dest))
+                    .first()
+                ):
+                    continue
                 item = ArchiveItem(
                     media_type="music",
                     title=metadata.get("album") or dest.parent.name,

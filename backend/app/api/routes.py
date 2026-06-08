@@ -520,7 +520,23 @@ def update_discography_metadata(
     warnings = [
         warning
         for warning in metadata.get("metadata_warnings", [])
-        if warning not in {"artist_missing", "child_album_metadata_missing"}
+        if warning not in {
+            "artist_missing",
+            "child_album_metadata_missing",
+            "destination_file_conflict",
+            "discography_destination_exists",
+        }
+    ]
+    metadata["metadata_alerts"] = [
+        alert
+        for alert in metadata.get("metadata_alerts", [])
+        if not (
+            isinstance(alert, dict)
+            and alert.get("type") in {
+                "destination_file_conflict",
+                "discography_destination_exists",
+            }
+        )
     ]
     blocking = any(
         album.get("include", True)
