@@ -34,6 +34,7 @@ export type BatchSummary = {
   format?: string | null;
   track_count: number;
   album_count: number;
+  albums: DiscographyAlbum[];
   disc_count: number;
   confidence: number;
   metadata_quality: string;
@@ -62,8 +63,39 @@ export type BatchMetadataUpdate = {
   format?: string | null;
 };
 
+export type DiscographyReleaseType =
+  | "album"
+  | "single"
+  | "ep"
+  | "compilation"
+  | "live"
+  | "other"
+  | "exclude";
+
+export type DiscographyAlbum = {
+  source_folder: string;
+  artist?: string | null;
+  album: string;
+  year?: string | null;
+  format?: string;
+  track_count: number;
+  status?: string;
+  warnings?: string[];
+  release_type?: DiscographyReleaseType;
+  include?: boolean;
+};
+
+export type DiscographyAlbumUpdate = {
+  source_folder: string;
+  album: string;
+  year: string | null;
+  release_type: DiscographyReleaseType;
+  include: boolean;
+};
+
 export type DiscographyMetadataUpdate = {
   artist: string;
+  albums?: DiscographyAlbumUpdate[];
 };
 
 export type PaginatedResponse<T> = {

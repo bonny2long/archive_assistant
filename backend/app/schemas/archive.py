@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Generic, TypeVar
+from typing import Generic, Literal, TypeVar
 from pydantic import BaseModel, Field
 
 T = TypeVar("T")
@@ -26,6 +26,7 @@ class BatchSummary(BaseModel):
     format: str | None = None
     track_count: int = 0
     album_count: int = 0
+    albums: list[dict] = Field(default_factory=list)
     disc_count: int = 0
     confidence: float
     metadata_quality: str
@@ -65,8 +66,25 @@ class BatchMetadataUpdate(BaseModel):
     format: str | None = None
 
 
+class DiscographyAlbumUpdate(BaseModel):
+    source_folder: str = Field(min_length=1)
+    album: str = Field(min_length=1)
+    year: str | None = Field(default=None, pattern=r"^(19|20)\d{2}$")
+    release_type: Literal[
+        "album",
+        "single",
+        "ep",
+        "compilation",
+        "live",
+        "other",
+        "exclude",
+    ] = "album"
+    include: bool = True
+
+
 class DiscographyMetadataUpdate(BaseModel):
     artist: str = Field(min_length=1)
+    albums: list[DiscographyAlbumUpdate] | None = None
 
 class PaginatedResponse(BaseModel, Generic[T]):
     items: list[T]

@@ -180,6 +180,13 @@ def _create_discography_batch(
             child_warnings.append("album_missing_title")
         if len(paths) == 1:
             child_warnings.extend(["one_track_release", "possible_single_or_ep"])
+            release_type = "single"
+        elif len(paths) <= 3 and re.search(r"\bep\b", album, flags=re.IGNORECASE):
+            release_type = "ep"
+        elif len(paths) <= 3:
+            release_type = "single"
+        else:
+            release_type = "album"
         embedded_years = [
             str(metadata.get("date") or "")[:4]
             for metadata in track_metadata
@@ -205,6 +212,9 @@ def _create_discography_batch(
             child_warnings.append("mixed_formats")
         if {"album_missing_year", "album_missing_title"} & set(child_warnings):
             warnings.append("child_album_metadata_missing")
+        child_blocking = bool(
+            {"album_missing_year", "album_missing_title"} & set(child_warnings)
+        )
 
         album_summaries.append(
             {
@@ -214,7 +224,11 @@ def _create_discography_batch(
                 "year": year,
                 "format": album_format,
                 "track_count": len(paths),
-                "status": "needs_review" if child_warnings else "ready",
+                "release_type": release_type,
+                "include": True,
+                "status": "needs_review" if child_blocking else (
+                    "warning" if child_warnings else "ready"
+                ),
                 "warnings": list(dict.fromkeys(child_warnings)),
                 "release_tags_removed": release_tags,
             }
@@ -228,6 +242,8 @@ def _create_discography_batch(
                 "album": album,
                 "year": year,
                 "format": album_format,
+                "release_type": release_type,
+                "include": True,
             }
             ingest_files.append(
                 IngestFile(

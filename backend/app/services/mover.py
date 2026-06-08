@@ -24,16 +24,41 @@ def _discography_album_destination(root: Path, album_metadata: dict) -> Path:
     )
     year = str(album_metadata.get("year") or "")[:4]
     folder = f"{year} - {album}" if year.isdigit() else album
-    return root / folder
+    release_type = str(album_metadata.get("release_type") or "album").lower()
+    buckets = {
+        "album": "Albums",
+        "single": "Singles",
+        "ep": "EPs",
+        "compilation": "Compilations",
+        "live": "Live",
+        "other": "Other",
+    }
+    return root / buckets.get(release_type, "Other") / folder
+
+
+def _discography_quarantine_destination(
+    artist: str,
+    album_metadata: dict,
+    source_filename: str,
+) -> Path:
+    source_folder = _safe_path_part(
+        str(album_metadata.get("source_folder") or "Unknown Release")
+    )
+    return (
+        settings.quarantine_discography_dir
+        / _safe_path_part(artist)
+        / source_folder
+        / source_filename
+    )
 
 
 def _move_discography_batch(
     db: Session,
     batch: IngestBatch,
-) -> tuple[list[str], list[str]]:
+) -> tuple[list[str], list[str], list[str]]:
     destination = Path(batch.suggested_destination or "")
     if not batch.suggested_destination:
-        return [], ["Missing suggested discography destination"]
+        return [], [], ["Missing suggested discography destination"]
     if destination.exists():
         metadata = dict(batch.metadata_json or {})
         warnings = list(metadata.get("metadata_warnings", []))
@@ -51,10 +76,11 @@ def _move_discography_batch(
         batch.status = "needs_metadata_review"
         batch.updated_at = datetime.utcnow()
         db.commit()
-        return [], ["Discography destination already exists"]
+        return [], [], ["Discography destination already exists"]
 
     planned = []
     seen_destinations = set()
+    collection_artist = str((batch.metadata_json or {}).get("artist") or "Unknown Artist")
     album_disc_counts: dict[str, int] = {}
     for ingest_file in batch.files:
         metadata = ingest_file.metadata_json or {}
@@ -69,17 +95,31 @@ def _move_discography_batch(
     for ingest_file in sort_music_tracks(batch.files):
         metadata = ingest_file.metadata_json or {}
         album_metadata = metadata.get("_discography_album") or {}
-        album_destination = _discography_album_destination(destination, album_metadata)
+        included = bool(album_metadata.get("include", True))
+        release_type = str(album_metadata.get("release_type") or "album").lower()
         disc_count = album_disc_counts.get(
             str(album_metadata.get("source_folder") or ""),
             1,
         )
-        destination_file = album_destination / music_track_filename(
-            metadata,
-            ingest_file.extension,
-            disc_count,
-            ingest_file.file_name,
-        )
+        if not included or release_type == "exclude":
+            destination_file = _discography_quarantine_destination(
+                collection_artist,
+                album_metadata,
+                ingest_file.file_name,
+            )
+            quarantined = True
+        else:
+            album_destination = _discography_album_destination(
+                destination,
+                album_metadata,
+            )
+            destination_file = album_destination / music_track_filename(
+                metadata,
+                ingest_file.extension,
+                disc_count,
+                ingest_file.file_name,
+            )
+            quarantined = False
         destination_key = str(destination_file).lower()
         if destination_key in seen_destinations or destination_file.exists():
             batch_metadata = dict(batch.metadata_json or {})
@@ -90,13 +130,16 @@ def _move_discography_batch(
             batch.status = "needs_metadata_review"
             batch.updated_at = datetime.utcnow()
             db.commit()
-            return [], [f"Destination file conflict: {destination_file}"]
+            return [], [], [f"Destination file conflict: {destination_file}"]
         seen_destinations.add(destination_key)
-        planned.append((ingest_file, destination_file))
+        planned.append((ingest_file, destination_file, quarantined, release_type))
 
     moved_files = []
+    quarantined_files = []
     failed_files = []
-    for ingest_file, destination_file in planned:
+    release_type_counts: dict[str, int] = {}
+    completed_release_folders: set[tuple[str, str]] = set()
+    for ingest_file, destination_file, quarantined, release_type in planned:
         source = Path(ingest_file.file_path)
         if not source.exists():
             failed_files.append(f"Source not found: {source}")
@@ -114,7 +157,23 @@ def _move_discography_batch(
             shutil.move(str(source), str(destination_file))
             action.status = "completed"
             action.completed_at = datetime.utcnow()
-            moved_files.append(str(destination_file))
+            if quarantined:
+                quarantined_files.append(str(destination_file))
+            else:
+                moved_files.append(str(destination_file))
+                album_metadata = (ingest_file.metadata_json or {}).get(
+                    "_discography_album",
+                    {},
+                )
+                release_key = (
+                    release_type,
+                    str(album_metadata.get("source_folder") or ""),
+                )
+                if release_key not in completed_release_folders:
+                    completed_release_folders.add(release_key)
+                    release_type_counts[release_type] = (
+                        release_type_counts.get(release_type, 0) + 1
+                    )
         except Exception as exc:
             action.status = "failed"
             action.error_message = str(exc)
@@ -130,9 +189,36 @@ def _move_discography_batch(
                 "type": "discography_move",
                 "batch_id": batch.id,
                 "artist": metadata.get("artist"),
-                "albums_completed": metadata.get("album_count", 0),
+                "albums_completed": release_type_counts.get("album", 0),
+                "singles_completed": release_type_counts.get("single", 0),
+                "eps_completed": release_type_counts.get("ep", 0),
+                "excluded_releases": len(
+                    {
+                        str(
+                            ((ingest_file.metadata_json or {}).get(
+                                "_discography_album",
+                                {},
+                            )).get("source_folder") or ""
+                        )
+                        for ingest_file in batch.files
+                        if not bool(
+                            ((ingest_file.metadata_json or {}).get(
+                                "_discography_album",
+                                {},
+                            )).get("include", True)
+                        )
+                        or str(
+                            ((ingest_file.metadata_json or {}).get(
+                                "_discography_album",
+                                {},
+                            )).get("release_type") or ""
+                        ).lower() == "exclude"
+                    }
+                ),
                 "tracks_completed": len(moved_files),
                 "failed_moves": len(failed_files),
+                "quarantined_files": quarantined_files,
+                "release_type_counts": release_type_counts,
                 "warnings": metadata.get("metadata_warnings", []),
                 "destination": str(destination),
                 "moved_files": moved_files,
@@ -144,7 +230,7 @@ def _move_discography_batch(
         ),
         encoding="utf-8",
     )
-    return moved_files, failed_files
+    return moved_files, quarantined_files, failed_files
 
 
 def _format_bucket_for_path(path: Path) -> str:
@@ -399,8 +485,10 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                 continue
 
             if batch.detected_type == "music_discography":
-                moved_files, failed_files = _move_discography_batch(db, batch)
-                if not moved_files:
+                moved_files, quarantined_files, failed_files = (
+                    _move_discography_batch(db, batch)
+                )
+                if not moved_files and not quarantined_files:
                     if batch.status != "needs_metadata_review":
                         batch.status = "move_failed"
                     batch.updated_at = datetime.utcnow()

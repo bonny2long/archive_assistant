@@ -425,19 +425,77 @@ def update_discography_metadata(
     artist = update.artist.strip()
     metadata = dict(batch.metadata_json or {})
     metadata["artist"] = artist
+    updates_by_source = {
+        item.source_folder: item
+        for item in (update.albums or [])
+    }
     albums = []
     for album in metadata.get("albums", []):
         album_copy = dict(album)
         album_copy["artist"] = artist
+        correction = updates_by_source.get(
+            str(album_copy.get("source_folder") or "")
+        )
+        if correction:
+            included = correction.include and correction.release_type != "exclude"
+            album_copy["album"] = correction.album.strip()
+            album_copy["year"] = correction.year
+            album_copy["release_type"] = correction.release_type
+            album_copy["include"] = included
+            album_warnings = [
+                warning
+                for warning in album_copy.get("warnings", [])
+                if warning not in {"album_missing_year", "album_missing_title"}
+            ]
+            if included and not correction.year:
+                album_warnings.append("album_missing_year")
+            album_copy["warnings"] = list(dict.fromkeys(album_warnings))
+            album_copy["status"] = (
+                "excluded"
+                if not included
+                else "needs_review"
+                if "album_missing_year" in album_copy["warnings"]
+                else "warning"
+                if album_copy["warnings"]
+                else "ready"
+            )
         albums.append(album_copy)
     metadata["albums"] = albums
+    metadata["album_count"] = sum(
+        bool(album.get("include", True))
+        for album in albums
+    )
     metadata["artist_source"] = "manual correction"
+    for ingest_file in batch.files:
+        track_metadata = dict(ingest_file.metadata_json or {})
+        album_metadata = dict(track_metadata.get("_discography_album") or {})
+        correction = updates_by_source.get(
+            str(album_metadata.get("source_folder") or "")
+        )
+        if not correction:
+            continue
+        included = correction.include and correction.release_type != "exclude"
+        album_metadata["album"] = correction.album.strip()
+        album_metadata["year"] = correction.year
+        album_metadata["release_type"] = correction.release_type
+        album_metadata["include"] = included
+        track_metadata["_discography_album"] = album_metadata
+        ingest_file.metadata_json = track_metadata
     warnings = [
         warning
         for warning in metadata.get("metadata_warnings", [])
-        if warning != "artist_missing"
+        if warning not in {"artist_missing", "child_album_metadata_missing"}
     ]
-    blocking = "child_album_metadata_missing" in warnings
+    blocking = any(
+        album.get("include", True)
+        and (
+            not album.get("album")
+            or not album.get("year")
+        )
+        for album in albums
+    )
+    if blocking:
+        warnings.append("child_album_metadata_missing")
     metadata["metadata_warnings"] = warnings
     metadata["metadata_quality"] = "weak" if blocking else "good"
     metadata["confidence"] = 0.6 if blocking else 1.0
@@ -602,6 +660,7 @@ def _batch_to_summary(
         format=meta.get("format") or ", ".join(meta.get("format_summary", [])) or "MP3",
         track_count=meta.get("track_count", 0),
         album_count=meta.get("album_count", 0),
+        albums=meta.get("albums", []),
         disc_count=meta.get("disc_count", 1),
         confidence=batch.confidence,
         metadata_quality=meta.get("metadata_quality", "weak"),

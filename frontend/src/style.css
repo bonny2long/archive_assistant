@@ -301,6 +301,7 @@ button:focus-visible, input:focus-visible {
   margin-top: 0.5rem;
 }
 .batch-debug { margin-top: 1rem; }
+.batch-debug__actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .batch-debug__content { display: grid; gap: 0.75rem; margin-top: 0.75rem; }
 .metadata-warnings { display: grid; gap: 0.45rem; margin-top: 0.75rem; }
 .metadata-warnings__list { display: flex; flex-wrap: wrap; gap: 0.4rem; }
@@ -392,6 +393,48 @@ button:focus-visible, input:focus-visible {
 }
 .discography-albums td:nth-child(2) { min-width: 180px; }
 .discography-cleanup dd { overflow-wrap: anywhere; }
+.discography-editor {
+  width: min(1180px, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+}
+.discography-editor__table {
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.discography-editor__table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.discography-editor__table th,
+.discography-editor__table td {
+  min-width: 90px;
+  padding: 6px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-align: left;
+  vertical-align: top;
+}
+.discography-editor__table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-raised);
+  color: var(--text-muted);
+}
+.discography-editor__table td:nth-child(3) { min-width: 220px; }
+.discography-editor__table td:last-child { min-width: 280px; }
+.discography-editor__table input,
+.discography-editor__table select {
+  width: 100%;
+  padding: 5px 6px;
+}
+.discography-editor__table input[type="checkbox"] { width: auto; }
+.discography-editor__table code {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 .track-preview__warning { color: var(--accent-amber); }
 
 /* Moved library detail */

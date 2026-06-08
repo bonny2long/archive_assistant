@@ -90,13 +90,32 @@ function warningLabel(warning: string): string {
 
 function DebugDetails({ batch, moveSummary, review }: Props) {
   const [showJson, setShowJson] = useState(false);
+  const [copyLabel, setCopyLabel] = useState("Copy debug JSON");
+
+  const copyDebugJson = async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(batch, null, 2));
+      setCopyLabel("Debug JSON copied");
+      window.setTimeout(() => setCopyLabel("Copy debug JSON"), 1800);
+    } catch {
+      setShowJson(true);
+      setCopyLabel("Copy failed. JSON opened instead.");
+      window.setTimeout(() => setCopyLabel("Copy debug JSON"), 2600);
+    }
+  };
 
   return (
     <div className="batch-debug">
-      <button className="btn btn--compact" onClick={() => setShowJson((value) => !value)}>
-        <i className={`ti ti-${showJson ? "eye-off" : "code"}`} />
-        {showJson ? "Hide debug JSON" : "Show debug JSON"}
-      </button>
+      <div className="batch-debug__actions">
+        <button className="btn btn--compact" onClick={() => setShowJson((value) => !value)}>
+          <i className={`ti ti-${showJson ? "eye-off" : "code"}`} />
+          {showJson ? "Hide debug JSON" : "Show debug JSON"}
+        </button>
+        <button className="btn btn--compact" onClick={() => void copyDebugJson()}>
+          <i className="ti ti-copy" />
+          {copyLabel}
+        </button>
+      </div>
       {showJson && (
         <div className="batch-debug__content">
           <div>
@@ -252,6 +271,9 @@ function DiscographyBatchDetail({ batch, moveSummary }: Props) {
     ? metadata.parent_cleanup as DiscographyParentCleanup
     : null;
   const removedTokens = cleanup?.removed_tokens?.filter(Boolean) ?? [];
+  const artistSource = typeof metadata.artist_source === "string"
+    ? metadata.artist_source
+    : "";
   const warnings = metadataWarnings(batch);
   const moved = batch.status === "moved";
 
@@ -275,7 +297,7 @@ function DiscographyBatchDetail({ batch, moveSummary }: Props) {
         <strong>{readableLibraryPath(batch.suggested_destination)}</strong>
       </section>
 
-      {(removedTokens.length > 0 || cleanup?.year_range || metadata.artist_source) && (
+      {(removedTokens.length > 0 || Boolean(cleanup?.year_range) || Boolean(artistSource)) && (
         <section className="library-card discography-cleanup">
           <h3>Source folder cleanup</h3>
           <dl className="library-fields library-fields--single">
@@ -288,8 +310,8 @@ function DiscographyBatchDetail({ batch, moveSummary }: Props) {
             {cleanup?.format_hint && (
               <div><dt>Format hint</dt><dd>{cleanup.format_hint}</dd></div>
             )}
-            {metadata.artist_source && (
-              <div><dt>Artist selected from</dt><dd>{String(metadata.artist_source)}</dd></div>
+            {artistSource && (
+              <div><dt>Artist selected from</dt><dd>{artistSource}</dd></div>
             )}
           </dl>
         </section>

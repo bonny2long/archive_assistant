@@ -87,6 +87,7 @@ def _validate_moves(moves: list[MoveAction]) -> list[str]:
     library_roots = [
         settings.data_root / "Music" / "Library",
         settings.music_discographies_dir,
+        settings.quarantine_discography_dir,
     ]
 
     for move in moves:
@@ -163,6 +164,7 @@ def reset_music_test_data(db: Session, *, apply: bool) -> DevResetSummary:
         for root in (
             settings.data_root / "Music" / "Library",
             settings.music_discographies_dir,
+            settings.quarantine_discography_dir,
         )
     )
 
