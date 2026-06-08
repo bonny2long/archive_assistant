@@ -33,6 +33,10 @@ export type BatchSummary = {
   primary_genre?: string | null;
   format?: string | null;
   track_count: number;
+  artwork_count: number;
+  name?: string | null;
+  reason?: string | null;
+  file_count: number;
   album_count: number;
   albums: DiscographyAlbum[];
   disc_count: number;
@@ -79,6 +83,8 @@ export type DiscographyAlbum = {
   year?: string | null;
   format?: string;
   track_count: number;
+  artwork_count?: number;
+  artwork_files?: string[];
   status?: string;
   warnings?: string[];
   release_type?: DiscographyReleaseType;
@@ -115,6 +121,12 @@ export type ScanMusicResponse = {
   created: number;
   skipped_duplicates: number;
   batches: IngestBatch[];
+  music_albums_found: number;
+  discographies_found: number;
+  unknown_items: number;
+  unsupported_files: number;
+  ignored_system_files: number;
+  artwork_files_found: number;
 };
 
 export type DevResetResponse = {
@@ -216,4 +228,4 @@ export type BulkApproveResult = {
   errors: BulkApproveError[];
 };
 
-export type TabKey = "all" | "pending" | "needs_metadata" | "approved" | "moved";
+export type TabKey = "all" | "pending" | "needs_metadata" | "quarantine" | "approved" | "moved";

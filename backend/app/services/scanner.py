@@ -20,6 +20,7 @@ from app.services.music_metadata import (
     extract_music_metadata,
     has_mixed_track_artists,
     is_audio_file,
+    is_artwork_file,
     is_compilation_artist,
     metadata_mismatch_warnings,
     music_folder_release_tags,
@@ -39,6 +40,12 @@ class ScanMusicResult:
     created: int
     skipped_duplicates: int
     batches: list[IngestBatch]
+    music_albums_found: int = 0
+    discographies_found: int = 0
+    unknown_items: int = 0
+    unsupported_files: int = 0
+    ignored_system_files: int = 0
+    artwork_files_found: int = 0
 
 
 IGNORED_INGEST_NAMES = {
@@ -53,6 +60,10 @@ IGNORED_INGEST_NAMES = {
     "frontend",
     "backend",
     "scripts",
+    ".ds_store",
+    "thumbs.db",
+    "desktop.ini",
+    "__macosx",
 }
 
 
@@ -60,7 +71,7 @@ def classify_ingest_item(path: Path) -> str:
     if path.name.casefold() in IGNORED_INGEST_NAMES:
         return "ignored_system_folder"
     if path.is_file():
-        return "music_album" if is_audio_file(path) else "unknown_type"
+        return "music_album" if is_audio_file(path) else "unsupported_file"
     if not path.is_dir():
         return "unknown_type"
 
@@ -105,6 +116,72 @@ def _root_music_audio_files() -> list[Path]:
                 if path.is_file() and is_audio_file(path)
             )
     return audio_files
+
+
+def _artwork_files(root: Path) -> list[Path]:
+    if not root.is_dir():
+        return []
+    return sorted(
+        path for path in root.rglob("*")
+        if path.is_file() and is_artwork_file(path)
+    )
+
+
+def _unknown_metadata(path: Path, classification: str) -> dict:
+    if path.is_file():
+        return {
+            "name": path.name,
+            "reason": "Loose file type is not supported yet",
+            "file_count": 1,
+            "folder_count": 0,
+            "sample_files": [path.name],
+            "metadata_quality": "unsupported",
+            "metadata_warnings": ["quarantine_review_required"],
+        }
+    files = sorted(candidate for candidate in path.rglob("*") if candidate.is_file())
+    folders = [candidate for candidate in path.rglob("*") if candidate.is_dir()]
+    return {
+        "name": path.name,
+        "reason": "Could not classify folder contents",
+        "file_count": len(files),
+        "folder_count": len(folders),
+        "sample_files": [
+            str(candidate.relative_to(path)) for candidate in files[:10]
+        ],
+        "metadata_quality": "unsupported",
+        "metadata_warnings": ["quarantine_review_required"],
+    }
+
+
+def _create_unknown_batch(
+    db: Session,
+    path: Path,
+    classification: str,
+) -> IngestBatch | None:
+    existing = (
+        db.query(IngestBatch)
+        .filter(
+            IngestBatch.source_path == str(path),
+            IngestBatch.status != "quarantined",
+        )
+        .first()
+    )
+    if existing:
+        return None
+    metadata = _unknown_metadata(path, classification)
+    batch = IngestBatch(
+        source_kind="manual-drop",
+        source_path=str(path),
+        detected_type=classification,
+        status="needs_quarantine_review",
+        confidence=0.0,
+        metadata_json=metadata,
+    )
+    db.add(batch)
+    db.commit()
+    db.refresh(batch)
+    write_json_report(settings.reports_dir, batch.id, metadata)
+    return batch
 
 
 def _destination_contains_all_checksums(
@@ -284,6 +361,7 @@ def _create_discography_batch(
         child_blocking = bool(
             {"album_missing_year", "album_missing_title"} & set(child_warnings)
         )
+        artwork_paths = _artwork_files(child)
 
         album_summaries.append(
             {
@@ -293,6 +371,8 @@ def _create_discography_batch(
                 "year": year,
                 "format": album_format,
                 "track_count": len(paths),
+                "artwork_count": len(artwork_paths),
+                "artwork_files": [path.name for path in artwork_paths],
                 "release_type": release_type,
                 "include": True,
                 "status": "needs_review" if child_blocking else (
@@ -325,6 +405,27 @@ def _create_discography_batch(
                     metadata_json=metadata,
                 )
             )
+        for path in artwork_paths:
+            ingest_files.append(
+                IngestFile(
+                    file_path=str(path),
+                    file_name=path.name,
+                    extension=path.suffix.lower(),
+                    size_bytes=path.stat().st_size,
+                    checksum=file_sha256(path),
+                    detected_role="artwork",
+                    metadata_json={
+                        "_discography_album": {
+                            "source_folder": child.name,
+                            "album": album,
+                            "year": year,
+                            "format": album_format,
+                            "release_type": release_type,
+                            "include": True,
+                        },
+                    },
+                )
+            )
 
     if len(formats) > 1:
         warnings.append("mixed_formats")
@@ -341,7 +442,13 @@ def _create_discography_batch(
         "artist": artist,
         "collection_type": "discography",
         "album_count": len(album_summaries),
-        "track_count": len(ingest_files),
+        "track_count": len(all_paths),
+        "artwork_count": sum(album["artwork_count"] for album in album_summaries),
+        "artwork_files": [
+            name
+            for album in album_summaries
+            for name in album["artwork_files"]
+        ],
         "format_summary": sorted(formats),
         "albums": album_summaries,
         "parent_cleanup": parent_parse,
@@ -376,9 +483,37 @@ def _create_discography_batch(
 
 def scan_music_ingest(db: Session) -> ScanMusicResult:
     settings.ingest_root.mkdir(parents=True, exist_ok=True)
+    classifications = {
+        item: classify_ingest_item(item)
+        for item in sorted(settings.ingest_root.iterdir())
+    }
+    unknown_batches = []
+    for item, classification in classifications.items():
+        if classification not in {"unknown_type", "unsupported_file"}:
+            continue
+        batch = _create_unknown_batch(db, item, classification)
+        if batch:
+            unknown_batches.append(batch)
+
     audio_files = _root_music_audio_files()
     if not audio_files:
-        return ScanMusicResult(created=0, skipped_duplicates=0, batches=[])
+        return ScanMusicResult(
+            created=len(unknown_batches),
+            skipped_duplicates=0,
+            batches=unknown_batches,
+            unknown_items=sum(
+                classification == "unknown_type"
+                for classification in classifications.values()
+            ),
+            unsupported_files=sum(
+                classification == "unsupported_file"
+                for classification in classifications.values()
+            ),
+            ignored_system_files=sum(
+                classification == "ignored_system_folder"
+                for classification in classifications.values()
+            ),
+        )
 
     file_metadata: dict[str, dict] = {}
     file_checksums: dict[str, str] = {}
@@ -401,7 +536,7 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
             continue
         groups[_group_key(path, file_metadata[str(path)])].append(path)
 
-    batches: list[IngestBatch] = []
+    batches: list[IngestBatch] = list(unknown_batches)
     skipped_duplicates = 0
     for parent, child_groups in discography_groups.items():
         batch = _create_discography_batch(
@@ -474,6 +609,9 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
         album_meta.update(quality)
 
         source_path = _release_source_path(sample_path)
+        artwork_paths = _artwork_files(source_path)
+        album_meta["artwork_count"] = len(artwork_paths)
+        album_meta["artwork_files"] = [path.name for path in artwork_paths]
         suggested_metadata = build_suggested_metadata(
             source_path,
             track_metadata,
@@ -590,6 +728,19 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
                     metadata_json=metadata,
                 )
             )
+        for path in artwork_paths:
+            ingest_files.append(
+                IngestFile(
+                    batch_id=batch.id,
+                    file_path=str(path),
+                    file_name=path.name,
+                    extension=path.suffix.lower(),
+                    size_bytes=path.stat().st_size,
+                    checksum=file_sha256(path),
+                    detected_role="artwork",
+                    metadata_json={"artwork_name": path.name},
+                )
+            )
         for ingest_file in sort_music_tracks(ingest_files):
             db.add(ingest_file)
             metadata = ingest_file.metadata_json or {}
@@ -610,4 +761,29 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
         created=len(batches),
         skipped_duplicates=skipped_duplicates,
         batches=batches,
+        music_albums_found=sum(
+            classification == "music_album"
+            for classification in classifications.values()
+        ),
+        discographies_found=sum(
+            classification == "music_discography"
+            for classification in classifications.values()
+        ),
+        unknown_items=sum(
+            classification == "unknown_type"
+            for classification in classifications.values()
+        ),
+        unsupported_files=sum(
+            classification == "unsupported_file"
+            for classification in classifications.values()
+        ),
+        ignored_system_files=sum(
+            classification == "ignored_system_folder"
+            for classification in classifications.values()
+        ),
+        artwork_files_found=sum(
+            len(_artwork_files(item))
+            for item, classification in classifications.items()
+            if classification in {"music_album", "music_discography"}
+        ),
     )

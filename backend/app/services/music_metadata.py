@@ -6,6 +6,20 @@ from pathlib import Path
 from mutagen import File as MutagenFile
 
 AUDIO_EXTENSIONS = {".mp3", ".flac", ".m4a", ".aac", ".wav", ".ogg", ".opus"}
+ARTWORK_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
+PREFERRED_ARTWORK_STEMS = {
+    "cover",
+    "folder",
+    "front",
+    "back",
+    "album",
+    "artwork",
+    "albumart",
+    "albumartsmall",
+    "albumartlarge",
+    "scan",
+    "booklet",
+}
 UNKNOWN_VALUES = {"", "unknown", "unknown artist", "unknown album", "unknown year"}
 YEAR_PATTERN = re.compile(r"(?<!\d)(19\d{2}|20\d{2})(?!\d)")
 BRACKETED_TEXT = re.compile(r"[\[(][^\])]*(?:mp3|flac|pmedia|lossless|web|cd|vinyl|kbps|bit|remaster|deluxe)[^\])]*[\])]", re.IGNORECASE)
@@ -44,6 +58,14 @@ DECORATIVE_SYMBOLS = re.compile(r"[^\w\s&'.,()\-]+", re.UNICODE)
 
 def is_audio_file(path: Path) -> bool:
     return path.suffix.lower() in AUDIO_EXTENSIONS
+
+
+def is_artwork_file(path: Path) -> bool:
+    return path.suffix.lower() in ARTWORK_EXTENSIONS
+
+
+def is_preferred_artwork_file(path: Path) -> bool:
+    return is_artwork_file(path) and path.stem.casefold() in PREFERRED_ARTWORK_STEMS
 
 
 def is_disc_folder_name(value: str) -> bool:
@@ -132,12 +154,11 @@ def looks_like_discography_parent(
         child for child in child_audio_folders
         if not is_disc_folder_name(child.name)
     ]
+    parent_key = canonical_text_key(parent.name)
+    if eligible and any(token in parent_key for token in DISCOGRAPHY_TOKENS):
+        return True
     if len(eligible) < 2:
         return False
-
-    parent_key = canonical_text_key(parent.name)
-    if any(token in parent_key for token in DISCOGRAPHY_TOKENS):
-        return True
 
     year_pattern_count = sum(
         bool(YEAR_PATTERN.search(child.name))

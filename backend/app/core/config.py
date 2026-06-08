@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     quarantine_discography_dir: Path = (
         data_root / "_QUARANTINE" / "music" / "discography-excluded"
     )
+    quarantine_unknown_dir: Path = data_root / "_QUARANTINE" / "unknown-type"
+    quarantine_unsupported_dir: Path = data_root / "_QUARANTINE" / "unsupported-file"
+    quarantine_reports_dir: Path = data_root / "_REPORTS" / "quarantine-reports"
 
     database_url: str = f"sqlite:///{backend_dir / 'archive_assistant.db'}"
 

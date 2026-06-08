@@ -125,6 +125,7 @@ export default function App() {
       return batch.status === "needs_metadata_review"
         || (batch.status === "pending_review" && batch.confidence < 0.6);
     }
+    if (tab === "quarantine") return batch.status === "needs_quarantine_review";
     return batch.status === tab;
   });
 
@@ -135,6 +136,9 @@ export default function App() {
       batch.status === "needs_metadata_review"
       || (batch.status === "pending_review" && batch.confidence < 0.6)
     )).length,
+    quarantine: batches.filter(
+      (batch) => batch.status === "needs_quarantine_review",
+    ).length,
     approved: batches.filter((batch) => batch.status === "approved").length,
     moved: batches.filter((batch) => batch.status === "moved").length,
   };
@@ -214,6 +218,27 @@ export default function App() {
       await loadBatches();
     } catch {
       showToast("Recovery failed", "error");
+    }
+  };
+
+  const handleQuarantine = async (id: number) => {
+    const confirmed = window.confirm(
+      "Move this item to quarantine?\n\n"
+      + "This does not delete anything. It moves the item out of _INGEST "
+      + "so it can be reviewed later.",
+    );
+    if (!confirmed) return;
+    try {
+      const result = await api.quarantineBatch(id);
+      showToast(result.message);
+      await loadBatches();
+    } catch (quarantineError: unknown) {
+      showToast(
+        quarantineError instanceof Error
+          ? quarantineError.message
+          : "Quarantine move failed",
+        "error",
+      );
     }
   };
 
@@ -321,8 +346,8 @@ export default function App() {
       const warnings = items.flatMap((batch) => batch.metadata_warnings);
       setQaSummary({
         title: "Scan summary",
-        text: `${items.length} ingest items · ${items.reduce((sum, batch) => sum + batch.track_count, 0)} tracks · ${items.filter((batch) => batch.status === "needs_metadata_review").length} needs metadata · ${items.filter((batch) => batch.status === "move_failed").length} failed`,
-        warnings: `${warnings.filter((warning) => warning === "release_folder_grouping_used").length} release-folder grouping used · ${warnings.filter((warning) => warning === "manual_duplicate_batch_merge_performed").length} manual duplicate merge performed`,
+        text: `Music albums found: ${result.music_albums_found} | Discographies found: ${result.discographies_found} | Unknown items: ${result.unknown_items} | Unsupported files: ${result.unsupported_files}`,
+        warnings: `Ignored system files: ${result.ignored_system_files} | Artwork files found: ${result.artwork_files_found} | ${warnings.filter((warning) => warning === "release_folder_grouping_used").length} release-folder grouping used`,
       });
       showToast(`Scan complete - ${result.created} new, ${result.skipped_duplicates} skipped duplicate(s)`);
     } catch {
@@ -429,6 +454,7 @@ export default function App() {
           onApprove={(id) => void handleApprove(id)}
           onReject={(id) => void handleReject(id)}
           onRecovery={(id) => void handleRecovery(id)}
+          onQuarantine={(id) => void handleQuarantine(id)}
           onEdit={setEditingBatch}
           onBulkApprove={() => {
             setShowBulkApprove(true);

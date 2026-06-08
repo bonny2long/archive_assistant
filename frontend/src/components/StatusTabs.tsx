@@ -4,6 +4,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "all", label: "All" },
   { key: "pending", label: "Pending review" },
   { key: "needs_metadata", label: "Needs metadata" },
+  { key: "quarantine", label: "Needs quarantine review" },
   { key: "approved", label: "Approved" },
   { key: "moved", label: "Moved" },
 ];

@@ -26,6 +26,10 @@ class BatchSummary(BaseModel):
     primary_genre: str | None = None
     format: str | None = None
     track_count: int = 0
+    artwork_count: int = 0
+    name: str | None = None
+    reason: str | None = None
+    file_count: int = 0
     album_count: int = 0
     albums: list[dict] = Field(default_factory=list)
     disc_count: int = 0
@@ -134,6 +138,12 @@ class ScanMusicResponse(BaseModel):
     created: int
     skipped_duplicates: int
     batches: list[IngestBatchOut]
+    music_albums_found: int = 0
+    discographies_found: int = 0
+    unknown_items: int = 0
+    unsupported_files: int = 0
+    ignored_system_files: int = 0
+    artwork_files_found: int = 0
 
 
 class DevResetResponse(BaseModel):

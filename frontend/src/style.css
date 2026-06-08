@@ -122,6 +122,8 @@ button:focus-visible, input:focus-visible {
 }
 .btn-sm:hover { background: var(--bg-hover); }
 .btn-sm:disabled { cursor: not-allowed; opacity: 0.3; }
+.row-artwork { display: block; margin-top: 3px; color: var(--text-muted); }
+.quarantine-action { color: var(--accent-amber); white-space: nowrap; }
 
 /* Library summary */
 .library-summary {
@@ -251,6 +253,8 @@ button:focus-visible, input:focus-visible {
 .pill--rejected { background: var(--pill-rejected-bg); color: var(--pill-rejected-fg); }
 .pill--recovery, .pill--metadata_recovery { background: var(--pill-recovery-bg); color: var(--pill-recovery-fg); }
 .pill--moved { background: var(--pill-moved-bg); color: var(--pill-moved-fg); }
+.pill--needs_quarantine_review { background: var(--pill-pending-bg); color: var(--pill-pending-fg); }
+.pill--quarantined { background: var(--pill-approved-bg); color: var(--pill-approved-fg); }
 
 /* Confidence bar */
 .conf-bar { display: flex; align-items: center; gap: 6px; }

@@ -130,6 +130,22 @@ function DebugDetails({ batch, moveSummary, review }: Props) {
   );
 }
 
+function QuarantineReviewDetail({ batch, moveSummary }: Props) {
+  return (
+    <div className="batch-detail">
+      <div className="batch-detail__grid">
+        <div><div className="batch-detail__label">Name</div><div className="batch-detail__value">{metadataValue(batch, "name")}</div></div>
+        <div><div className="batch-detail__label">Detected type</div><div className="batch-detail__value">{batch.detected_type}</div></div>
+        <div><div className="batch-detail__label">Reason</div><div className="batch-detail__value">{metadataValue(batch, "reason")}</div></div>
+        <div><div className="batch-detail__label">File count</div><div className="batch-detail__value">{metadataValue(batch, "file_count")}</div></div>
+        <div><div className="batch-detail__label">Folder count</div><div className="batch-detail__value">{metadataValue(batch, "folder_count")}</div></div>
+        <div><div className="batch-detail__label">Source path</div><div className="batch-detail__value batch-detail__path">{batch.source_path}</div></div>
+      </div>
+      <DebugDetails batch={batch} moveSummary={moveSummary} />
+    </div>
+  );
+}
+
 function ReviewBatchDetail({ batch, moveSummary, review }: Props) {
   const warnings = review?.warnings ?? metadataWarnings(batch);
   const alerts = metadataAlertMessages(batch);
@@ -160,6 +176,7 @@ function ReviewBatchDetail({ batch, moveSummary, review }: Props) {
             <div><dt>Genre</dt><dd>{review?.genre ?? metadataValue(batch, "genre")}</dd></div>
             <div><dt>Format</dt><dd>{review?.format ?? metadataValue(batch, "format")}</dd></div>
             <div><dt>Tracks</dt><dd>{review?.track_count ?? batch.files.length}</dd></div>
+            <div><dt>Artwork</dt><dd>{metadataValue(batch, "artwork_count")}</dd></div>
           </dl>
         </section>
         <section className="library-card">
@@ -484,6 +501,9 @@ function MovedBatchDetail({ batch, moveSummary }: Props) {
 }
 
 export default function BatchDetail({ batch, moveSummary, review }: Props) {
+  if (batch.status === "needs_quarantine_review" || batch.status === "quarantined") {
+    return <QuarantineReviewDetail batch={batch} moveSummary={moveSummary} />;
+  }
   if (batch.detected_type === "music_discography") {
     return <DiscographyBatchDetail batch={batch} moveSummary={moveSummary} />;
   }

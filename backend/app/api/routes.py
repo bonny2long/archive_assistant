@@ -42,6 +42,7 @@ from app.services.music_metadata import (
 )
 from app.services.scanner import scan_music_ingest
 from app.services.mover import move_approved_batches
+from app.services.quarantine import quarantine_batch
 from app.core.config import settings
 from app.core.time import configured_timezone, now_local, now_utc, serialize_utc
 
@@ -85,6 +86,12 @@ def scan_music(db: Session = Depends(get_db)):
         created=result.created,
         skipped_duplicates=result.skipped_duplicates,
         batches=result.batches,
+        music_albums_found=result.music_albums_found,
+        discographies_found=result.discographies_found,
+        unknown_items=result.unknown_items,
+        unsupported_files=result.unsupported_files,
+        ignored_system_files=result.ignored_system_files,
+        artwork_files_found=result.artwork_files_found,
     )
 
 
@@ -182,7 +189,13 @@ def get_batch_review(batch_id: int, db: Session = Depends(get_db)):
     year = str(metadata.get("year") or metadata.get("date") or "")[:4] or None
     genre = str(metadata.get("genre") or "") or None
     format_bucket = str(metadata.get("format") or "MP3").upper()
-    ordered_files = sort_music_tracks(batch.files)
+    ordered_files = sort_music_tracks(
+        [
+            ingest_file
+            for ingest_file in batch.files
+            if ingest_file.detected_role != "artwork"
+        ]
+    )
     parsed_discs = [
         music_track_numbers(item.metadata_json or {}, item.file_name)[0]
         for item in ordered_files
@@ -542,6 +555,8 @@ def approve_batch(batch_id: int, db: Session = Depends(get_db)):
     batch = db.get(IngestBatch, batch_id)
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
+    if batch.detected_type in {"unknown_type", "unsupported_file"}:
+        raise HTTPException(status_code=400, detail="Unknown items cannot be approved")
     
     meta = batch.metadata_json or {}
     quality = meta.get("metadata_quality", "weak")
@@ -599,7 +614,9 @@ def approve_selected_batches(
         metadata = batch.metadata_json or {}
         quality = metadata.get("metadata_quality", "weak")
         warnings = set(metadata.get("metadata_warnings", []))
-        if batch.status in {"needs_metadata_review", "metadata_recovery"} or quality in {
+        if batch.detected_type in {"unknown_type", "unsupported_file"}:
+            reason = "quarantine_review_required"
+        elif batch.status in {"needs_metadata_review", "metadata_recovery"} or quality in {
             "weak",
             "broken",
         }:
@@ -643,6 +660,22 @@ def reject_batch(batch_id: int, db: Session = Depends(get_db)):
     return ApproveResponse(batch_id=batch.id, status=batch.status, message="Batch rejected")
 
 
+@router.post("/batches/{batch_id}/quarantine", response_model=ApproveResponse)
+def quarantine_review_batch(batch_id: int, db: Session = Depends(get_db)):
+    batch = db.get(IngestBatch, batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    try:
+        destination = quarantine_batch(db, batch)
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return ApproveResponse(
+        batch_id=batch.id,
+        status=batch.status,
+        message=f"Moved to quarantine: {destination}",
+    )
+
+
 @router.post("/batches/{batch_id}/recovery", response_model=ApproveResponse)
 def send_to_recovery(batch_id: int, db: Session = Depends(get_db)):
     batch = db.get(IngestBatch, batch_id)
@@ -682,6 +715,10 @@ def _batch_to_summary(
         primary_genre=meta.get("genre"),
         format=meta.get("format") or ", ".join(meta.get("format_summary", [])) or "MP3",
         track_count=meta.get("track_count", 0),
+        artwork_count=meta.get("artwork_count", 0),
+        name=meta.get("name"),
+        reason=meta.get("reason"),
+        file_count=meta.get("file_count", 0),
         album_count=meta.get("album_count", 0),
         albums=meta.get("albums", []),
         disc_count=meta.get("disc_count", 1),

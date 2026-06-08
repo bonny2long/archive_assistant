@@ -16,6 +16,7 @@ type Props = {
   onApprove: (id: number) => void;
   onReject: (id: number) => void;
   onRecovery: (id: number) => void;
+  onQuarantine: (id: number) => void;
   onEdit: (batch: BatchSummary) => void;
 };
 
@@ -48,14 +49,18 @@ export default function BatchRow({
   onApprove,
   onReject,
   onRecovery,
+  onQuarantine,
   onEdit,
 }: Props) {
-  const artist = batch.artist ?? "-";
-  const album = batch.detected_type === "music_discography"
-    ? `${batch.albums.length || batch.album_count} release discography`
-    : batch.album ?? "-";
+  const quarantineReview = batch.status === "needs_quarantine_review";
+  const artist = quarantineReview ? batch.name ?? "Unknown item" : batch.artist ?? "-";
+  const album = quarantineReview
+    ? batch.reason ?? batch.detected_type
+    : batch.detected_type === "music_discography"
+      ? `${batch.albums.length || batch.album_count} release discography`
+      : batch.album ?? "-";
   const year = batch.year ?? "-";
-  const tracks = batch.track_count || "-";
+  const tracks = quarantineReview ? batch.file_count : batch.track_count || "-";
   const percent = Math.round((batch.confidence ?? 0) * 100);
 
   return (
@@ -74,7 +79,12 @@ export default function BatchRow({
         </td>
         <td style={{ color: "var(--text-muted)" }}>{index}</td>
         <td title={artist}>{artist}</td>
-        <td title={album}>{album}</td>
+        <td title={album}>
+          {album}
+          {!quarantineReview && batch.artwork_count > 0 && (
+            <small className="row-artwork">Artwork: {batch.artwork_count}</small>
+          )}
+        </td>
         <td>{year}</td>
         <td style={{ textAlign: "center" }}>{tracks}</td>
         <td><span className={pillClass(batch.status)}>{statusLabel(batch.status)}</span></td>
@@ -93,7 +103,15 @@ export default function BatchRow({
           </div>
         </td>
         <td onClick={(event) => event.stopPropagation()}>
-          <button
+          {quarantineReview ? (
+            <button
+              className="btn btn--compact quarantine-action"
+              title="Move to quarantine"
+              onClick={(event) => { event.stopPropagation(); onQuarantine(batch.id); }}
+            >
+              <i className="ti ti-archive" /> Move to quarantine
+            </button>
+          ) : <button
             className="btn-sm"
             title="Approve"
             disabled={batch.status !== "pending_review"}
@@ -101,11 +119,11 @@ export default function BatchRow({
             onClick={(event) => { event.stopPropagation(); onApprove(batch.id); }}
           >
             <i className="ti ti-check" />
-          </button>
+          </button>}
           <button
             className="btn-sm"
             title="Edit metadata"
-            disabled={batch.status === "moved"}
+            disabled={batch.status === "moved" || quarantineReview}
             style={{ color: "var(--accent-blue)" }}
             onClick={(event) => { event.stopPropagation(); onEdit(batch); }}
           >
@@ -114,6 +132,7 @@ export default function BatchRow({
           <button
             className="btn-sm"
             title="Send to recovery"
+            disabled={quarantineReview}
             style={{ color: "var(--text-secondary)" }}
             onClick={(event) => { event.stopPropagation(); onRecovery(batch.id); }}
           >
