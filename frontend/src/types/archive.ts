@@ -142,6 +142,13 @@ export type HealthResponse = {
   dev_tools_enabled: boolean;
 };
 
+export type SystemTimeResponse = {
+  server_utc: string;
+  server_timezone: string;
+  server_local: string;
+  source: "server_clock";
+};
+
 export type MoveAction = {
   id: number;
   source_path: string;

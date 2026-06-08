@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.archive import IngestBatch, IngestFile
+from app.core.time import now_utc
 from app.services.music_metadata import (
     canonical_album_key,
     canonical_artist_key,
@@ -179,7 +179,7 @@ def merge_music_batches(
         source_metadata["merged_into_batch_id"] = target.id
         source.metadata_json = source_metadata
         source.status = "merged"
-        source.updated_at = datetime.utcnow()
+        source.updated_at = now_utc()
 
     db.flush()
     files = (
@@ -215,7 +215,7 @@ def merge_music_batches(
     )
     target.approved_at = None
     target.approved_by = None
-    target.updated_at = datetime.utcnow()
+    target.updated_at = now_utc()
     db.flush()
     db.refresh(target)
     return BatchMergeResult(target, merged_ids, merged_track_count)

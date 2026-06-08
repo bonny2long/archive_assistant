@@ -1,9 +1,9 @@
 import json
 import shutil
-from datetime import datetime
 from pathlib import Path
 from sqlalchemy.orm import Session, selectinload
 from app.core.config import settings
+from app.core.time import now_utc, serialize_utc
 from app.models.archive import ArchiveItem, IngestBatch, MoveAction
 from app.services.music_metadata import (
     canonical_album_key,
@@ -77,7 +77,7 @@ def _move_discography_batch(
         ]
         batch.metadata_json = metadata
         batch.status = "needs_metadata_review"
-        batch.updated_at = datetime.utcnow()
+        batch.updated_at = now_utc()
         db.commit()
         return [], [], ["Discography destination already exists"]
 
@@ -131,7 +131,7 @@ def _move_discography_batch(
             batch_metadata["metadata_warnings"] = list(dict.fromkeys(warnings))
             batch.metadata_json = batch_metadata
             batch.status = "needs_metadata_review"
-            batch.updated_at = datetime.utcnow()
+            batch.updated_at = now_utc()
             db.commit()
             return [], [], [f"Destination file conflict: {destination_file}"]
         seen_destinations.add(destination_key)
@@ -159,7 +159,7 @@ def _move_discography_batch(
         try:
             shutil.move(str(source), str(destination_file))
             action.status = "completed"
-            action.completed_at = datetime.utcnow()
+            action.completed_at = now_utc()
             if quarantined:
                 quarantined_files.append(str(destination_file))
             else:
@@ -226,7 +226,7 @@ def _move_discography_batch(
                 "destination": str(destination),
                 "moved_files": moved_files,
                 "failed_files": failed_files,
-                "moved_at": datetime.utcnow().isoformat(),
+                "moved_at": serialize_utc(now_utc()),
             },
             indent=2,
             default=str,
@@ -482,7 +482,7 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                 and not batch.metadata_confirmed
             ):
                 batch.status = "needs_metadata_review"
-                batch.updated_at = datetime.utcnow()
+                batch.updated_at = now_utc()
                 db.commit()
                 errors.append(f"Batch {batch.id}: weak metadata must be confirmed before move")
                 continue
@@ -494,13 +494,13 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                 if not moved_files and not quarantined_files:
                     if batch.status != "needs_metadata_review":
                         batch.status = "move_failed"
-                    batch.updated_at = datetime.utcnow()
+                    batch.updated_at = now_utc()
                     db.commit()
                     errors.extend(f"Batch {batch.id}: {error}" for error in failed_files)
                     continue
 
                 batch.status = "move_failed" if failed_files else "moved"
-                batch.updated_at = datetime.utcnow()
+                batch.updated_at = now_utc()
                 for dest_path in moved_files:
                     dest = Path(dest_path)
                     metadata = batch.metadata_json or {}
@@ -560,7 +560,7 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                 album_meta["metadata_alerts"] = alerts
                 batch.metadata_json = album_meta
                 batch.status = "needs_metadata_review"
-                batch.updated_at = datetime.utcnow()
+                batch.updated_at = now_utc()
                 db.commit()
                 errors.append(f"Batch {batch.id}: {conflict['message']}")
                 continue
@@ -585,7 +585,7 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                 ]
                 batch.metadata_json = album_meta
                 batch.status = "needs_metadata_review"
-                batch.updated_at = datetime.utcnow()
+                batch.updated_at = now_utc()
                 db.commit()
                 errors.append(
                     f"Batch {batch.id}: destination filename conflict"
@@ -622,7 +622,7 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                 try:
                     shutil.move(str(source), str(destination_file))
                     action.status = "completed"
-                    action.completed_at = datetime.utcnow()
+                    action.completed_at = now_utc()
                     moved_files.append(str(destination_file))
                 except Exception as exc:
                     failed_files.append(f"Failed to move {source}: {exc}")
@@ -636,7 +636,7 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
             else:
                 batch.status = "moved"
 
-            batch.updated_at = datetime.utcnow()
+            batch.updated_at = now_utc()
             db.flush()
 
             _write_move_log(batch, album_meta, moved_files, failed_files)
@@ -664,7 +664,7 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
             db.rollback()
             errors.append(f"Batch {batch.id}: {exc}")
             batch.status = "move_failed"
-            batch.updated_at = datetime.utcnow()
+            batch.updated_at = now_utc()
             db.add(batch)
             db.commit()
 
@@ -688,7 +688,7 @@ def _write_move_log(batch: IngestBatch, album_meta: dict, moved_files: list[str]
                 "moved_files": moved_files,
                 "failed_files": failed_files,
                 "status": "completed" if not failed_files else "partial",
-                "moved_at": datetime.utcnow().isoformat(),
+                "moved_at": serialize_utc(now_utc()),
                 "album_metadata": album_meta,
             },
             indent=2,

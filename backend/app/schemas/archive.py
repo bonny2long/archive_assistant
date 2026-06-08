@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Generic, Literal, TypeVar
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
+from app.core.time import serialize_utc
 
 T = TypeVar("T")
 
@@ -37,6 +38,10 @@ class BatchSummary(BaseModel):
     action_message: str | None = None
     created_at: datetime
 
+    @field_serializer("created_at")
+    def serialize_created_at(self, value: datetime) -> str:
+        return serialize_utc(value)
+
     class Config:
         from_attributes = True
 
@@ -54,6 +59,10 @@ class IngestBatchOut(BaseModel):
     created_at: datetime
     approved_at: datetime | None = None
     files: list[IngestFileOut] = []
+
+    @field_serializer("created_at", "approved_at")
+    def serialize_timestamps(self, value: datetime | None) -> str | None:
+        return serialize_utc(value) if value else None
 
     class Config:
         from_attributes = True
@@ -154,6 +163,10 @@ class MoveActionOut(BaseModel):
     error_message: str | None = None
     created_at: datetime
     completed_at: datetime | None = None
+
+    @field_serializer("created_at", "completed_at")
+    def serialize_timestamps(self, value: datetime | None) -> str | None:
+        return serialize_utc(value) if value else None
 
     class Config:
         from_attributes = True

@@ -1,15 +1,12 @@
 import { useState } from "react";
 import type { BatchMoveSummary, BatchReview, IngestBatch } from "../types/archive";
+import { formatArchiveTime } from "../utils/archiveTime";
 
 type Props = {
   batch: IngestBatch;
   moveSummary?: BatchMoveSummary;
   review?: BatchReview;
 };
-
-function formatDate(value?: string | null): string {
-  return value ? new Date(value).toLocaleString() : "-";
-}
 
 function metadataValue(batch: IngestBatch, key: string): string {
   const value = batch.metadata_json?.[key];
@@ -424,9 +421,9 @@ function MovedBatchDetail({ batch, moveSummary }: Props) {
         <section className="library-card">
           <h3>Timeline</h3>
           <dl className="library-fields">
-            <div><dt>Created</dt><dd>{formatDate(batch.created_at)}</dd></div>
-            <div><dt>Approved</dt><dd>{formatDate(batch.approved_at)}</dd></div>
-            <div><dt>Moved</dt><dd>{formatDate(latestCompleted)}</dd></div>
+            <div><dt>Created</dt><dd>{formatArchiveTime(batch.created_at)}</dd></div>
+            <div><dt>Approved</dt><dd>{formatArchiveTime(batch.approved_at)}</dd></div>
+            <div><dt>Moved</dt><dd>{formatArchiveTime(latestCompleted)}</dd></div>
           </dl>
         </section>
       </div>
@@ -530,11 +527,11 @@ export default function BatchDetail({ batch, moveSummary, review }: Props) {
         </div>
         <div>
           <div className="batch-detail__label">Created at</div>
-          <div className="batch-detail__value">{formatDate(batch.created_at)}</div>
+          <div className="batch-detail__value">{formatArchiveTime(batch.created_at)}</div>
         </div>
         <div>
           <div className="batch-detail__label">Approved at</div>
-          <div className="batch-detail__value">{formatDate(batch.approved_at)}</div>
+          <div className="batch-detail__value">{formatArchiveTime(batch.approved_at)}</div>
         </div>
       </div>
       {warnings.length > 0 && (

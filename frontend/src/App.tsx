@@ -7,6 +7,7 @@ import type {
   DiscographyMetadataUpdate,
   IngestBatch,
   LibrarySummary as LibrarySummaryData,
+  SystemTimeResponse,
   TabKey,
 } from "./types/archive";
 import { api } from "./api/client";
@@ -18,6 +19,11 @@ import MetadataEditor from "./components/MetadataEditor";
 import LibrarySummary from "./components/LibrarySummary";
 import BulkApproveModal from "./components/BulkApproveModal";
 import DiscographyEditor from "./components/DiscographyEditor";
+import {
+  archiveTimezone,
+  configureArchiveTimezone,
+  formatArchiveTime,
+} from "./utils/archiveTime";
 
 type ToastState = { msg: string; type: "info" | "error" };
 type ActionKey = "refresh" | "scan" | "move" | "reset";
@@ -55,6 +61,7 @@ export default function App() {
   const [devToolsEnabled, setDevToolsEnabled] = useState(false);
   const [librarySummary, setLibrarySummary] = useState<LibrarySummaryData>(EMPTY_LIBRARY_SUMMARY);
   const [qaSummary, setQaSummary] = useState<QaSummary | null>(null);
+  const [systemTime, setSystemTime] = useState<SystemTimeResponse | null>(null);
 
   const showToast = useCallback((msg: string, type: ToastState["type"] = "info") => {
     setToast({ msg, type });
@@ -103,6 +110,12 @@ export default function App() {
     void api.health()
       .then((health) => setDevToolsEnabled(health.dev_tools_enabled))
       .catch(() => setDevToolsEnabled(false));
+    void api.systemTime()
+      .then((time) => {
+        configureArchiveTimezone(time.server_timezone);
+        setSystemTime(time);
+      })
+      .catch(() => configureArchiveTimezone(null));
   }, [loadBatches]);
 
   const filtered = batches.filter((batch) => {
@@ -376,6 +389,9 @@ export default function App() {
         onReset={handleReset}
         loadingAction={loadingAction}
         devToolsEnabled={devToolsEnabled}
+        serverTime={systemTime
+          ? `Server time: ${formatArchiveTime(systemTime.server_utc)} ${archiveTimezone()}`
+          : null}
       />
       <div className="app-content">
         <LibrarySummary summary={librarySummary} />

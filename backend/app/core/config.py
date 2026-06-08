@@ -25,6 +25,7 @@ class Settings(BaseSettings):
 
     api_docs_enabled: bool = False
     dev_tools_enabled: bool = True
+    archive_assistant_timezone: str = "America/Chicago"
 
     class Config:
         env_file = ".env"

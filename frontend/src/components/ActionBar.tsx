@@ -7,6 +7,7 @@ type Props = {
   onReset: () => Promise<void>;
   loadingAction: ActionKey | null;
   devToolsEnabled: boolean;
+  serverTime?: string | null;
 };
 
 export default function ActionBar({
@@ -16,6 +17,7 @@ export default function ActionBar({
   onReset,
   loadingAction,
   devToolsEnabled,
+  serverTime,
 }: Props) {
   const disabled = loadingAction !== null;
 
@@ -24,6 +26,9 @@ export default function ActionBar({
       <div>
         <div className="action-bar__title">Archive Assistant</div>
         <div className="action-bar__subtitle">Archive ingest dashboard</div>
+        {devToolsEnabled && serverTime && (
+          <div className="action-bar__system-time">{serverTime}</div>
+        )}
       </div>
       <div className="action-bar__buttons">
         <button className="btn" disabled={disabled} onClick={() => void onRefresh()}>

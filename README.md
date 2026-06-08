@@ -172,6 +172,7 @@ Settings are defined in `backend/app/core/config.py` using `pydantic-settings`. 
 | `music_flac_dir` | `data/Music/Library/FLAC/` | FLAC library destination |
 | `music_mp3_dir` | `data/Music/Library/MP3/` | MP3 library destination |
 | `music_discographies_dir` | `data/Music/Discographies/` | Multi-album artist collection destination |
+| `archive_assistant_timezone` | `America/Chicago` | Frontend display and server-local diagnostics timezone |
 | `database_url` | `sqlite:///.../archive_assistant.db` | SQLite connection string |
 
 ---
@@ -290,6 +291,10 @@ Starts two services:
 
 - **archive-backend** (port 8000): Python 3.12-slim, runs `init_db` then `uvicorn`.
 - **archive-frontend** (port 5173): Node 22-alpine, runs `npm install && npm run dev -- --host 0.0.0.0`.
+
+For NAS deployment, set both `TZ` and `ARCHIVE_ASSISTANT_TIMEZONE` to the
+desired IANA timezone. The container uses the NAS/server clock; TrueNAS remains
+responsible for NTP synchronization.
 
 The `./data` directory and SQLite database file are mounted as volumes for persistence.
 

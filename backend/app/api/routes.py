@@ -1,4 +1,3 @@
-from datetime import datetime
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, selectinload
@@ -44,6 +43,7 @@ from app.services.music_metadata import (
 from app.services.scanner import scan_music_ingest
 from app.services.mover import move_approved_batches
 from app.core.config import settings
+from app.core.time import configured_timezone, now_local, now_utc, serialize_utc
 
 router = APIRouter(prefix="/api")
 
@@ -64,6 +64,17 @@ def health():
         "service": "archive-assistant",
         "debug": settings.debug,
         "dev_tools_enabled": settings.debug and settings.dev_tools_enabled,
+    }
+
+
+@router.get("/system/time")
+def system_time():
+    utc_now = now_utc()
+    return {
+        "server_utc": serialize_utc(utc_now),
+        "server_timezone": configured_timezone(),
+        "server_local": now_local().isoformat(),
+        "source": "server_clock",
     }
 
 
@@ -383,7 +394,7 @@ def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Sessio
     else:
         batch.status = "needs_metadata_review"
     
-    batch.updated_at = datetime.utcnow()
+    batch.updated_at = now_utc()
     db.flush()
 
     merge_candidates = find_merge_candidate_batches(db, batch)
@@ -521,7 +532,7 @@ def update_discography_metadata(
     batch.metadata_confirmed = True
     batch.confidence = metadata["confidence"]
     batch.status = "needs_metadata_review" if blocking else "pending_review"
-    batch.updated_at = datetime.utcnow()
+    batch.updated_at = now_utc()
     db.commit()
     return _batch_to_summary(batch, action_message="Discography metadata saved.")
 
@@ -556,9 +567,9 @@ def approve_batch(batch_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=f"Cannot approve batch with status {batch.status}")
 
     batch.status = "approved"
-    batch.approved_at = datetime.utcnow()
+    batch.approved_at = now_utc()
     batch.approved_by = "bonny-local"
-    batch.updated_at = datetime.utcnow()
+    batch.updated_at = now_utc()
     db.commit()
     return ApproveResponse(batch_id=batch.id, status=batch.status, message="Batch approved")
 
@@ -599,9 +610,9 @@ def approve_selected_batches(
             reason = f"invalid_status:{batch.status}"
         else:
             batch.status = "approved"
-            batch.approved_at = datetime.utcnow()
+            batch.approved_at = now_utc()
             batch.approved_by = "bonny-local"
-            batch.updated_at = datetime.utcnow()
+            batch.updated_at = now_utc()
             approved.append(batch_id)
             continue
 
@@ -627,7 +638,7 @@ def reject_batch(batch_id: int, db: Session = Depends(get_db)):
             detail=f"Cannot reject batch with status {batch.status}",
         )
     batch.status = "rejected"
-    batch.updated_at = datetime.utcnow()
+    batch.updated_at = now_utc()
     db.commit()
     return ApproveResponse(batch_id=batch.id, status=batch.status, message="Batch rejected")
 
@@ -638,7 +649,7 @@ def send_to_recovery(batch_id: int, db: Session = Depends(get_db)):
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
     batch.status = "metadata_recovery"
-    batch.updated_at = datetime.utcnow()
+    batch.updated_at = now_utc()
     db.commit()
     return ApproveResponse(batch_id=batch.id, status=batch.status, message="Batch sent to metadata recovery")
 
