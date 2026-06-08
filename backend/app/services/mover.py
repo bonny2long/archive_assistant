@@ -23,7 +23,6 @@ def _discography_album_destination(root: Path, album_metadata: dict) -> Path:
         str(album_metadata.get("album") or album_metadata.get("source_folder") or "Unknown Album")
     )
     year = str(album_metadata.get("year") or "")[:4]
-    folder = f"{year} - {album}" if year.isdigit() else album
     release_type = str(album_metadata.get("release_type") or "album").lower()
     buckets = {
         "album": "Albums",
@@ -33,7 +32,11 @@ def _discography_album_destination(root: Path, album_metadata: dict) -> Path:
         "live": "Live",
         "other": "Other",
     }
-    return root / buckets.get(release_type, "Other") / folder
+    bucket = root / buckets.get(release_type, "Other")
+    if release_type in {"single", "ep"} and year.isdigit():
+        return bucket / year / album
+    folder = f"{year} - {album}" if year.isdigit() else album
+    return bucket / folder
 
 
 def _discography_quarantine_destination(

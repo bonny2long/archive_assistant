@@ -42,7 +42,26 @@ def main() -> int:
     failures += check(
         "single routes to Singles year-title bucket",
         single.as_posix().endswith(
-            "Music/Discographies/Kanye West/Singles/2015 - All Day"
+            "Music/Discographies/Kanye West/Singles/2015/All Day"
+        ),
+    )
+    second_single = _discography_album_destination(
+        root,
+        {"album": "Only One", "year": "2015", "release_type": "single"},
+    )
+    failures += check(
+        "same-year singles share the same year parent",
+        single.parent == second_single.parent
+        and single.parent.name == "2015",
+    )
+    ep = _discography_album_destination(
+        root,
+        {"album": "My Dear Melancholy", "year": "2018", "release_type": "ep"},
+    )
+    failures += check(
+        "EP routes through an EP year bucket",
+        ep.as_posix().endswith(
+            "Music/Discographies/Kanye West/EPs/2018/My Dear Melancholy"
         ),
     )
     failures += check(

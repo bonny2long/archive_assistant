@@ -58,9 +58,11 @@ function albumDestination(
     return `data/_QUARANTINE/music/discography-excluded/${sanitizePathPart(artist)}/${sanitizePathPart(album.source_folder)}`;
   }
   const releaseType = album.release_type as Exclude<DiscographyReleaseType, "exclude">;
-  const folder = album.year
-    ? `${album.year} - ${sanitizePathPart(album.album)}`
-    : sanitizePathPart(album.album);
+  const title = sanitizePathPart(album.album);
+  if ((releaseType === "single" || releaseType === "ep") && album.year) {
+    return `Music/Discographies/${sanitizePathPart(artist)}/${RELEASE_BUCKETS[releaseType]}/${album.year}/${title}`;
+  }
+  const folder = album.year ? `${album.year} - ${title}` : title;
   return `Music/Discographies/${sanitizePathPart(artist)}/${RELEASE_BUCKETS[releaseType]}/${folder}`;
 }
 
