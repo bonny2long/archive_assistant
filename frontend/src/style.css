@@ -393,47 +393,123 @@ button:focus-visible, input:focus-visible {
 }
 .discography-albums td:nth-child(2) { min-width: 180px; }
 .discography-cleanup dd { overflow-wrap: anywhere; }
-.discography-editor {
-  width: min(1180px, calc(100vw - 2rem));
+.metadata-editor.discography-editor {
+  width: min(96vw, 1400px);
+  max-width: 1400px;
+  height: min(90vh, 900px);
+  min-width: 560px;
+  min-height: 420px;
   max-height: calc(100vh - 2rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  resize: both;
 }
-.discography-editor__table {
-  overflow: auto;
+.discography-editor__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
+.discography-editor__collection {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.7fr) minmax(320px, 1.3fr);
+  gap: 0.75rem;
+}
+.discography-editor__release-summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0.9rem 0 0.45rem;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.discography-editor__release-summary span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.discography-editor__releases {
+  max-height: 58vh;
+  overflow-x: auto;
+  overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
+  background: var(--bg-page);
 }
-.discography-editor__table table {
-  width: 100%;
-  border-collapse: collapse;
-}
-.discography-editor__table th,
-.discography-editor__table td {
-  min-width: 90px;
-  padding: 6px;
+.album-edit-row {
+  display: grid;
+  grid-template-columns: 72px 110px minmax(280px, 1fr) 150px minmax(320px, 1fr) 220px;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 10px;
+  min-width: 1180px;
   border-bottom: 1px solid var(--border);
   color: var(--text-secondary);
   font-size: 11px;
-  text-align: left;
-  vertical-align: top;
 }
-.discography-editor__table th {
+.album-edit-row:last-child { border-bottom: 0; }
+.album-edit-header {
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 2;
+  background: var(--bg-raised);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.album-edit-row input,
+.album-edit-row select {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 8px;
+}
+.album-edit-row__include { text-align: center; }
+.album-edit-row__include input { width: auto; }
+.album-edit-row__title { min-width: 0; }
+.album-edit-row__destination {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+.album-edit-row__warnings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.album-edit-row__warnings span,
+.album-edit-row__warnings small {
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: rgba(245,158,11,0.08);
+  color: var(--accent-amber);
+  font-size: 9px;
+}
+.album-edit-row__warnings small {
   background: var(--bg-raised);
   color: var(--text-muted);
 }
-.discography-editor__table td:nth-child(3) { min-width: 220px; }
-.discography-editor__table td:last-child { min-width: 280px; }
-.discography-editor__table input,
-.discography-editor__table select {
-  width: 100%;
-  padding: 5px 6px;
+.discography-editor__footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  margin: 0.75rem -1.25rem -1.25rem;
+  padding: 0.85rem 1.25rem;
+  border-top: 1px solid var(--border);
+  background: var(--bg-surface);
 }
-.discography-editor__table input[type="checkbox"] { width: auto; }
-.discography-editor__table code {
-  white-space: normal;
-  overflow-wrap: anywhere;
+.discography-editor__resize-hint {
+  margin-right: auto;
+  color: var(--text-muted);
+  font-size: 10px;
 }
 .track-preview__warning { color: var(--accent-amber); }
 
@@ -751,4 +827,18 @@ button:focus-visible, input:focus-visible {
   .library-status__facts { grid-column: 1 / -1; align-items: flex-start; flex-direction: row; flex-wrap: wrap; }
   .library-detail__grid, .library-fields { grid-template-columns: 1fr; }
   .metadata-editor__row { grid-template-columns: 1fr; gap: 0; }
+  .metadata-editor.discography-editor {
+    width: calc(100vw - 1rem);
+    height: calc(100vh - 1rem);
+    min-width: 0;
+    min-height: 0;
+    resize: none;
+    padding: 1rem;
+  }
+  .discography-editor__collection { grid-template-columns: 1fr; }
+  .discography-editor__footer {
+    margin: 0.75rem -1rem -1rem;
+    padding: 0.75rem 1rem;
+  }
+  .discography-editor__resize-hint { display: none; }
 }

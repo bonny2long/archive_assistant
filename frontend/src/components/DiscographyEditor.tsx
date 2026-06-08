@@ -78,6 +78,10 @@ export default function DiscographyEditor({
     () => `Music/Discographies/${sanitizePathPart(artist)}`,
     [artist],
   );
+  const trackCount = useMemo(
+    () => batch.albums.reduce((total, album) => total + album.track_count, 0),
+    [batch.albums],
+  );
   const albumsBySource = useMemo(
     () => new Map(batch.albums.map((album) => [album.source_folder, album])),
     [batch.albums],
@@ -119,35 +123,40 @@ export default function DiscographyEditor({
           </button>
         </div>
 
-        <label>
-          <span>Artist</span>
-          <input value={artist} autoFocus onChange={(event) => setArtist(event.target.value)} />
-        </label>
-        <div className="metadata-editor__preview">
-          <span>Destination preview</span>
-          <code>{collectionDestination}</code>
-        </div>
+        <div className="discography-editor__body">
+          <div className="discography-editor__collection">
+            <label>
+              <span>Artist</span>
+              <input value={artist} autoFocus onChange={(event) => setArtist(event.target.value)} />
+            </label>
+            <div className="metadata-editor__preview">
+              <span>Destination preview</span>
+              <code>{collectionDestination}</code>
+            </div>
+          </div>
 
-        <div className="discography-editor__table">
-          <table>
-            <thead>
-              <tr>
-                <th>Include</th>
-                <th>Year</th>
-                <th>Album title</th>
-                <th>Release type</th>
-                <th>Tracks</th>
-                <th>Warnings</th>
-                <th>Destination preview</th>
-              </tr>
-            </thead>
-            <tbody>
-              {albums.map((album) => {
-                const source = albumsBySource.get(album.source_folder);
-                return (
-                  <tr key={album.source_folder}>
-                    <td>
+          <div className="discography-editor__release-summary">
+            <strong>Releases</strong>
+            <span>{albums.length} releases · {trackCount} tracks</span>
+          </div>
+
+          <div className="discography-editor__releases">
+            <div className="album-edit-row album-edit-header" aria-hidden="true">
+              <span>Include</span>
+              <span>Year</span>
+              <span>Album title</span>
+              <span>Release type</span>
+              <span>Destination preview</span>
+              <span>Warnings</span>
+            </div>
+            {albums.map((album) => {
+              const source = albumsBySource.get(album.source_folder);
+              const destination = albumDestination(artist, album);
+              return (
+                <div className="album-edit-row" key={album.source_folder}>
+                  <div className="album-edit-row__include">
                       <input
+                        aria-label={`Include ${album.album}`}
                         type="checkbox"
                         checked={album.include && album.release_type !== "exclude"}
                         onChange={(event) => updateAlbum(album.source_folder, {
@@ -157,27 +166,30 @@ export default function DiscographyEditor({
                             : album.release_type,
                         })}
                       />
-                    </td>
-                    <td>
+                  </div>
+                  <div>
                       <input
                         className="discography-editor__year"
+                        aria-label={`Year for ${album.album}`}
                         value={album.year ?? ""}
                         placeholder="YYYY"
                         onChange={(event) => updateAlbum(album.source_folder, {
                           year: event.target.value || null,
                         })}
                       />
-                    </td>
-                    <td>
+                  </div>
+                  <div className="album-edit-row__title">
                       <input
+                        aria-label={`Title for ${album.source_folder}`}
                         value={album.album}
                         onChange={(event) => updateAlbum(album.source_folder, {
                           album: event.target.value,
                         })}
                       />
-                    </td>
-                    <td>
+                  </div>
+                  <div>
                       <select
+                        aria-label={`Release type for ${album.album}`}
                         value={album.release_type}
                         onChange={(event) => {
                           const releaseType = event.target.value as DiscographyReleaseType;
@@ -191,18 +203,26 @@ export default function DiscographyEditor({
                           <option key={option.value} value={option.value}>{option.label}</option>
                         ))}
                       </select>
-                    </td>
-                    <td>{source?.track_count ?? 0}</td>
-                    <td>{source?.warnings?.join(", ") || "-"}</td>
-                    <td><code>{albumDestination(artist, album)}</code></td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                  </div>
+                  <code className="album-edit-row__destination" title={destination}>
+                    {destination}
+                  </code>
+                  <div className="album-edit-row__warnings">
+                    <small>{source?.track_count ?? 0} track(s)</small>
+                    {source?.warnings?.length
+                      ? source.warnings.map((warning) => <span key={warning}>{warning.replace(/_/g, " ")}</span>)
+                      : <small>No warnings</small>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
-        <div className="metadata-editor__actions">
+        <div className="metadata-editor__actions discography-editor__footer">
+          <span className="discography-editor__resize-hint">
+            Drag the bottom-right corner to resize
+          </span>
           <button type="button" className="btn" disabled={saving} onClick={onClose}>Cancel</button>
           <button type="submit" className="btn btn--green" disabled={saving || !valid}>
             <i className={`ti ti-${saving ? "loader-2 spinner" : "device-floppy"}`} />
