@@ -27,6 +27,7 @@ class BatchSummary(BaseModel):
     format: str | None = None
     track_count: int = 0
     artwork_count: int = 0
+    ignored_sidecar_count: int = 0
     name: str | None = None
     reason: str | None = None
     file_count: int = 0

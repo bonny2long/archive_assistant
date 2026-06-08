@@ -359,8 +359,9 @@ export default function App() {
 
   const handleReset = async () => {
     const confirmed = window.confirm(
-      "Reset local music test data? This restores moved test tracks to _INGEST "
-      + "and clears music test batches. It will not delete your source tracks.",
+      "Reset local ingest test data? This restores moved music files to _INGEST "
+      + "and clears music, unknown, and unsupported review batches. "
+      + "It will not delete source files or clear completed quarantine records.",
     );
     if (!confirmed) return;
 

@@ -710,7 +710,7 @@ def list_quarantine_reports():
         return []
     reports = []
     for path in sorted(
-        settings.quarantine_reports_dir.glob("quarantine_*.json"),
+        settings.quarantine_reports_dir.glob("*.json"),
         reverse=True,
     ):
         try:
@@ -760,6 +760,7 @@ def _batch_to_summary(
         format=meta.get("format") or ", ".join(meta.get("format_summary", [])) or "MP3",
         track_count=meta.get("track_count", 0),
         artwork_count=meta.get("artwork_count", 0),
+        ignored_sidecar_count=meta.get("ignored_sidecar_count", 0),
         name=meta.get("name"),
         reason=meta.get("reason"),
         file_count=meta.get("file_count", 0),

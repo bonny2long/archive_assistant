@@ -69,8 +69,6 @@ IGNORED_INGEST_NAMES = {
     "desktop.ini",
     "__macosx",
 }
-
-
 def classify_ingest_item(path: Path) -> str:
     if path.name.casefold() in IGNORED_INGEST_NAMES:
         return "ignored_system_folder"
@@ -131,25 +129,17 @@ def _artwork_files(root: Path) -> list[Path]:
     )
 
 
-def _nested_unsupported_files(
-    classifications: dict[Path, str],
-) -> list[tuple[Path, Path]]:
-    unsupported = []
-    for root, classification in classifications.items():
-        if (
-            classification not in {"music_album", "music_discography"}
-            or not root.is_dir()
-        ):
-            continue
-        for path in sorted(candidate for candidate in root.rglob("*") if candidate.is_file()):
-            if (
-                is_audio_file(path)
-                or is_artwork_file(path)
-                or path.name.casefold() in IGNORED_INGEST_NAMES
-            ):
-                continue
-            unsupported.append((path, root))
-    return unsupported
+def _ignored_music_sidecars(root: Path) -> list[Path]:
+    if not root.is_dir():
+        return []
+    return sorted(
+        path
+        for path in root.rglob("*")
+        if path.is_file()
+        and not is_audio_file(path)
+        and not is_artwork_file(path)
+        and path.name.casefold() not in IGNORED_INGEST_NAMES
+    )
 
 
 def _unknown_metadata(
@@ -246,6 +236,122 @@ def _create_unknown_batch(
     db.refresh(batch)
     write_json_report(settings.reports_dir, batch.id, metadata)
     return batch
+
+
+def _retire_noisy_unsupported_batches(
+    db: Session,
+    music_roots: list[Path],
+    loose_files: list[Path],
+) -> None:
+    loose_paths = {str(path) for path in loose_files}
+    active = (
+        db.query(IngestBatch)
+        .filter(
+            IngestBatch.detected_type == "unsupported_file",
+            IngestBatch.status != "quarantined",
+            IngestBatch.status != "merged",
+        )
+        .all()
+    )
+    for batch in active:
+        source = Path(batch.source_path)
+        metadata = batch.metadata_json or {}
+        nested_in_music = any(
+            source.resolve().is_relative_to(root.resolve())
+            for root in music_roots
+            if root.exists()
+        ) or bool(metadata.get("music_parent"))
+        if nested_in_music or batch.source_path in loose_paths:
+            batch.status = "merged"
+    db.commit()
+
+
+def _create_grouped_loose_files_batch(
+    db: Session,
+    paths: list[Path],
+) -> IngestBatch | None:
+    if not paths:
+        return None
+    existing = (
+        db.query(IngestBatch)
+        .filter(
+            IngestBatch.source_path == str(settings.ingest_root),
+            IngestBatch.detected_type == "unsupported_file",
+            IngestBatch.status == "needs_quarantine_review",
+        )
+        .first()
+    )
+    metadata = {
+        "name": "Unsupported loose files",
+        "reason": "Unsupported loose files in _INGEST",
+        "file_count": len(paths),
+        "folder_count": 0,
+        "size_bytes": sum(path.stat().st_size for path in paths),
+        "grouped_loose_files": [str(path) for path in paths],
+        "sample_files": [path.name for path in paths[:10]],
+        "recommended_action": "Move group to quarantine",
+        "metadata_quality": "unsupported",
+        "metadata_warnings": ["cleanup_review_required"],
+    }
+    if existing:
+        existing.metadata_json = metadata
+        existing.files.clear()
+        batch = existing
+    else:
+        batch = IngestBatch(
+            source_kind="manual-drop",
+            source_path=str(settings.ingest_root),
+            detected_type="unsupported_file",
+            status="needs_quarantine_review",
+            confidence=0.0,
+            metadata_json=metadata,
+        )
+        db.add(batch)
+        db.flush()
+    for path in paths:
+        batch.files.append(
+            IngestFile(
+                file_path=str(path),
+                file_name=path.name,
+                extension=path.suffix.lower(),
+                size_bytes=path.stat().st_size,
+                detected_role="unsupported_loose_file",
+                metadata_json=None,
+            )
+        )
+    db.commit()
+    db.refresh(batch)
+    write_json_report(settings.reports_dir, batch.id, metadata)
+    return batch
+
+
+def _update_existing_music_sidecars(
+    db: Session,
+    music_roots: list[Path],
+) -> None:
+    for root in music_roots:
+        batch = (
+            db.query(IngestBatch)
+            .filter(
+                IngestBatch.source_path == str(root),
+                IngestBatch.detected_type.in_(
+                    ["music_album", "music_discography"]
+                ),
+                IngestBatch.status != "merged",
+            )
+            .order_by(IngestBatch.id.desc())
+            .first()
+        )
+        if not batch:
+            continue
+        sidecars = _ignored_music_sidecars(root)
+        metadata = dict(batch.metadata_json or {})
+        metadata["ignored_sidecar_count"] = len(sidecars)
+        metadata["ignored_sidecar_files"] = [
+            str(path.relative_to(root)) for path in sidecars
+        ]
+        batch.metadata_json = metadata
+    db.commit()
 
 
 def _destination_contains_all_checksums(
@@ -426,6 +532,7 @@ def _create_discography_batch(
             {"album_missing_year", "album_missing_title"} & set(child_warnings)
         )
         artwork_paths = _artwork_files(child)
+        ignored_sidecars = _ignored_music_sidecars(child)
 
         album_summaries.append(
             {
@@ -437,6 +544,8 @@ def _create_discography_batch(
                 "track_count": len(paths),
                 "artwork_count": len(artwork_paths),
                 "artwork_files": [path.name for path in artwork_paths],
+                "ignored_sidecar_count": len(ignored_sidecars),
+                "ignored_sidecar_files": [path.name for path in ignored_sidecars],
                 "release_type": release_type,
                 "include": True,
                 "status": "needs_review" if child_blocking else (
@@ -502,6 +611,7 @@ def _create_discography_batch(
         or bool(existing_checksums)
     )
     destination = settings.music_discographies_dir / artist
+    collection_sidecars = _ignored_music_sidecars(parent)
     metadata = {
         "artist": artist,
         "collection_type": "discography",
@@ -513,6 +623,10 @@ def _create_discography_batch(
             name
             for album in album_summaries
             for name in album["artwork_files"]
+        ],
+        "ignored_sidecar_count": len(collection_sidecars),
+        "ignored_sidecar_files": [
+            str(path.relative_to(parent)) for path in collection_sidecars
         ],
         "format_summary": sorted(formats),
         "albums": album_summaries,
@@ -554,21 +668,26 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
     }
     unknown_batches = []
     for item, classification in classifications.items():
-        if classification not in {"unknown_type", "unsupported_file"}:
+        if classification != "unknown_type":
             continue
         batch = _create_unknown_batch(db, item, classification)
         if batch:
             unknown_batches.append(batch)
-    nested_unsupported = _nested_unsupported_files(classifications)
-    for path, music_parent in nested_unsupported:
-        batch = _create_unknown_batch(
-            db,
-            path,
-            "unsupported_file",
-            music_parent=music_parent,
-        )
-        if batch:
-            unknown_batches.append(batch)
+    music_roots = [
+        item
+        for item, classification in classifications.items()
+        if classification in {"music_album", "music_discography"} and item.is_dir()
+    ]
+    loose_unsupported = [
+        item
+        for item, classification in classifications.items()
+        if classification == "unsupported_file"
+    ]
+    _retire_noisy_unsupported_batches(db, music_roots, loose_unsupported)
+    _update_existing_music_sidecars(db, music_roots)
+    grouped_loose_batch = _create_grouped_loose_files_batch(db, loose_unsupported)
+    if grouped_loose_batch:
+        unknown_batches.append(grouped_loose_batch)
 
     audio_files = _root_music_audio_files()
     if not audio_files:
@@ -580,10 +699,7 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
                 classification == "unknown_type"
                 for classification in classifications.values()
             ),
-            unsupported_files=sum(
-                classification == "unsupported_file"
-                for classification in classifications.values()
-            ) + len(nested_unsupported),
+            unsupported_files=len(loose_unsupported),
             ignored_system_files=sum(
                 classification == "ignored_system_folder"
                 for classification in classifications.values()
@@ -685,8 +801,13 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
 
         source_path = _release_source_path(sample_path)
         artwork_paths = _artwork_files(source_path)
+        ignored_sidecars = _ignored_music_sidecars(source_path)
         album_meta["artwork_count"] = len(artwork_paths)
         album_meta["artwork_files"] = [path.name for path in artwork_paths]
+        album_meta["ignored_sidecar_count"] = len(ignored_sidecars)
+        album_meta["ignored_sidecar_files"] = [
+            str(path.relative_to(source_path)) for path in ignored_sidecars
+        ]
         suggested_metadata = build_suggested_metadata(
             source_path,
             track_metadata,
@@ -848,10 +969,7 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
             classification == "unknown_type"
             for classification in classifications.values()
         ),
-        unsupported_files=sum(
-            classification == "unsupported_file"
-            for classification in classifications.values()
-        ) + len(nested_unsupported),
+        unsupported_files=len(loose_unsupported),
         ignored_system_files=sum(
             classification == "ignored_system_folder"
             for classification in classifications.values()

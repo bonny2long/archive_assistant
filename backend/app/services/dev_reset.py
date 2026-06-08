@@ -112,7 +112,17 @@ def _validate_moves(moves: list[MoveAction]) -> list[str]:
 def reset_music_test_data(db: Session, *, apply: bool) -> DevResetSummary:
     batches = (
         db.query(IngestBatch)
-        .filter(IngestBatch.detected_type.in_(["music_album", "music_discography"]))
+        .filter(
+            IngestBatch.detected_type.in_(
+                [
+                    "music_album",
+                    "music_discography",
+                    "unknown_type",
+                    "unsupported_file",
+                ]
+            ),
+            IngestBatch.status != "quarantined",
+        )
         .order_by(IngestBatch.id.asc())
         .all()
     )
@@ -145,7 +155,8 @@ def reset_music_test_data(db: Session, *, apply: bool) -> DevResetSummary:
             cleared_batches=len(batch_ids),
             message=(
                 "Dry run only. "
-                f"Would restore {len(restorable)} track(s) to ingest."
+                f"Would restore {len(restorable)} track(s) to ingest and "
+                f"clear {len(batch_ids)} ingest batch(es)."
             ),
         )
 
@@ -190,5 +201,9 @@ def reset_music_test_data(db: Session, *, apply: bool) -> DevResetSummary:
         removed_move_logs=removed_move_logs,
         removed_empty_dirs=removed_empty_dirs,
         cleared_batches=len(batch_ids),
-        message=f"Music test data reset. Restored {restored_tracks} tracks to ingest.",
+        message=(
+            "Ingest test data reset. "
+            f"Restored {restored_tracks} track(s) and cleared "
+            f"{len(batch_ids)} batch(es). Source files were not deleted."
+        ),
     )

@@ -34,6 +34,7 @@ export type BatchSummary = {
   format?: string | null;
   track_count: number;
   artwork_count: number;
+  ignored_sidecar_count: number;
   name?: string | null;
   reason?: string | null;
   file_count: number;

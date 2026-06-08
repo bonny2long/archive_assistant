@@ -95,6 +95,11 @@ export default function BatchRow({
           {!quarantineReview && batch.artwork_count > 0 && (
             <small className="row-artwork">Artwork: {batch.artwork_count}</small>
           )}
+          {!quarantineReview && batch.ignored_sidecar_count > 0 && (
+            <small className="row-artwork">
+              Ignored sidecars: {batch.ignored_sidecar_count}
+            </small>
+          )}
         </td>
         <td>{year}</td>
         <td style={{ textAlign: "center" }}>{tracks}</td>
@@ -120,7 +125,11 @@ export default function BatchRow({
               title="Move to quarantine"
               onClick={(event) => { event.stopPropagation(); onQuarantine(batch.id); }}
             >
-              <i className="ti ti-archive" /> Move to quarantine
+              <i className="ti ti-archive" /> {
+                batch.name === "Unsupported loose files"
+                  ? "Move group to quarantine"
+                  : "Move to quarantine"
+              }
             </button>
           ) : <button
             className="btn-sm"

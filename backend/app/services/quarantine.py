@@ -41,20 +41,49 @@ def quarantine_batch(db: Session, batch: IngestBatch) -> Path:
     ):
         raise ValueError("Batch is not eligible for quarantine review")
 
-    source = Path(batch.source_path)
-    if not source.exists():
-        raise FileNotFoundError(f"Source not found: {source}")
-    if not source.resolve().is_relative_to(settings.ingest_root.resolve()):
-        raise ValueError("Quarantine source must be inside the ingest root")
-
     root = settings.quarantine_unknown_dir
     root.mkdir(parents=True, exist_ok=True)
-    destination = _available_destination(root, source)
-    shutil.move(str(source), str(destination))
-
     metadata = dict(batch.metadata_json or {})
-    metadata["quarantine_destination"] = str(destination)
     moved_at = now_utc()
+    grouped_paths = [
+        Path(value)
+        for value in metadata.get("grouped_loose_files", [])
+        if isinstance(value, str)
+    ]
+    files_moved = []
+    folders_moved = []
+
+    if grouped_paths:
+        group_root = root / "loose-files"
+        timestamp = moved_at.strftime("%Y%m%dT%H%M%SZ")
+        destination = _available_destination(
+            group_root,
+            Path(timestamp),
+        )
+        destination.mkdir(parents=True, exist_ok=False)
+        for source in grouped_paths:
+            if not source.exists():
+                continue
+            if source.resolve().parent != settings.ingest_root.resolve():
+                raise ValueError("Grouped quarantine files must be directly inside ingest")
+            destination_file = _available_destination(destination, source)
+            shutil.move(str(source), str(destination_file))
+            files_moved.append(str(destination_file))
+    else:
+        source = Path(batch.source_path)
+        if not source.exists():
+            raise FileNotFoundError(f"Source not found: {source}")
+        if not source.resolve().is_relative_to(settings.ingest_root.resolve()):
+            raise ValueError("Quarantine source must be inside the ingest root")
+        destination = _available_destination(root, source)
+        source_was_dir = source.is_dir()
+        shutil.move(str(source), str(destination))
+        if source_was_dir:
+            folders_moved.append(str(destination))
+        else:
+            files_moved.append(str(destination))
+
+    metadata["quarantine_destination"] = str(destination)
     metadata["quarantined_at"] = serialize_utc(moved_at)
     batch.metadata_json = metadata
     batch.suggested_destination = str(destination)
@@ -65,8 +94,8 @@ def quarantine_batch(db: Session, batch: IngestBatch) -> Path:
     settings.quarantine_reports_dir.mkdir(parents=True, exist_ok=True)
     report = {
         "batch_id": batch.id,
-        "source_path": str(source),
-        "quarantine_path": str(destination),
+        "source_path": batch.source_path,
+        "destination_path": str(destination),
         "detected_type": batch.detected_type,
         "status_before": "needs_quarantine_review",
         "status_after": "quarantined",
@@ -76,9 +105,11 @@ def quarantine_batch(db: Session, batch: IngestBatch) -> Path:
         "file_count": metadata.get("file_count", 0),
         "folder_count": metadata.get("folder_count", 0),
         "size_bytes": metadata.get("size_bytes", 0),
+        "files_moved": files_moved,
+        "folders_moved": folders_moved,
     }
-    timestamp = moved_at.strftime("%Y%m%dT%H%M%SZ")
-    (settings.quarantine_reports_dir / f"quarantine_{batch.id}_{timestamp}.json").write_text(
+    report_timestamp = moved_at.strftime("%Y%m%dT%H%M%SZ")
+    (settings.quarantine_reports_dir / f"{report_timestamp}_{batch.id}.json").write_text(
         json.dumps(report, indent=2),
         encoding="utf-8",
     )
