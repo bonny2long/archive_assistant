@@ -12,6 +12,8 @@ from app.services.music_metadata import (
     album_group_key,
     build_suggested_metadata,
     canonical_artist_key,
+    clean_compilation_artist,
+    compilation_artist_cleanup_from_folder,
     common_album_artist,
     common_track_artist,
     evaluate_music_album_metadata,
@@ -458,6 +460,15 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
             "format": "FLAC" if "flac" in sample_meta.get("extension", "") else "MP3",
             "tracks": [],
         }
+        raw_artist = str(album_meta["artist"])
+        display_artist, artist_cleanup = clean_compilation_artist(raw_artist)
+        if artist_cleanup:
+            album_meta["artist"] = display_artist
+            album_meta["albumartist"] = display_artist
+            album_meta["display_artist"] = display_artist
+            album_meta["raw_artist"] = raw_artist
+            album_meta["artist_cleanup"] = artist_cleanup
+            album_meta["is_compilation"] = True
 
         quality = evaluate_music_album_metadata(album_meta)
         album_meta.update(quality)
@@ -468,7 +479,27 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
             track_metadata,
             album_meta,
         )
+        folder_display_artist, folder_artist_cleanup = (
+            compilation_artist_cleanup_from_folder(source_path.name)
+        )
+        if folder_artist_cleanup and not artist_cleanup:
+            artist_cleanup = folder_artist_cleanup
+            album_meta["artist"] = folder_display_artist
+            album_meta["albumartist"] = folder_display_artist
+            album_meta["display_artist"] = folder_display_artist
+            album_meta["raw_artist"] = folder_artist_cleanup["raw_artist"]
+            album_meta["artist_cleanup"] = folder_artist_cleanup
+            album_meta["is_compilation"] = True
+            suggested_metadata["artist"] = folder_display_artist
+            suggested_metadata["compilation"] = True
+            suggested_metadata.setdefault("sources", {})["artist"] = (
+                "cleaned compilation folder"
+            )
+            quality = evaluate_music_album_metadata(album_meta)
+            album_meta.update(quality)
         warnings = list(album_meta.get("metadata_warnings", []))
+        if artist_cleanup:
+            warnings.extend(["compilation_detected", "compilation_prefix_removed"])
         if source_path.resolve() != settings.ingest_root.resolve():
             warnings.append("release_folder_grouping_used")
             warnings.extend(

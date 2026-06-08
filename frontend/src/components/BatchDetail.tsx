@@ -32,6 +32,8 @@ const WARNING_LABELS: Record<string, string> = {
   raw_folder_name_detected: "Raw folder name detected",
   partial_duplicate_tracks_detected: "Partial duplicate tracks detected",
   compilation_suspected: "Compilation suspected",
+  compilation_detected: "Compilation detected",
+  compilation_prefix_removed: "Compilation prefix removed",
   mixed_embedded_metadata_detected: "Mixed embedded metadata detected",
   track_album_mismatch_detected: "Some track album tags differ from the release folder",
   track_artist_mismatch_detected: "Some track artist tags differ from the release folder",

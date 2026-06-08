@@ -13,6 +13,7 @@ sys.path.insert(0, str(BACKEND_ROOT))
 from app.services.music_metadata import (  # noqa: E402
     canonical_album_key,
     canonical_artist_key,
+    clean_compilation_artist,
     metadata_mismatch_warnings,
     parse_music_folder_name,
 )
@@ -74,6 +75,36 @@ def main() -> int:
     else:
         failures += 1
         print("FAIL canonical album case comparison")
+
+    compilation_cases = {
+        "VA-DJ Cinema Presents": "DJ Cinema Presents",
+        "VA - DJ Cinema Presents": "DJ Cinema Presents",
+        "VA_DJ Cinema Presents": "DJ Cinema Presents",
+        "Various Artists - DJ Cinema Presents": "DJ Cinema Presents",
+        "Vampire Weekend": "Vampire Weekend",
+        "Van Morrison": "Van Morrison",
+    }
+    for raw_artist, expected in compilation_cases.items():
+        cleaned, _ = clean_compilation_artist(raw_artist)
+        if cleaned == expected:
+            print(f"PASS compilation artist cleanup => {raw_artist} / {cleaned}")
+        else:
+            failures += 1
+            print(
+                "FAIL compilation artist cleanup => "
+                f"{raw_artist} / expected {expected} / actual {cleaned}"
+            )
+
+    compilation_keys = {
+        canonical_artist_key("VA-DJ Cinema Presents"),
+        canonical_artist_key("DJ Cinema Presents"),
+        canonical_artist_key("Various Artists - DJ Cinema Presents"),
+    }
+    if compilation_keys == {"dj cinema presents"}:
+        print("PASS compilation canonical artist aliases")
+    else:
+        failures += 1
+        print(f"FAIL compilation canonical artist aliases => {compilation_keys}")
 
     mismatch_warnings = metadata_mismatch_warnings(
         [

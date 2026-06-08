@@ -33,6 +33,7 @@ from app.services.batch_merge import (
 from app.services.music_metadata import (
     canonical_album_key,
     canonical_artist_key,
+    clean_compilation_artist,
     evaluate_music_album_metadata,
     is_compilation_artist,
     music_track_filename,
@@ -320,8 +321,15 @@ def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Sessio
     meta = dict(batch.metadata_json or {})
     
     # Update core fields
-    meta["artist"] = update.artist.strip()
-    meta["albumartist"] = update.artist.strip()
+    raw_artist = update.artist.strip()
+    display_artist, artist_cleanup = clean_compilation_artist(raw_artist)
+    meta["artist"] = display_artist
+    meta["albumartist"] = display_artist
+    if artist_cleanup:
+        meta["raw_artist"] = raw_artist
+        meta["display_artist"] = display_artist
+        meta["artist_cleanup"] = artist_cleanup
+        meta["is_compilation"] = True
     meta["album"] = update.album.strip()
     meta["year"] = update.year.strip()
     meta["date"] = update.year.strip()
@@ -334,6 +342,10 @@ def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Sessio
     # Re-evaluate quality
     quality_res = evaluate_music_album_metadata(meta)
     meta.update(quality_res)
+    if artist_cleanup:
+        warnings = list(meta.get("metadata_warnings", []))
+        warnings.extend(["compilation_detected", "compilation_prefix_removed"])
+        meta["metadata_warnings"] = list(dict.fromkeys(warnings))
     
     file_format = str(meta.get("format", "MP3")).lower()
     new_dest = suggest_music_destination(

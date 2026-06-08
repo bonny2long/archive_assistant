@@ -42,6 +42,8 @@ function readableWarning(value: string): string {
     mixed_embedded_metadata_detected: "Mixed embedded metadata detected",
     track_album_mismatch_detected: "Some track album tags differ from the release folder",
     track_artist_mismatch_detected: "Some track artist tags differ from the release folder",
+    compilation_detected: "Compilation detected",
+    compilation_prefix_removed: "Compilation prefix removed",
     possible_duplicate_destination: "Possible duplicate destination",
     possible_artist_alias: "Possible artist alias",
     manual_duplicate_batch_merge_performed: "Manual duplicate batch merge performed",

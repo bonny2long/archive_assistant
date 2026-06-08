@@ -22,6 +22,11 @@ TRAILING_RELEASE_NOISE = re.compile(
     re.IGNORECASE | re.VERBOSE,
 )
 COMPILATION_ARTISTS = {"va", "v.a.", "various", "various artists", "ost", "soundtrack"}
+COMPILATION_PREFIX_PATTERN = re.compile(
+    r"^\s*(?P<prefix>v[._\s-]*a[._]?|various\s+artists)"
+    r"\s*(?:[-_]+|\s+-\s+|\s+)\s*(?P<artist>.+)$",
+    re.IGNORECASE,
+)
 DISCOGRAPHY_TOKENS = {
     "discography",
     "collection",
@@ -236,7 +241,8 @@ def canonical_text_key(value: str) -> str:
 
 def canonical_artist_key(value: str) -> str:
     """Normalize obvious artist aliases for destination comparison."""
-    normalized = str(value or "").lower().replace("_", " ")
+    cleaned = clean_compilation_artist(str(value or ""))[0]
+    normalized = cleaned.lower().replace("_", " ")
     normalized = re.sub(r"\b(?:and|x|feat(?:uring)?|ft)\.?\b", " ", normalized)
     normalized = normalized.replace("&", " ")
     return canonical_text_key(normalized)
@@ -256,6 +262,42 @@ def normalize_compilation_artist(value: str | None) -> str | None:
     return value
 
 
+def clean_compilation_artist(raw_artist: str) -> tuple[str, dict]:
+    raw = str(raw_artist or "").strip()
+    match = COMPILATION_PREFIX_PATTERN.match(raw)
+    if not match:
+        return raw, {}
+
+    display = _clean_spacing(match.group("artist"))
+    if not display or normalize_key(display) in UNKNOWN_VALUES:
+        return raw, {}
+    prefix = match.group("prefix").strip(" ._-")
+    return display, {
+        "raw_artist": raw,
+        "display_artist": display,
+        "removed_prefix": prefix.upper().replace(".", "") if prefix else "VA",
+        "is_compilation": True,
+    }
+
+
+def compilation_artist_cleanup_from_folder(folder_name: str) -> tuple[str, dict]:
+    without_noise = BRACKETED_TEXT.sub("", folder_name).strip(" .-_")
+    year_match = YEAR_PATTERN.search(without_noise)
+    if year_match:
+        without_noise = re.sub(
+            rf"(?:^|[\s._-]+)(?:\(|\[)?{re.escape(year_match.group(1))}(?:\)|\])?",
+            "",
+            without_noise,
+            count=1,
+        ).strip(" .-_")
+    without_noise = TRAILING_RELEASE_NOISE.sub("", without_noise).strip(" .-_")
+    parts = re.split(r"\s+-\s+|_-_", without_noise, maxsplit=1)
+    if len(parts) != 2:
+        return "", {}
+    raw_artist = _clean_spacing(parts[0])
+    return clean_compilation_artist(raw_artist)
+
+
 def is_compilation_artist(value: str | None) -> bool:
     return normalize_compilation_artist(value) == "Various Artists"
 
@@ -269,7 +311,8 @@ def _clean_spacing(value: str) -> str:
 def _clean_artist_text(value: str) -> str:
     value = re.sub(r"(?i)(?:_|\s)+(?:and|x|&)(?:_|\s)+", " & ", value)
     value = _clean_spacing(value)
-    return normalize_compilation_artist(value) or value
+    cleaned, _ = clean_compilation_artist(value)
+    return normalize_compilation_artist(cleaned) or cleaned
 
 
 def _clean_album_text(value: str) -> str:
@@ -514,7 +557,8 @@ def evaluate_music_album_metadata(album_meta: dict) -> dict:
 def suggest_music_destination(metadata: dict, flac_root: Path, mp3_root: Path) -> Path:
     artist_value = metadata.get("albumartist") or metadata.get("artist") or "Unknown Artist"
     album_value = metadata.get("album") or "Unknown Album"
-    artist = "".join(c if c not in '<>:"/\\|?*' else "_" for c in str(artist_value))
+    artist_display, _ = clean_compilation_artist(str(artist_value))
+    artist = "".join(c if c not in '<>:"/\\|?*' else "_" for c in artist_display)
     album = "".join(c if c not in '<>:"/\\|?*' else "_" for c in str(album_value))
     year = str(metadata.get("date") or metadata.get("year") or "")[:4]
     folder = f"{year} - {album}" if year.isdigit() else album
