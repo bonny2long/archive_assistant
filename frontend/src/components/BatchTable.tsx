@@ -9,6 +9,7 @@ const BLOCKING_APPROVAL_WARNINGS = new Set([
   "destination_file_conflict",
   "child_album_metadata_missing",
   "discography_destination_exists",
+  "movie_destination_exists",
 ]);
 
 type Props = {

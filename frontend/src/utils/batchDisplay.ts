@@ -20,6 +20,21 @@ export function getReleaseCount(batch: DisplayBatch): number {
 }
 
 export function getBatchDisplayTitle(batch: DisplayBatch): string {
+  if (batch.detected_type === "video_movie") {
+    const title = (
+      ("title" in batch ? batch.title : null)
+      ?? metadataValue(batch, "title")
+      ?? "Unknown Movie"
+    );
+    const year = (
+      ("year" in batch ? batch.year : null)
+      ?? metadataValue(batch, "year")
+    );
+    return year
+      ? `Movie - ${String(title)} (${String(year)})`
+      : `Movie - ${String(title)}`;
+  }
+
   const metadataArtist = metadataValue(batch, "artist")
     ?? metadataValue(batch, "albumartist");
   const artist = (

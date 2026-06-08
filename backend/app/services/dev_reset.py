@@ -73,7 +73,11 @@ def _remove_move_logs() -> int:
     for root in roots:
         if not root.exists():
             continue
-        for pattern in ("batch-*-move-log.json", "discography-move-log.json"):
+        for pattern in (
+            "batch-*-move-log.json",
+            "batch-*-movie-move-log.json",
+            "discography-move-log.json",
+        ):
             for path in root.rglob(pattern):
                 if path.is_file():
                     path.unlink()
@@ -88,6 +92,7 @@ def _validate_moves(moves: list[MoveAction]) -> list[str]:
         settings.data_root / "Music" / "Library",
         settings.music_discographies_dir,
         settings.quarantine_discography_dir,
+        settings.movies_dir,
     ]
 
     for move in moves:
@@ -117,6 +122,7 @@ def reset_music_test_data(db: Session, *, apply: bool) -> DevResetSummary:
                 [
                     "music_album",
                     "music_discography",
+                    "video_movie",
                     "unknown_type",
                     "unsupported_file",
                 ]
@@ -176,6 +182,7 @@ def reset_music_test_data(db: Session, *, apply: bool) -> DevResetSummary:
             settings.data_root / "Music" / "Library",
             settings.music_discographies_dir,
             settings.quarantine_discography_dir,
+            settings.movies_dir,
         )
     )
 
@@ -186,7 +193,9 @@ def reset_music_test_data(db: Session, *, apply: bool) -> DevResetSummary:
         db.query(IngestFile).filter(IngestFile.batch_id.in_(batch_ids)).delete(
             synchronize_session=False
         )
-        db.query(ArchiveItem).filter(ArchiveItem.media_type == "music").delete(
+        db.query(ArchiveItem).filter(
+            ArchiveItem.media_type.in_(["music", "video"])
+        ).delete(
             synchronize_session=False
         )
         db.query(IngestBatch).filter(IngestBatch.id.in_(batch_ids)).delete(

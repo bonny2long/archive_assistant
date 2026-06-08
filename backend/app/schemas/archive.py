@@ -28,6 +28,9 @@ class BatchSummary(BaseModel):
     track_count: int = 0
     artwork_count: int = 0
     ignored_sidecar_count: int = 0
+    subtitle_count: int = 0
+    video_file_count: int = 0
+    title: str | None = None
     name: str | None = None
     reason: str | None = None
     file_count: int = 0
@@ -149,6 +152,8 @@ class ScanMusicResponse(BaseModel):
     unsupported_files: int = 0
     ignored_system_files: int = 0
     artwork_files_found: int = 0
+    movie_batches_found: int = 0
+    subtitle_files_found: int = 0
 
 
 class DevResetResponse(BaseModel):

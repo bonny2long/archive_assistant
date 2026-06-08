@@ -171,10 +171,12 @@ export default function App() {
         api.getBatch(id),
         api.getBatchMoves(id),
       ]);
-      const review = await api.getBatchReview(id);
       setDetails((previous) => ({ ...previous, [id]: detail }));
       setMoveSummaries((previous) => ({ ...previous, [id]: moves }));
-      setReviews((previous) => ({ ...previous, [id]: review }));
+      if (detail.detected_type !== "video_movie") {
+        const review = await api.getBatchReview(id);
+        setReviews((previous) => ({ ...previous, [id]: review }));
+      }
     } catch (loadError: unknown) {
       const message = loadError instanceof Error ? loadError.message : "Unable to load batch details";
       setDetailErrors((previous) => ({ ...previous, [id]: message }));
@@ -346,8 +348,8 @@ export default function App() {
       const warnings = items.flatMap((batch) => batch.metadata_warnings);
       setQaSummary({
         title: "Scan summary",
-        text: `Music albums found: ${result.music_albums_found} | Discographies found: ${result.discographies_found} | Unknown items: ${result.unknown_items} | Unsupported files: ${result.unsupported_files}`,
-        warnings: `Ignored system files: ${result.ignored_system_files} | Artwork files found: ${result.artwork_files_found} | ${warnings.filter((warning) => warning === "release_folder_grouping_used").length} release-folder grouping used`,
+        text: `Movies found: ${result.movie_batches_found} | Music albums found: ${result.music_albums_found} | Discographies found: ${result.discographies_found} | Unknown items: ${result.unknown_items} | Unsupported files: ${result.unsupported_files}`,
+        warnings: `Ignored system files: ${result.ignored_system_files} | Artwork files found: ${result.artwork_files_found} | Subtitle files found: ${result.subtitle_files_found} | ${warnings.filter((warning) => warning === "release_folder_grouping_used").length} release-folder grouping used`,
       });
       showToast(`Scan complete - ${result.created} new, ${result.skipped_duplicates} skipped duplicate(s)`);
     } catch {
@@ -472,7 +474,10 @@ export default function App() {
           onHide={() => setToast(null)}
         />
       )}
-      {editingBatch && editingBatch.detected_type !== "music_discography" && (
+      {editingBatch
+        && editingBatch.detected_type !== "music_discography"
+        && editingBatch.detected_type !== "video_movie"
+        && (
         <MetadataEditor
           batch={editingBatch}
           saving={savingMetadata}

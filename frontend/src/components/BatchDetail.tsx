@@ -18,7 +18,9 @@ function readableLibraryPath(value?: string | null): string {
   if (!value) return "-";
   const normalized = value.replace(/\\/g, "/");
   const libraryIndex = normalized.toLowerCase().indexOf("music/library/");
-  return libraryIndex >= 0 ? normalized.slice(libraryIndex) : normalized;
+  if (libraryIndex >= 0) return normalized.slice(libraryIndex);
+  const movieIndex = normalized.toLowerCase().indexOf("media/movies/");
+  return movieIndex >= 0 ? normalized.slice(movieIndex) : normalized;
 }
 
 function formatBytes(value: unknown): string {
@@ -67,6 +69,8 @@ const WARNING_LABELS: Record<string, string> = {
   folder_artist_mismatch: "Folder artist mismatch",
   album_title_from_folder_cleanup: "Album title cleaned",
   release_tag_removed: "Release tag removed",
+  movie_year_missing: "Movie year missing",
+  movie_destination_exists: "Movie destination already exists",
 };
 
 function metadataWarnings(batch: IngestBatch): string[] {
@@ -161,6 +165,71 @@ function QuarantineReviewDetail({ batch, moveSummary }: Props) {
         )}
         <div><div className="batch-detail__label">Source path</div><div className="batch-detail__value batch-detail__path">{batch.source_path}</div></div>
       </div>
+      <DebugDetails batch={batch} moveSummary={moveSummary} />
+    </div>
+  );
+}
+
+function MovieBatchDetail({ batch, moveSummary }: Props) {
+  const warnings = metadataWarnings(batch);
+  const moved = batch.status === "moved";
+  return (
+    <div className={`batch-detail ${moved ? "batch-detail--moved" : "batch-detail--review"}`}>
+      <div className="library-status">
+        <div className="library-status__icon"><i className="ti ti-movie" /></div>
+        <div>
+          <div className="library-status__eyebrow">Movie detected</div>
+          <h2>{getBatchDisplayTitle(batch)}</h2>
+          <p>{metadataValue(batch, "format")} · {metadataValue(batch, "video_file_count")} video file(s)</p>
+        </div>
+        <div className="library-status__facts">
+          <span>{Math.round(batch.confidence * 100)}% confidence</span>
+          <span>{batch.status.replace(/_/g, " ")}</span>
+        </div>
+      </div>
+
+      <div className="library-detail__grid">
+        <section className="library-card">
+          <h3>Movie</h3>
+          <dl className="library-fields">
+            <div><dt>Title</dt><dd>{metadataValue(batch, "title")}</dd></div>
+            <div><dt>Year</dt><dd>{metadataValue(batch, "year")}</dd></div>
+            <div><dt>Format</dt><dd>{metadataValue(batch, "format")}</dd></div>
+            <div><dt>Video files</dt><dd>{metadataValue(batch, "video_file_count")}</dd></div>
+            <div><dt>Artwork</dt><dd>{metadataValue(batch, "artwork_count")}</dd></div>
+            <div><dt>Subtitles</dt><dd>{metadataValue(batch, "subtitle_count")}</dd></div>
+            <div><dt>Ignored sidecars</dt><dd>{metadataValue(batch, "ignored_sidecar_count")}</dd></div>
+          </dl>
+        </section>
+        <section className="library-card">
+          <h3>Source</h3>
+          <dl className="library-fields library-fields--single">
+            <div><dt>Path</dt><dd>{batch.source_path}</dd></div>
+            <div><dt>Status</dt><dd>{batch.status.replace(/_/g, " ")}</dd></div>
+          </dl>
+        </section>
+      </div>
+
+      <section className="library-destination">
+        <span>{moved ? "Final destination" : "Destination preview"}</span>
+        <strong>{readableLibraryPath(batch.suggested_destination)}</strong>
+      </section>
+
+      {warnings.length > 0 && (
+        <section className="metadata-warnings">
+          <div className="metadata-warnings__list">
+            {warnings.map((warning) => (
+              <span key={warning}><i className="ti ti-alert-triangle" />{warningLabel(warning)}</span>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {moved && moveSummary && (
+        <div className="move-log__empty">
+          {moveSummary.completed} files completed, {moveSummary.failed} failed.
+        </div>
+      )}
       <DebugDetails batch={batch} moveSummary={moveSummary} />
     </div>
   );
@@ -527,6 +596,9 @@ export default function BatchDetail({ batch, moveSummary, review }: Props) {
   }
   if (batch.detected_type === "music_discography") {
     return <DiscographyBatchDetail batch={batch} moveSummary={moveSummary} />;
+  }
+  if (batch.detected_type === "video_movie") {
+    return <MovieBatchDetail batch={batch} moveSummary={moveSummary} />;
   }
   if (batch.status === "moved") {
     return <MovedBatchDetail batch={batch} moveSummary={moveSummary} />;

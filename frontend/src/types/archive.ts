@@ -35,6 +35,9 @@ export type BatchSummary = {
   track_count: number;
   artwork_count: number;
   ignored_sidecar_count: number;
+  subtitle_count: number;
+  video_file_count: number;
+  title?: string | null;
   name?: string | null;
   reason?: string | null;
   file_count: number;
@@ -132,6 +135,8 @@ export type ScanMusicResponse = {
   unsupported_files: number;
   ignored_system_files: number;
   artwork_files_found: number;
+  movie_batches_found: number;
+  subtitle_files_found: number;
 };
 
 export type DevResetResponse = {

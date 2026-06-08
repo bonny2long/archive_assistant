@@ -56,6 +56,7 @@ BLOCKING_APPROVAL_WARNINGS = {
     "destination_file_conflict",
     "child_album_metadata_missing",
     "discography_destination_exists",
+    "movie_destination_exists",
 }
 
 
@@ -93,6 +94,8 @@ def scan_music(db: Session = Depends(get_db)):
         unsupported_files=result.unsupported_files,
         ignored_system_files=result.ignored_system_files,
         artwork_files_found=result.artwork_files_found,
+        movie_batches_found=result.movie_batches_found,
+        subtitle_files_found=result.subtitle_files_found,
     )
 
 
@@ -761,6 +764,9 @@ def _batch_to_summary(
         track_count=meta.get("track_count", 0),
         artwork_count=meta.get("artwork_count", 0),
         ignored_sidecar_count=meta.get("ignored_sidecar_count", 0),
+        subtitle_count=meta.get("subtitle_count", 0),
+        video_file_count=meta.get("video_file_count", 0),
+        title=meta.get("title"),
         name=meta.get("name"),
         reason=meta.get("reason"),
         file_count=meta.get("file_count", 0),

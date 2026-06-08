@@ -59,6 +59,130 @@ def _completed_move_destination(
     return destination if destination.exists() else None
 
 
+def _move_movie_batch(
+    db: Session,
+    batch: IngestBatch,
+) -> tuple[list[str], list[str]]:
+    if not batch.suggested_destination:
+        return [], ["Missing suggested movie destination"]
+    destination = Path(batch.suggested_destination)
+    if destination.exists() and not _same_batch_retry(db, batch.id, destination):
+        metadata = dict(batch.metadata_json or {})
+        warnings = list(metadata.get("metadata_warnings", []))
+        warnings.append("movie_destination_exists")
+        metadata["metadata_warnings"] = list(dict.fromkeys(warnings))
+        batch.metadata_json = metadata
+        batch.status = "needs_metadata_review"
+        batch.updated_at = now_utc()
+        db.commit()
+        return [], [f"Movie destination already exists: {destination}"]
+
+    planned = []
+    moved_files = []
+    failed_files = []
+    reserved: set[str] = set()
+    for ingest_file in batch.files:
+        source = Path(ingest_file.file_path)
+        completed = _completed_move_destination(db, batch.id, source)
+        if not source.exists() and completed:
+            moved_files.append(str(completed))
+            reserved.add(_path_key(completed))
+            continue
+        destination_file = destination / ingest_file.file_name
+        if ingest_file.detected_role in {"movie_artwork", "subtitle"}:
+            destination_file = _unique_artwork_destination(
+                destination_file,
+                reserved,
+            )
+        elif _path_key(destination_file) in reserved or destination_file.exists():
+            metadata = dict(batch.metadata_json or {})
+            warnings = list(metadata.get("metadata_warnings", []))
+            warnings.append("destination_file_conflict")
+            metadata["metadata_warnings"] = list(dict.fromkeys(warnings))
+            batch.metadata_json = metadata
+            batch.status = "needs_metadata_review"
+            batch.updated_at = now_utc()
+            db.commit()
+            return [], [f"Destination file conflict: {destination_file}"]
+        reserved.add(_path_key(destination_file))
+        planned.append((ingest_file, destination_file))
+
+    destination.mkdir(parents=True, exist_ok=True)
+    for ingest_file, destination_file in planned:
+        source = Path(ingest_file.file_path)
+        if not source.exists():
+            failed_files.append(f"Source not found: {source}")
+            continue
+        action = MoveAction(
+            batch_id=batch.id,
+            source_path=str(source),
+            destination_path=str(destination_file),
+            status="running",
+        )
+        db.add(action)
+        db.flush()
+        try:
+            shutil.move(str(source), str(destination_file))
+            action.status = "completed"
+            action.completed_at = now_utc()
+            moved_files.append(str(destination_file))
+        except Exception as exc:
+            action.status = "failed"
+            action.error_message = str(exc)
+            failed_files.append(f"Failed to move {source}: {exc}")
+            db.flush()
+
+    metadata_dir = destination / "metadata"
+    metadata_dir.mkdir(parents=True, exist_ok=True)
+    metadata = batch.metadata_json or {}
+    role_by_source = {
+        ingest_file.file_path: ingest_file.detected_role
+        for ingest_file in batch.files
+    }
+    completed_actions = (
+        db.query(MoveAction)
+        .filter(
+            MoveAction.batch_id == batch.id,
+            MoveAction.status == "completed",
+        )
+        .all()
+    )
+    completed_roles = [
+        role_by_source.get(action.source_path)
+        for action in completed_actions
+    ]
+    (metadata_dir / f"batch-{batch.id}-movie-move-log.json").write_text(
+        json.dumps(
+            {
+                "batch_id": batch.id,
+                "media_type": "video_movie",
+                "title": metadata.get("title"),
+                "year": metadata.get("year"),
+                "summary": {
+                    "video_files_moved": sum(
+                        role == "video_file" for role in completed_roles
+                    ),
+                    "artwork_moved": sum(
+                        role == "movie_artwork" for role in completed_roles
+                    ),
+                    "subtitles_moved": sum(
+                        role == "subtitle" for role in completed_roles
+                    ),
+                    "ignored_sidecars": metadata.get("ignored_sidecar_count", 0),
+                    "failed": len(failed_files),
+                },
+                "destination_path": str(destination),
+                "moved_files": moved_files,
+                "failed_files": failed_files,
+                "moved_at": serialize_utc(now_utc()),
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return moved_files, failed_files
+
+
 def _discography_album_destination(root: Path, album_metadata: dict) -> Path:
     album = _safe_path_part(
         str(album_metadata.get("album") or album_metadata.get("source_folder") or "Unknown Album")
@@ -613,6 +737,47 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                 batch.updated_at = now_utc()
                 db.commit()
                 errors.append(f"Batch {batch.id}: weak metadata must be confirmed before move")
+                continue
+
+            if batch.detected_type == "video_movie":
+                moved_files, failed_files = _move_movie_batch(db, batch)
+                if not moved_files:
+                    if batch.status != "needs_metadata_review":
+                        batch.status = "move_failed"
+                    batch.updated_at = now_utc()
+                    db.commit()
+                    errors.extend(
+                        f"Batch {batch.id}: {error}" for error in failed_files
+                    )
+                    continue
+                batch.status = "move_failed" if failed_files else "moved"
+                batch.updated_at = now_utc()
+                metadata = batch.metadata_json or {}
+                if not (
+                    db.query(ArchiveItem)
+                    .filter(
+                        ArchiveItem.final_path == str(
+                            Path(batch.suggested_destination or "")
+                        )
+                    )
+                    .first()
+                ):
+                    db.add(
+                        ArchiveItem(
+                            media_type="video",
+                            title=metadata.get("title") or "Unknown Movie",
+                            year=metadata.get("year"),
+                            source_kind=batch.source_kind,
+                            final_path=batch.suggested_destination or "",
+                            metadata_status="basic",
+                        )
+                    )
+                db.commit()
+                moved += 1
+                if failed_files:
+                    errors.extend(
+                        f"Batch {batch.id}: {error}" for error in failed_files
+                    )
                 continue
 
             if batch.detected_type == "music_discography":

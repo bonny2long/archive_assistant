@@ -57,6 +57,8 @@ export default function BatchRow({
   const releaseCount = getReleaseCount(batch);
   const artist = quarantineReview
     ? batch.name ?? "Unknown item"
+    : batch.detected_type === "video_movie"
+      ? "Movie"
     : batch.artist ?? batch.suggested_metadata?.artist ?? "Unknown Artist";
   const album = quarantineReview
     ? batch.reason ?? batch.detected_type
@@ -64,9 +66,15 @@ export default function BatchRow({
       ? releaseCount > 0
         ? `${releaseCount} release discography`
         : "Discography"
+      : batch.detected_type === "video_movie"
+        ? batch.title ?? "Unknown Movie"
       : batch.album ?? batch.suggested_metadata?.album ?? "Unknown Album";
   const year = batch.year ?? "-";
-  const tracks = quarantineReview ? batch.file_count : batch.track_count || "-";
+  const tracks = quarantineReview
+    ? batch.file_count
+    : batch.detected_type === "video_movie"
+      ? batch.video_file_count
+      : batch.track_count || "-";
   const percent = Math.round((batch.confidence ?? 0) * 100);
 
   return (
@@ -143,7 +151,11 @@ export default function BatchRow({
           <button
             className="btn-sm"
             title="Edit metadata"
-            disabled={batch.status === "moved" || quarantineReview}
+            disabled={
+              batch.status === "moved"
+              || quarantineReview
+              || batch.detected_type === "video_movie"
+            }
             style={{ color: "var(--accent-blue)" }}
             onClick={(event) => { event.stopPropagation(); onEdit(batch); }}
           >

@@ -33,6 +33,14 @@ from app.services.music_metadata import (
     UNKNOWN_VALUES,
 )
 from app.services.report_writer import write_json_report
+from app.services.video_metadata import (
+    is_movie_artwork,
+    is_subtitle_file,
+    is_video_file,
+    looks_like_tv,
+    parse_movie_name,
+    safe_movie_path_part,
+)
 
 
 @dataclass(frozen=True)
@@ -46,6 +54,8 @@ class ScanMusicResult:
     unsupported_files: int = 0
     ignored_system_files: int = 0
     artwork_files_found: int = 0
+    movie_batches_found: int = 0
+    subtitle_files_found: int = 0
 
 
 IGNORED_INGEST_NAMES = {
@@ -73,7 +83,11 @@ def classify_ingest_item(path: Path) -> str:
     if path.name.casefold() in IGNORED_INGEST_NAMES:
         return "ignored_system_folder"
     if path.is_file():
-        return "music_album" if is_audio_file(path) else "unsupported_file"
+        if is_audio_file(path):
+            return "music_album"
+        if is_video_file(path):
+            return "video_movie"
+        return "unsupported_file"
     if not path.is_dir():
         return "unknown_type"
 
@@ -82,6 +96,19 @@ def classify_ingest_item(path: Path) -> str:
         for candidate in path.rglob("*")
         if candidate.is_file() and is_audio_file(candidate)
     ]
+    video_files = [
+        candidate
+        for candidate in path.rglob("*")
+        if candidate.is_file() and is_video_file(candidate)
+    ]
+    if video_files and not audio_files:
+        if (
+            len(video_files) == 1
+            and not looks_like_tv(path.name)
+            and not looks_like_tv(video_files[0].name)
+        ):
+            return "video_movie"
+        return "unknown_type"
     if not audio_files:
         return "unknown_type"
 
@@ -142,6 +169,117 @@ def _ignored_music_sidecars(root: Path) -> list[Path]:
     )
 
 
+def _movie_files(root: Path) -> dict[str, list[Path]]:
+    candidates = [root] if root.is_file() else [
+        path for path in root.rglob("*") if path.is_file()
+    ]
+    video = sorted(path for path in candidates if is_video_file(path))
+    artwork = sorted(path for path in candidates if is_movie_artwork(path))
+    subtitles = sorted(path for path in candidates if is_subtitle_file(path))
+    recognized = {
+        path.resolve()
+        for path in [*video, *artwork, *subtitles]
+    }
+    return {
+        "video": video,
+        "artwork": artwork,
+        "subtitles": subtitles,
+        "ignored": sorted(
+            path
+            for path in candidates
+            if path.resolve() not in recognized
+        ),
+    }
+
+
+def _create_movie_batch(db: Session, source: Path) -> IngestBatch | None:
+    existing = (
+        db.query(IngestBatch)
+        .filter(
+            IngestBatch.source_path == str(source),
+            IngestBatch.detected_type == "video_movie",
+            IngestBatch.status != "merged",
+        )
+        .first()
+    )
+    if existing:
+        return None
+    files = _movie_files(source)
+    if len(files["video"]) != 1:
+        return None
+    main_video = files["video"][0]
+    parsed = parse_movie_name(source.name if source.is_dir() else main_video.name)
+    file_parsed = parse_movie_name(main_video.name)
+    if not parsed["year"] and file_parsed["year"]:
+        parsed = file_parsed
+    title = parsed["title"]
+    year = parsed["year"]
+    folder = safe_movie_path_part(f"{year or 'Unknown Year'} - {title}")
+    destination = settings.movies_dir / folder
+    warnings = [] if year else ["movie_year_missing"]
+    metadata = {
+        "media_kind": "movie",
+        "title": title,
+        "year": year,
+        "format": main_video.suffix.lstrip(".").upper(),
+        "video_file_count": 1,
+        "artwork_count": len(files["artwork"]),
+        "subtitle_count": len(files["subtitles"]),
+        "ignored_sidecar_count": len(files["ignored"]),
+        "ignored_sidecar_files": [
+            str(path.relative_to(source)) if source.is_dir() else path.name
+            for path in files["ignored"]
+        ],
+        "metadata_quality": "good",
+        "metadata_warnings": warnings,
+        "confidence": 0.8 if year else 0.7,
+    }
+    batch = IngestBatch(
+        source_kind="manual-drop",
+        source_path=str(source),
+        detected_type="video_movie",
+        status="pending_review",
+        confidence=metadata["confidence"],
+        suggested_destination=str(destination),
+        suggested_metadata={"title": title, "year": year},
+        metadata_json=metadata,
+    )
+    db.add(batch)
+    db.flush()
+    (
+        db.query(IngestBatch)
+        .filter(
+            IngestBatch.id != batch.id,
+            IngestBatch.source_path == str(source),
+            IngestBatch.detected_type.in_(["unknown_type", "unsupported_file"]),
+            IngestBatch.status != "quarantined",
+        )
+        .update({"status": "merged"}, synchronize_session=False)
+    )
+    roles = (
+        [(path, "video_file") for path in files["video"]]
+        + [(path, "movie_artwork") for path in files["artwork"]]
+        + [(path, "subtitle") for path in files["subtitles"]]
+    )
+    for path, role in roles:
+        db.add(
+            IngestFile(
+                batch_id=batch.id,
+                file_path=str(path),
+                file_name=path.name,
+                extension=path.suffix.lower(),
+                size_bytes=path.stat().st_size,
+                checksum=file_sha256(path),
+                detected_role=role,
+                metadata_json=None,
+            )
+        )
+    db.commit()
+    db.refresh(batch)
+    write_json_report(settings.reports_dir, batch.id, metadata)
+    return batch
+
+
 def _unknown_metadata(
     path: Path,
     classification: str,
@@ -177,7 +315,7 @@ def _unknown_metadata(
     video_extensions = {".mkv", ".mp4", ".avi", ".mov", ".wmv", ".m4v"}
     document_extensions = {".pdf", ".epub", ".mobi", ".azw", ".azw3"}
     if extensions & video_extensions:
-        reason = "Movie/video support not implemented yet"
+        reason = "Possible TV or multi-video folder needs review"
     elif extensions and extensions.issubset(document_extensions):
         reason = "Book/document support not implemented yet"
     elif len(extensions) > 1:
@@ -666,6 +804,16 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
         item: classify_ingest_item(item)
         for item in sorted(settings.ingest_root.iterdir())
     }
+    batches: list[IngestBatch] = []
+    movie_batches = []
+    for item, classification in classifications.items():
+        if classification != "video_movie":
+            continue
+        batch = _create_movie_batch(db, item)
+        if batch:
+            movie_batches.append(batch)
+            batches.append(batch)
+
     unknown_batches = []
     for item, classification in classifications.items():
         if classification != "unknown_type":
@@ -688,13 +836,14 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
     grouped_loose_batch = _create_grouped_loose_files_batch(db, loose_unsupported)
     if grouped_loose_batch:
         unknown_batches.append(grouped_loose_batch)
+    batches.extend(unknown_batches)
 
     audio_files = _root_music_audio_files()
     if not audio_files:
         return ScanMusicResult(
-            created=len(unknown_batches),
+            created=len(batches),
             skipped_duplicates=0,
-            batches=unknown_batches,
+            batches=batches,
             unknown_items=sum(
                 classification == "unknown_type"
                 for classification in classifications.values()
@@ -703,6 +852,20 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
             ignored_system_files=sum(
                 classification == "ignored_system_folder"
                 for classification in classifications.values()
+            ),
+            movie_batches_found=sum(
+                classification == "video_movie"
+                for classification in classifications.values()
+            ),
+            subtitle_files_found=sum(
+                len(_movie_files(item)["subtitles"])
+                for item, classification in classifications.items()
+                if classification == "video_movie"
+            ),
+            artwork_files_found=sum(
+                len(_movie_files(item)["artwork"])
+                for item, classification in classifications.items()
+                if classification == "video_movie"
             ),
         )
 
@@ -727,7 +890,6 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
             continue
         groups[_group_key(path, file_metadata[str(path)])].append(path)
 
-    batches: list[IngestBatch] = list(unknown_batches)
     skipped_duplicates = 0
     for parent, child_groups in discography_groups.items():
         batch = _create_discography_batch(
@@ -978,5 +1140,18 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
             len(_artwork_files(item))
             for item, classification in classifications.items()
             if classification in {"music_album", "music_discography"}
+        ) + sum(
+            len(_movie_files(item)["artwork"])
+            for item, classification in classifications.items()
+            if classification == "video_movie"
+        ),
+        movie_batches_found=sum(
+            classification == "video_movie"
+            for classification in classifications.values()
+        ),
+        subtitle_files_found=sum(
+            len(_movie_files(item)["subtitles"])
+            for item, classification in classifications.items()
+            if classification == "video_movie"
         ),
     )
