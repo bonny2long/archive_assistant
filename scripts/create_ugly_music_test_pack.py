@@ -10,9 +10,9 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_ROOT = PROJECT_ROOT / "data"
-DEFAULT_INGEST_ROOT = DATA_ROOT / "_INGEST" / "music"
+DEFAULT_INGEST_ROOT = DATA_ROOT / "_INGEST"
 DEFAULT_SEARCH_ROOTS = [
-    DATA_ROOT / "_INGEST" / "music",
+    DATA_ROOT / "_INGEST",
     DATA_ROOT / "Music" / "Library",
 ]
 AUDIO_EXTENSIONS = {".mp3", ".flac", ".m4a", ".aac", ".wav", ".ogg", ".opus"}
@@ -29,7 +29,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Copy existing local audio files into intentionally ugly test folders "
-            "under data/_INGEST/music. This never deletes files or overwrites targets."
+            "under data/_INGEST. This never deletes files or overwrites targets."
         )
     )
     parser.add_argument(

@@ -39,6 +39,72 @@ class ScanMusicResult:
     batches: list[IngestBatch]
 
 
+IGNORED_INGEST_NAMES = {
+    "_checks",
+    "_reports",
+    "_staging",
+    "_quarantine",
+    "music",
+    "library",
+    "metadata",
+    "docs",
+    "frontend",
+    "backend",
+    "scripts",
+}
+
+
+def classify_ingest_item(path: Path) -> str:
+    if path.name.casefold() in IGNORED_INGEST_NAMES:
+        return "ignored_system_folder"
+    if path.is_file():
+        return "music_album" if is_audio_file(path) else "unknown_type"
+    if not path.is_dir():
+        return "unknown_type"
+
+    audio_files = [
+        candidate
+        for candidate in path.rglob("*")
+        if candidate.is_file() and is_audio_file(candidate)
+    ]
+    if not audio_files:
+        return "unknown_type"
+
+    child_audio_folders = [
+        child
+        for child in path.iterdir()
+        if child.is_dir()
+        and any(
+            candidate.is_file() and is_audio_file(candidate)
+            for candidate in child.rglob("*")
+        )
+    ]
+    if looks_like_discography_parent(
+        path,
+        child_audio_folders,
+        {str(child): [] for child in child_audio_folders},
+    ):
+        return "music_discography"
+    return "music_album"
+
+
+def _root_music_audio_files() -> list[Path]:
+    audio_files = []
+    for item in sorted(settings.ingest_root.iterdir()):
+        classification = classify_ingest_item(item)
+        if classification not in {"music_album", "music_discography"}:
+            continue
+        if item.is_file():
+            audio_files.append(item)
+        else:
+            audio_files.extend(
+                path
+                for path in item.rglob("*")
+                if path.is_file() and is_audio_file(path)
+            )
+    return audio_files
+
+
 def _destination_contains_all_checksums(
     destination: Path,
     expected_checksums: set[str],
@@ -65,7 +131,7 @@ def _release_source_path(path: Path) -> Path:
 
 def _group_key(path: Path, metadata: dict) -> str:
     source_path = _release_source_path(path)
-    if source_path.resolve() != settings.ingest_music_dir.resolve():
+    if source_path.resolve() != settings.ingest_root.resolve():
         return f"source|{source_path.resolve()}"
     return album_group_key(metadata)
 
@@ -88,10 +154,11 @@ def _discography_groups(
     file_metadata: dict[str, dict],
 ) -> dict[Path, dict[Path, list[Path]]]:
     candidates: dict[Path, dict[Path, list[Path]]] = {}
-    ingest_root = settings.ingest_music_dir.resolve()
+    ingest_root = settings.ingest_root.resolve()
     top_level_dirs = sorted(
-        path for path in settings.ingest_music_dir.iterdir()
+        path for path in settings.ingest_root.iterdir()
         if path.is_dir()
+        and classify_ingest_item(path) in {"music_album", "music_discography"}
     )
     for parent in top_level_dirs:
         child_groups: dict[Path, list[Path]] = {}
@@ -306,12 +373,8 @@ def _create_discography_batch(
 
 
 def scan_music_ingest(db: Session) -> ScanMusicResult:
-    settings.ingest_music_dir.mkdir(parents=True, exist_ok=True)
-    audio_files = [
-        path
-        for path in settings.ingest_music_dir.rglob("*")
-        if path.is_file() and is_audio_file(path)
-    ]
+    settings.ingest_root.mkdir(parents=True, exist_ok=True)
+    audio_files = _root_music_audio_files()
     if not audio_files:
         return ScanMusicResult(created=0, skipped_duplicates=0, batches=[])
 
@@ -406,7 +469,7 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
             album_meta,
         )
         warnings = list(album_meta.get("metadata_warnings", []))
-        if source_path.resolve() != settings.ingest_music_dir.resolve():
+        if source_path.resolve() != settings.ingest_root.resolve():
             warnings.append("release_folder_grouping_used")
             warnings.extend(
                 metadata_mismatch_warnings(track_metadata, suggested_metadata)

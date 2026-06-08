@@ -308,7 +308,7 @@ export default function App() {
       const warnings = items.flatMap((batch) => batch.metadata_warnings);
       setQaSummary({
         title: "Scan summary",
-        text: `${items.length} albums · ${items.reduce((sum, batch) => sum + batch.track_count, 0)} tracks · ${items.filter((batch) => batch.status === "needs_metadata_review").length} needs metadata · ${items.filter((batch) => batch.status === "move_failed").length} failed`,
+        text: `${items.length} ingest items · ${items.reduce((sum, batch) => sum + batch.track_count, 0)} tracks · ${items.filter((batch) => batch.status === "needs_metadata_review").length} needs metadata · ${items.filter((batch) => batch.status === "move_failed").length} failed`,
         warnings: `${warnings.filter((warning) => warning === "release_folder_grouping_used").length} release-folder grouping used · ${warnings.filter((warning) => warning === "manual_duplicate_batch_merge_performed").length} manual duplicate merge performed`,
       });
       showToast(`Scan complete - ${result.created} new, ${result.skipped_duplicates} skipped duplicate(s)`);

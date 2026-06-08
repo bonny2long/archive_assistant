@@ -96,8 +96,8 @@ def _validate_moves(moves: list[MoveAction]) -> list[str]:
 
         source = Path(move.source_path)
         destination = Path(move.destination_path)
-        if not _is_within(source, settings.ingest_music_dir):
-            errors.append(f"Source is outside music ingest: {source}")
+        if not _is_within(source, settings.ingest_root):
+            errors.append(f"Source is outside ingest root: {source}")
         if not any(_is_within(destination, root) for root in library_roots):
             errors.append(f"Destination is outside music library: {destination}")
         if source in seen_sources:

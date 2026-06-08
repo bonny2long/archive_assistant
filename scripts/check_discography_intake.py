@@ -60,16 +60,16 @@ def main() -> int:
     checks_root.mkdir(parents=True, exist_ok=True)
     root = Path(mkdtemp(prefix="archive-discography-", dir=checks_root))
     original_paths = {
-        "ingest_music_dir": settings.ingest_music_dir,
+        "ingest_root": settings.ingest_root,
         "reports_dir": settings.reports_dir,
         "music_discographies_dir": settings.music_discographies_dir,
     }
 
     try:
-        ingest = root / "_INGEST" / "music"
+        ingest = root / "_INGEST"
         reports = root / "_REPORTS" / "ingest-reports"
         discographies = root / "Music" / "Discographies"
-        settings.ingest_music_dir = ingest
+        settings.ingest_root = ingest
         settings.reports_dir = reports
         settings.music_discographies_dir = discographies
 

@@ -284,7 +284,7 @@ function DiscographyBatchDetail({ batch, moveSummary }: Props) {
         <div>
           <div className="library-status__eyebrow">Discography detected</div>
           <h2>{String(metadata.artist ?? "Unknown Artist")}</h2>
-          <p>{albums.length} album discography · {String(metadata.track_count ?? batch.files.length)} tracks</p>
+          <p>{albums.length} release discography · {String(metadata.track_count ?? batch.files.length)} tracks</p>
         </div>
         <div className="library-status__facts">
           <span>{Array.isArray(metadata.format_summary) ? metadata.format_summary.join(", ") : "-"}</span>
@@ -330,8 +330,8 @@ function DiscographyBatchDetail({ batch, moveSummary }: Props) {
 
       <section className="discography-albums">
         <div className="track-preview__header">
-          <h3>Albums found</h3>
-          <span>{albums.length} album(s)</span>
+          <h3>Releases found</h3>
+          <span>{albums.length} release(s)</span>
         </div>
         <div className="track-preview__table">
           <table>

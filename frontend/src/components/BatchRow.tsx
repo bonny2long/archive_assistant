@@ -52,7 +52,7 @@ export default function BatchRow({
 }: Props) {
   const artist = batch.artist ?? "-";
   const album = batch.detected_type === "music_discography"
-    ? `${batch.album_count} album discography`
+    ? `${batch.albums.length || batch.album_count} release discography`
     : batch.album ?? "-";
   const year = batch.year ?? "-";
   const tracks = batch.track_count || "-";

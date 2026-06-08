@@ -2,7 +2,7 @@
 
 Local-first scaffold for Bonny's Archive Assistant -- a self-hosted, NAS-friendly tool for managing personal media archives starting with music.
 
-**V1 goal**: scan copied music files in `data/_INGEST/music`, read metadata, create pending reports, wait for approval, then move files into a clean `data/Music/Library/...` folder structure.
+**V1 goal**: scan copied media placed directly in `data/_INGEST`, classify supported music, create pending reports, wait for approval, then move files into a clean library structure.
 
 **Design philosophy**: deterministic tools with human approval gates. AI metadata recovery comes later.
 
@@ -73,10 +73,10 @@ Frontend runs at: `http://localhost:5173` (proxies `/api` to the backend).
 Use copies only -- never place your only copy of a file in the ingest folder.
 
 ```text
-data/_INGEST/music/
+data/_INGEST/
 ```
 
-### Scan music
+### Scan ingest
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/scan/music
@@ -130,8 +130,8 @@ python -m app.workers.move_approved_worker
 
 ## Usage Flow
 
-1. Copy music files (copies only) into `data/_INGEST/music/`.
-2. Click **Scan music** on the dashboard or POST `/api/scan/music`.
+1. Copy album or discography folders directly into `data/_INGEST/`.
+2. Click **Scan ingest** on the dashboard or POST `/api/scan/music`.
 3. Review batches in the dashboard tabs (All / Pending / Needs Metadata / Approved / Moved).
 4. Edit metadata via the pencil icon if needed.
 5. Approve batches (checkmark icon or bulk approve).
@@ -166,7 +166,7 @@ Settings are defined in `backend/app/core/config.py` using `pydantic-settings`. 
 | `debug` | `True` | Enable debug mode |
 | `dev_tools_enabled` | `True` | Show local reset tools when debug mode is also enabled |
 | `data_root` | `project_root / "data"` | Root data directory |
-| `ingest_music_dir` | `data/_INGEST/music/` | Incoming music files |
+| `ingest_root` | `data/_INGEST/` | Root intake zone for unclassified media |
 | `reports_dir` | `data/_REPORTS/ingest-reports/` | JSON scan reports |
 | `move_logs_dir` | `data/_REPORTS/move-logs/` | Move action logs |
 | `music_flac_dir` | `data/Music/Library/FLAC/` | FLAC library destination |
@@ -203,7 +203,7 @@ archive-assistant-scaffold/
     package.json
     vite.config.ts
   data/
-    _INGEST/music/             # Drop zone for copied music
+    _INGEST/                   # Root drop zone for copied intake items
     _STAGING/                  # Reserved for future use
     _QUARANTINE/               # Rejected / unclear files
     _REPORTS/                  # JSON scan reports and move logs
@@ -222,6 +222,7 @@ archive-assistant-scaffold/
     check_track_order.py       # Canonical track sorting and filename checks
     check_bulk_approve.py      # Safe bulk approval skip-reason checks
     check_discography_intake.py # Discography detection, move, and reset checks
+    check_root_ingest.py        # Root intake classification checks
     create_ugly_music_test_pack.py # Copies local audio into ugly ingest folders
     create_sample_tree.sh      # Creates empty data directory structure
   docker-compose.yml
@@ -308,7 +309,7 @@ Apply the reset:
 python scripts/reset_music_test.py --apply
 ```
 
-This restores moved tracks to their original `data/_INGEST/music` paths, removes generated music reports and move logs, and clears music records without dropping or recreating database tables.
+This restores moved tracks to their original `data/_INGEST` paths, removes generated music reports and move logs, and clears music records without dropping or recreating database tables.
 
 In local debug mode, the same guarded reset is available from the dashboard using
 **Reset test data**. The button asks for confirmation and is hidden when debug
@@ -326,6 +327,7 @@ backend/.venv/Scripts/python.exe scripts/check_batch_merge.py
 backend/.venv/Scripts/python.exe scripts/check_track_order.py
 backend/.venv/Scripts/python.exe scripts/check_bulk_approve.py
 backend/.venv/Scripts/python.exe scripts/check_discography_intake.py
+backend/.venv/Scripts/python.exe scripts/check_root_ingest.py
 ```
 
 Create the five ugly ingest folders using existing local test audio:
@@ -422,7 +424,7 @@ bash scripts/create_sample_tree.sh
 | Port 8000 already in use | Change port: `uvicorn app.main:app --reload --port 8001` |
 | Port 5173 already in use | Vite will auto-switch to next available port |
 | Database errors on startup | Run `python -m app.db.init_db` to create/update tables |
-| Files not appearing in ingest | Ensure files are inside `data/_INGEST/music/` (not a subfolder with different name) |
+| Files not appearing in ingest | Ensure album or discography folders are direct children of `data/_INGEST/` |
 | CORS errors in browser | Check backend is running on port 8000 and frontend on port 5173 |
 
 ---

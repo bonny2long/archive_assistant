@@ -26,7 +26,7 @@ def check(label: str, condition: bool) -> int:
 
 
 def main() -> int:
-    root = settings.ingest_music_dir
+    root = settings.ingest_root
     failures = 0
 
     release_a = root / "2003 Get Rich Or Die Tryin" / "01.mp3"

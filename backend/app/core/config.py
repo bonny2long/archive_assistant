@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     project_root: Path = backend_dir.parent
     data_root: Path = project_root / "data"
 
-    ingest_music_dir: Path = data_root / "_INGEST" / "music"
+    ingest_root: Path = data_root / "_INGEST"
     reports_dir: Path = data_root / "_REPORTS" / "ingest-reports"
     move_logs_dir: Path = data_root / "_REPORTS" / "move-logs"
     music_flac_dir: Path = data_root / "Music" / "Library" / "FLAC"
