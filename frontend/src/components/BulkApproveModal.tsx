@@ -1,4 +1,5 @@
 import type { BatchSummary } from "../types/archive";
+import { getBatchDisplayTitle } from "../utils/batchDisplay";
 
 type Props = {
   batches: BatchSummary[];
@@ -42,7 +43,7 @@ export default function BulkApproveModal({
         <div className="confirm-modal__header">
           <div>
             <h2 id="bulk-approve-title">Approve selected batches?</h2>
-            <p>These albums will be marked ready to move. No files will be moved yet.</p>
+            <p>These releases will be marked ready to move. No files will be moved yet.</p>
           </div>
           <button className="btn-sm" disabled={loading} title="Close" onClick={onClose}>
             <i className="ti ti-x" />
@@ -54,7 +55,7 @@ export default function BulkApproveModal({
             <div key={batch.id}>
               <i className={`ti ti-${isApprovable(batch) ? "disc" : "alert-triangle"}`} />
               <span>
-                <strong>{batch.artist ?? "Unknown Artist"} - {batch.album ?? "Unknown Album"}</strong>
+                <strong>{getBatchDisplayTitle(batch)}</strong>
                 <small>
                   {isApprovable(batch)
                     ? "ready to approve"

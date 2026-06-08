@@ -5,19 +5,29 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.time import now_utc, serialize_utc
+from app.core.time import configured_timezone, now_utc, serialize_utc
 from app.models.archive import IngestBatch
 
 
+def _safe_name(value: str) -> str:
+    safe = "".join(
+        character if character not in '<>:"/\\|?*' else "_"
+        for character in value
+    ).strip(" .")
+    return safe or "unknown-item"
+
+
 def _available_destination(root: Path, source: Path) -> Path:
-    destination = root / source.name
+    safe_name = _safe_name(source.name)
+    destination = root / safe_name
     if not destination.exists():
         return destination
     for index in range(1, 1000):
         if source.is_file():
-            name = f"{source.stem}__duplicate-{index:03d}{source.suffix}"
+            safe_stem = _safe_name(source.stem)
+            name = f"{safe_stem}__duplicate_{index:03d}{source.suffix.lower()}"
         else:
-            name = f"{source.name}__duplicate-{index:03d}"
+            name = f"{safe_name}__duplicate_{index:03d}"
         candidate = root / name
         if not candidate.exists():
             return candidate
@@ -37,18 +47,15 @@ def quarantine_batch(db: Session, batch: IngestBatch) -> Path:
     if not source.resolve().is_relative_to(settings.ingest_root.resolve()):
         raise ValueError("Quarantine source must be inside the ingest root")
 
-    root = (
-        settings.quarantine_unknown_dir
-        if batch.detected_type == "unknown_type"
-        else settings.quarantine_unsupported_dir
-    )
+    root = settings.quarantine_unknown_dir
     root.mkdir(parents=True, exist_ok=True)
     destination = _available_destination(root, source)
     shutil.move(str(source), str(destination))
 
     metadata = dict(batch.metadata_json or {})
     metadata["quarantine_destination"] = str(destination)
-    metadata["quarantined_at"] = serialize_utc(now_utc())
+    moved_at = now_utc()
+    metadata["quarantined_at"] = serialize_utc(moved_at)
     batch.metadata_json = metadata
     batch.suggested_destination = str(destination)
     batch.status = "quarantined"
@@ -59,13 +66,19 @@ def quarantine_batch(db: Session, batch: IngestBatch) -> Path:
     report = {
         "batch_id": batch.id,
         "source_path": str(source),
-        "destination_path": str(destination),
+        "quarantine_path": str(destination),
         "detected_type": batch.detected_type,
+        "status_before": "needs_quarantine_review",
+        "status_after": "quarantined",
         "reason": metadata.get("reason"),
-        "status": "completed",
-        "created_at": serialize_utc(now_utc()),
+        "moved_at": serialize_utc(moved_at),
+        "display_timezone": configured_timezone(),
+        "file_count": metadata.get("file_count", 0),
+        "folder_count": metadata.get("folder_count", 0),
+        "size_bytes": metadata.get("size_bytes", 0),
     }
-    (settings.quarantine_reports_dir / f"batch-{batch.id}-quarantine.json").write_text(
+    timestamp = moved_at.strftime("%Y%m%dT%H%M%SZ")
+    (settings.quarantine_reports_dir / f"quarantine_{batch.id}_{timestamp}.json").write_text(
         json.dumps(report, indent=2),
         encoding="utf-8",
     )

@@ -37,6 +37,10 @@ export type BatchSummary = {
   name?: string | null;
   reason?: string | null;
   file_count: number;
+  folder_count: number;
+  size_bytes: number;
+  recommended_action?: string | null;
+  release_count: number;
   album_count: number;
   albums: DiscographyAlbum[];
   disc_count: number;

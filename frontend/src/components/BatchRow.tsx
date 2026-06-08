@@ -1,5 +1,6 @@
 import type { BatchMoveSummary, BatchReview, BatchSummary, IngestBatch } from "../types/archive";
 import BatchDetail from "./BatchDetail";
+import { getReleaseCount } from "../utils/batchDisplay";
 
 type Props = {
   batch: BatchSummary;
@@ -53,12 +54,17 @@ export default function BatchRow({
   onEdit,
 }: Props) {
   const quarantineReview = batch.status === "needs_quarantine_review";
-  const artist = quarantineReview ? batch.name ?? "Unknown item" : batch.artist ?? "-";
+  const releaseCount = getReleaseCount(batch);
+  const artist = quarantineReview
+    ? batch.name ?? "Unknown item"
+    : batch.artist ?? batch.suggested_metadata?.artist ?? "Unknown Artist";
   const album = quarantineReview
     ? batch.reason ?? batch.detected_type
     : batch.detected_type === "music_discography"
-      ? `${batch.albums.length || batch.album_count} release discography`
-      : batch.album ?? "-";
+      ? releaseCount > 0
+        ? `${releaseCount} release discography`
+        : "Discography"
+      : batch.album ?? batch.suggested_metadata?.album ?? "Unknown Album";
   const year = batch.year ?? "-";
   const tracks = quarantineReview ? batch.file_count : batch.track_count || "-";
   const percent = Math.round((batch.confidence ?? 0) * 100);
@@ -81,6 +87,11 @@ export default function BatchRow({
         <td title={artist}>{artist}</td>
         <td title={album}>
           {album}
+          {quarantineReview && (
+            <small className="row-artwork">
+              {batch.file_count} file(s) · {batch.folder_count} folder(s)
+            </small>
+          )}
           {!quarantineReview && batch.artwork_count > 0 && (
             <small className="row-artwork">Artwork: {batch.artwork_count}</small>
           )}

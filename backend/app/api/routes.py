@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, selectinload
@@ -501,6 +502,7 @@ def update_discography_metadata(
         bool(album.get("include", True))
         for album in albums
     )
+    metadata["release_count"] = metadata["album_count"]
     metadata["artist_source"] = "manual correction"
     for ingest_file in batch.files:
         track_metadata = dict(ingest_file.metadata_json or {})
@@ -676,7 +678,7 @@ def reject_batch(batch_id: int, db: Session = Depends(get_db)):
     return ApproveResponse(batch_id=batch.id, status=batch.status, message="Batch rejected")
 
 
-@router.post("/batches/{batch_id}/quarantine", response_model=ApproveResponse)
+@router.post("/batches/{batch_id}/quarantine", response_model=BatchSummary)
 def quarantine_review_batch(batch_id: int, db: Session = Depends(get_db)):
     batch = db.get(IngestBatch, batch_id)
     if not batch:
@@ -685,11 +687,37 @@ def quarantine_review_batch(batch_id: int, db: Session = Depends(get_db)):
         destination = quarantine_batch(db, batch)
     except (ValueError, FileNotFoundError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return ApproveResponse(
-        batch_id=batch.id,
-        status=batch.status,
-        message=f"Moved to quarantine: {destination}",
+    return _batch_to_summary(
+        batch,
+        action_message=f"Moved to quarantine: {destination}",
     )
+
+
+@router.get("/quarantine/review", response_model=list[BatchSummary])
+def list_quarantine_review(db: Session = Depends(get_db)):
+    batches = (
+        db.query(IngestBatch)
+        .filter(IngestBatch.status == "needs_quarantine_review")
+        .order_by(IngestBatch.created_at.desc())
+        .all()
+    )
+    return [_batch_to_summary(batch) for batch in batches]
+
+
+@router.get("/quarantine/reports")
+def list_quarantine_reports():
+    if not settings.quarantine_reports_dir.exists():
+        return []
+    reports = []
+    for path in sorted(
+        settings.quarantine_reports_dir.glob("quarantine_*.json"),
+        reverse=True,
+    ):
+        try:
+            reports.append(json.loads(path.read_text(encoding="utf-8")))
+        except (OSError, json.JSONDecodeError):
+            continue
+    return reports
 
 
 @router.post("/batches/{batch_id}/recovery", response_model=ApproveResponse)
@@ -735,6 +763,10 @@ def _batch_to_summary(
         name=meta.get("name"),
         reason=meta.get("reason"),
         file_count=meta.get("file_count", 0),
+        folder_count=meta.get("folder_count", 0),
+        size_bytes=meta.get("size_bytes", 0),
+        recommended_action=meta.get("recommended_action"),
+        release_count=meta.get("release_count", meta.get("album_count", 0)),
         album_count=meta.get("album_count", 0),
         albums=meta.get("albums", []),
         disc_count=meta.get("disc_count", 1),

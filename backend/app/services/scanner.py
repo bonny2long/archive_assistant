@@ -60,6 +60,10 @@ IGNORED_INGEST_NAMES = {
     "frontend",
     "backend",
     "scripts",
+    ".git",
+    "__pycache__",
+    "node_modules",
+    ".venv",
     ".ds_store",
     "thumbs.db",
     "desktop.ini",
@@ -127,27 +131,81 @@ def _artwork_files(root: Path) -> list[Path]:
     )
 
 
-def _unknown_metadata(path: Path, classification: str) -> dict:
+def _nested_unsupported_files(
+    classifications: dict[Path, str],
+) -> list[tuple[Path, Path]]:
+    unsupported = []
+    for root, classification in classifications.items():
+        if (
+            classification not in {"music_album", "music_discography"}
+            or not root.is_dir()
+        ):
+            continue
+        for path in sorted(candidate for candidate in root.rglob("*") if candidate.is_file()):
+            if (
+                is_audio_file(path)
+                or is_artwork_file(path)
+                or path.name.casefold() in IGNORED_INGEST_NAMES
+            ):
+                continue
+            unsupported.append((path, root))
+    return unsupported
+
+
+def _unknown_metadata(
+    path: Path,
+    classification: str,
+    *,
+    music_parent: Path | None = None,
+) -> dict:
     if path.is_file():
+        reason = (
+            "Unsupported file found inside a recognized music collection"
+            if music_parent
+            else "Unsupported loose file in _INGEST"
+        )
         return {
             "name": path.name,
-            "reason": "Loose file type is not supported yet",
+            "reason": reason,
             "file_count": 1,
             "folder_count": 0,
+            "size_bytes": path.stat().st_size,
             "sample_files": [path.name],
+            "music_parent": str(music_parent) if music_parent else None,
+            "relative_path": (
+                str(path.relative_to(music_parent))
+                if music_parent
+                else path.name
+            ),
+            "recommended_action": "Move to quarantine",
             "metadata_quality": "unsupported",
             "metadata_warnings": ["quarantine_review_required"],
         }
     files = sorted(candidate for candidate in path.rglob("*") if candidate.is_file())
     folders = [candidate for candidate in path.rglob("*") if candidate.is_dir()]
+    extensions = {candidate.suffix.casefold() for candidate in files}
+    video_extensions = {".mkv", ".mp4", ".avi", ".mov", ".wmv", ".m4v"}
+    document_extensions = {".pdf", ".epub", ".mobi", ".azw", ".azw3"}
+    if extensions & video_extensions:
+        reason = "Movie/video support not implemented yet"
+    elif extensions and extensions.issubset(document_extensions):
+        reason = "Book/document support not implemented yet"
+    elif len(extensions) > 1:
+        reason = "Mixed unsupported file types"
+    elif files:
+        reason = "No supported audio files found"
+    else:
+        reason = "Folder does not match a known media structure"
     return {
         "name": path.name,
-        "reason": "Could not classify folder contents",
+        "reason": reason,
         "file_count": len(files),
-        "folder_count": len(folders),
+        "folder_count": len(folders) + 1,
+        "size_bytes": sum(candidate.stat().st_size for candidate in files),
         "sample_files": [
             str(candidate.relative_to(path)) for candidate in files[:10]
         ],
+        "recommended_action": "Move to quarantine",
         "metadata_quality": "unsupported",
         "metadata_warnings": ["quarantine_review_required"],
     }
@@ -157,6 +215,8 @@ def _create_unknown_batch(
     db: Session,
     path: Path,
     classification: str,
+    *,
+    music_parent: Path | None = None,
 ) -> IngestBatch | None:
     existing = (
         db.query(IngestBatch)
@@ -168,7 +228,11 @@ def _create_unknown_batch(
     )
     if existing:
         return None
-    metadata = _unknown_metadata(path, classification)
+    metadata = _unknown_metadata(
+        path,
+        classification,
+        music_parent=music_parent,
+    )
     batch = IngestBatch(
         source_kind="manual-drop",
         source_path=str(path),
@@ -442,6 +506,7 @@ def _create_discography_batch(
         "artist": artist,
         "collection_type": "discography",
         "album_count": len(album_summaries),
+        "release_count": len(album_summaries),
         "track_count": len(all_paths),
         "artwork_count": sum(album["artwork_count"] for album in album_summaries),
         "artwork_files": [
@@ -494,6 +559,16 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
         batch = _create_unknown_batch(db, item, classification)
         if batch:
             unknown_batches.append(batch)
+    nested_unsupported = _nested_unsupported_files(classifications)
+    for path, music_parent in nested_unsupported:
+        batch = _create_unknown_batch(
+            db,
+            path,
+            "unsupported_file",
+            music_parent=music_parent,
+        )
+        if batch:
+            unknown_batches.append(batch)
 
     audio_files = _root_music_audio_files()
     if not audio_files:
@@ -508,7 +583,7 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
             unsupported_files=sum(
                 classification == "unsupported_file"
                 for classification in classifications.values()
-            ),
+            ) + len(nested_unsupported),
             ignored_system_files=sum(
                 classification == "ignored_system_folder"
                 for classification in classifications.values()
@@ -776,7 +851,7 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
         unsupported_files=sum(
             classification == "unsupported_file"
             for classification in classifications.values()
-        ),
+        ) + len(nested_unsupported),
         ignored_system_files=sum(
             classification == "ignored_system_folder"
             for classification in classifications.values()

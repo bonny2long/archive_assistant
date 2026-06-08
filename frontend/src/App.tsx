@@ -230,7 +230,7 @@ export default function App() {
     if (!confirmed) return;
     try {
       const result = await api.quarantineBatch(id);
-      showToast(result.message);
+      showToast(result.action_message ?? "Item moved to quarantine");
       await loadBatches();
     } catch (quarantineError: unknown) {
       showToast(

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { BatchMoveSummary, BatchReview, IngestBatch } from "../types/archive";
 import { formatArchiveTime } from "../utils/archiveTime";
+import { getBatchDisplayTitle, getReleaseCount } from "../utils/batchDisplay";
 
 type Props = {
   batch: IngestBatch;
@@ -18,6 +19,17 @@ function readableLibraryPath(value?: string | null): string {
   const normalized = value.replace(/\\/g, "/");
   const libraryIndex = normalized.toLowerCase().indexOf("music/library/");
   return libraryIndex >= 0 ? normalized.slice(libraryIndex) : normalized;
+}
+
+function formatBytes(value: unknown): string {
+  const bytes = Number(value ?? 0);
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const unit = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+    units.length - 1,
+  );
+  return `${(bytes / (1024 ** unit)).toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
 
 const WARNING_LABELS: Record<string, string> = {
@@ -139,6 +151,14 @@ function QuarantineReviewDetail({ batch, moveSummary }: Props) {
         <div><div className="batch-detail__label">Reason</div><div className="batch-detail__value">{metadataValue(batch, "reason")}</div></div>
         <div><div className="batch-detail__label">File count</div><div className="batch-detail__value">{metadataValue(batch, "file_count")}</div></div>
         <div><div className="batch-detail__label">Folder count</div><div className="batch-detail__value">{metadataValue(batch, "folder_count")}</div></div>
+        <div><div className="batch-detail__label">Size</div><div className="batch-detail__value">{formatBytes(batch.metadata_json?.size_bytes)}</div></div>
+        <div><div className="batch-detail__label">Recommended action</div><div className="batch-detail__value">{metadataValue(batch, "recommended_action")}</div></div>
+        {Boolean(batch.metadata_json?.music_parent) && (
+          <div><div className="batch-detail__label">Music collection</div><div className="batch-detail__value batch-detail__path">{metadataValue(batch, "music_parent")}</div></div>
+        )}
+        {Boolean(batch.metadata_json?.relative_path) && (
+          <div><div className="batch-detail__label">Location inside collection</div><div className="batch-detail__value batch-detail__path">{metadataValue(batch, "relative_path")}</div></div>
+        )}
         <div><div className="batch-detail__label">Source path</div><div className="batch-detail__value batch-detail__path">{batch.source_path}</div></div>
       </div>
       <DebugDetails batch={batch} moveSummary={moveSummary} />
@@ -292,6 +312,7 @@ function DiscographyBatchDetail({ batch, moveSummary }: Props) {
     : "";
   const warnings = metadataWarnings(batch);
   const moved = batch.status === "moved";
+  const releaseCount = getReleaseCount(batch);
 
   return (
     <div className={`batch-detail ${moved ? "batch-detail--moved" : "batch-detail--review"}`}>
@@ -299,8 +320,8 @@ function DiscographyBatchDetail({ batch, moveSummary }: Props) {
         <div className="library-status__icon"><i className="ti ti-folders" /></div>
         <div>
           <div className="library-status__eyebrow">Discography detected</div>
-          <h2>{String(metadata.artist ?? "Unknown Artist")}</h2>
-          <p>{albums.length} release discography · {String(metadata.track_count ?? batch.files.length)} tracks</p>
+          <h2>{getBatchDisplayTitle(batch)}</h2>
+          <p>{releaseCount} releases · {String(metadata.track_count ?? batch.files.length)} tracks</p>
         </div>
         <div className="library-status__facts">
           <span>{Array.isArray(metadata.format_summary) ? metadata.format_summary.join(", ") : "-"}</span>
@@ -347,7 +368,7 @@ function DiscographyBatchDetail({ batch, moveSummary }: Props) {
       <section className="discography-albums">
         <div className="track-preview__header">
           <h3>Releases found</h3>
-          <span>{albums.length} release(s)</span>
+          <span>{releaseCount} releases</span>
         </div>
         <div className="track-preview__table">
           <table>

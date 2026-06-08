@@ -30,6 +30,10 @@ class BatchSummary(BaseModel):
     name: str | None = None
     reason: str | None = None
     file_count: int = 0
+    folder_count: int = 0
+    size_bytes: int = 0
+    recommended_action: str | None = None
+    release_count: int = 0
     album_count: int = 0
     albums: list[dict] = Field(default_factory=list)
     disc_count: int = 0
