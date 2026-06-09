@@ -122,7 +122,7 @@ export default function BatchRow({
             <span className="conf-bar__label">{percent}%</span>
           </div>
         </td>
-        <td onClick={(event) => event.stopPropagation()}>
+        <td className="batch-table__actions" onClick={(event) => event.stopPropagation()}>
           {awaitingQuarantine ? (
             <button
               className="btn btn--compact quarantine-action"

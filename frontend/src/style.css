@@ -213,7 +213,7 @@ button:focus-visible, input:focus-visible {
 }
 .batch-table {
   width: 100%;
-  min-width: 900px;
+  min-width: 1000px;
   border-collapse: collapse;
   table-layout: fixed;
 }
@@ -236,6 +236,10 @@ button:focus-visible, input:focus-visible {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.batch-table td.batch-table__actions {
+  overflow: visible;
+  text-overflow: clip;
 }
 .batch-table tr.row--clickable { cursor: pointer; transition: background 0.12s; }
 .batch-table tr.row--clickable:hover { background: var(--bg-hover); }
@@ -288,6 +292,7 @@ button:focus-visible, input:focus-visible {
   gap: 0.5rem 2rem;
   margin-bottom: 1rem;
 }
+.batch-detail__grid--stacked { grid-template-columns: minmax(0, 1fr); }
 .batch-detail__label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .batch-detail__value { max-width: 100%; font-size: 13px; color: var(--text-secondary); }
 .batch-detail__path {

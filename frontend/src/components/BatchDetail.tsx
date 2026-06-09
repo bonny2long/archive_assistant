@@ -169,7 +169,7 @@ function DebugDetails({ batch, moveSummary, review }: Props) {
 function QuarantineReviewDetail({ batch, moveSummary }: Props) {
   return (
     <div className="batch-detail">
-      <div className="batch-detail__grid">
+      <div className="batch-detail__grid batch-detail__grid--stacked">
         <div><div className="batch-detail__label">Name</div><div className="batch-detail__value">{metadataValue(batch, "name")}</div></div>
         <div><div className="batch-detail__label">Detected type</div><div className="batch-detail__value">{batch.detected_type}</div></div>
         <div><div className="batch-detail__label">Reason</div><div className="batch-detail__value">{metadataValue(batch, "reason")}</div></div>
@@ -183,7 +183,12 @@ function QuarantineReviewDetail({ batch, moveSummary }: Props) {
         {Boolean(batch.metadata_json?.relative_path) && (
           <div><div className="batch-detail__label">Location inside collection</div><div className="batch-detail__value batch-detail__path">{metadataValue(batch, "relative_path")}</div></div>
         )}
-        <div><div className="batch-detail__label">Source path</div><div className="batch-detail__value batch-detail__path">{batch.source_path}</div></div>
+        <div>
+          <div className="batch-detail__label">Source path</div>
+          <div className="batch-detail__value batch-detail__path">
+            {readableSourcePath(batch.source_path)}
+          </div>
+        </div>
       </div>
       <DebugDetails batch={batch} moveSummary={moveSummary} />
     </div>
@@ -800,7 +805,7 @@ export default function BatchDetail({ batch, moveSummary, review }: Props) {
 
   return (
     <div className="batch-detail">
-      <div className="batch-detail__grid">
+      <div className="batch-detail__grid batch-detail__grid--stacked">
         <div>
           <div className="batch-detail__label">Artist</div>
           <div className="batch-detail__value">{metadataValue(batch, "artist")}</div>
@@ -811,11 +816,17 @@ export default function BatchDetail({ batch, moveSummary, review }: Props) {
         </div>
         <div>
           <div className="batch-detail__label">Source path</div>
-          <div className="batch-detail__value batch-detail__path">{batch.source_path}</div>
+          <div className="batch-detail__value batch-detail__path">
+            {readableSourcePath(batch.source_path)}
+          </div>
         </div>
         <div>
           <div className="batch-detail__label">Suggested destination</div>
-          <div className="batch-detail__value batch-detail__path">{batch.suggested_destination ?? "-"}</div>
+          <div className="batch-detail__value batch-detail__path">
+            {batch.suggested_destination
+              ? readableSourcePath(batch.suggested_destination)
+              : "-"}
+          </div>
         </div>
         <div>
           <div className="batch-detail__label">Detected type</div>

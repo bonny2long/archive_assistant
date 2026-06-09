@@ -109,15 +109,15 @@ export default function BatchTable({
         <table className="batch-table">
           <colgroup>
             <col style={{ width: 36 }} />
-            <col style={{ width: 48 }} />
-            <col style={{ width: "10%" }} />
-            <col style={{ width: "16%" }} />
-            <col style={{ width: "20%" }} />
-            <col style={{ width: "7%" }} />
-            <col style={{ width: "9%" }} />
-            <col style={{ width: "10%" }} />
-            <col style={{ width: "12%" }} />
-            <col style={{ width: "16%" }} />
+            <col style={{ width: 42 }} />
+            <col style={{ width: 95 }} />
+            <col style={{ width: 145 }} />
+            <col />
+            <col style={{ width: 65 }} />
+            <col style={{ width: 80 }} />
+            <col style={{ width: 120 }} />
+            <col style={{ width: 110 }} />
+            <col style={{ width: 190 }} />
           </colgroup>
           <thead>
             <tr>
