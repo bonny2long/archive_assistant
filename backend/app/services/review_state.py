@@ -87,31 +87,59 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
         ]
         if not episodes:
             blocking.append(_item("no_parseable_episodes", "No parseable TV episodes were found."))
-        codes = []
+
+        included_codes: list[str] = []
         for episode in episodes:
             source_file = episode.get("source_file")
-            if episode.get("season_number") is None:
-                blocking.append(_item(
-                    "missing_season_number",
-                    "Episode is missing a season number.",
-                    file_name=source_file,
-                ))
-            if episode.get("episode_number") is None:
-                blocking.append(_item(
-                    "missing_episode_number",
-                    "Episode is missing an episode number.",
-                    file_name=source_file,
-                ))
+            include = episode.get("include", True)
+
+            # Excluded episodes: skip all checks
+            if not include:
+                continue
+
+            is_special = bool(episode.get("is_special"))
+            preserve = bool(episode.get("preserve_source_filename"))
+            special_label = str(episode.get("special_label") or "").strip()
+
+            season_number = episode.get("season_number")
+            episode_number = episode.get("episode_number")
+
+            if season_number is None:
+                # Specials with a destination_group don't need a normal season number
+                dest_group = episode.get("destination_group")
+                if not (is_special and dest_group in {"specials", "oad", "extras"}):
+                    blocking.append(_item(
+                        "missing_season_number",
+                        "Episode is missing a season number.",
+                        file_name=source_file,
+                    ))
+
+            if episode_number is None:
+                # Specials with a label satisfy the episode number requirement
+                if is_special and special_label:
+                    pass  # resolved via special_label
+                elif preserve:
+                    pass  # will use source filename, no code needed
+                else:
+                    blocking.append(_item(
+                        "missing_episode_number",
+                        "Episode is missing an episode number.",
+                        file_name=source_file,
+                    ))
+
+            if not str(episode.get("episode_title") or "").strip():
+                if not preserve:
+                    non_blocking.append(_item(
+                        "missing_episode_title",
+                        "Episode title is missing; the source filename will be preserved.",
+                        file_name=source_file,
+                    ))
+
             code = episode.get("episode_code")
             if code:
-                codes.append(str(code))
-            if not str(episode.get("episode_title") or "").strip():
-                non_blocking.append(_item(
-                    "missing_episode_title",
-                    "Episode title is missing; the source filename will be preserved.",
-                    file_name=source_file,
-                ))
-        for code, count in Counter(codes).items():
+                included_codes.append(str(code))
+
+        for code, count in Counter(included_codes).items():
             if count > 1:
                 blocking.append(_item(
                     "duplicate_episode_code",

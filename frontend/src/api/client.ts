@@ -16,6 +16,7 @@ import type {
   ScanMusicResponse,
   SystemTimeResponse,
   TvMetadataUpdate,
+  TvEpisodeReviewUpdate,
   ReviewConfirmationUpdate,
 } from "../types/archive";
 
@@ -51,6 +52,8 @@ export const api = {
     request<BatchSummary>(`/batches/${id}/movie-metadata`, "PATCH", update),
   updateTvMetadata: (id: number, update: TvMetadataUpdate) =>
     request<BatchSummary>(`/batches/${id}/tv-metadata`, "PATCH", update),
+  updateTvEpisodeReview: (id: number, update: TvEpisodeReviewUpdate) =>
+    request<BatchSummary>(`/batches/${id}/tv-episode-review`, "PATCH", update),
   updateReviewConfirmation: (id: number, update: ReviewConfirmationUpdate) =>
     request<BatchSummary>(`/batches/${id}/review-confirmation`, "PATCH", update),
   scanMusic: () => request<ScanMusicResponse>("/scan/music", "POST"),

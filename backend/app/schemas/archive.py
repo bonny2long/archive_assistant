@@ -124,6 +124,33 @@ class TvMetadataUpdate(BaseModel):
     season_title: str | None = None
 
 
+class TvEpisodeReviewPatch(BaseModel):
+    source_file: str
+    relative_source: str | None = None
+
+    include: bool = True
+
+    # Normal episode fields
+    season_number: int | None = None
+    episode_number: int | None = None
+
+    # Special handling
+    is_special: bool = False
+    special_label: str | None = None
+    destination_group: str | None = None
+    # Allowed values: None | "season" | "specials" | "oad" | "extras"
+
+    episode_title: str | None = None
+    preserve_source_filename: bool = False
+
+
+class TvEpisodeReviewUpdate(BaseModel):
+    show_title: str | None = None
+    year: str | None = None
+    patches: list[TvEpisodeReviewPatch] = Field(default_factory=list)
+    confirm_non_blocking_warnings: bool = False
+
+
 class ReviewConfirmationUpdate(BaseModel):
     confirmed: bool
     accept_non_blocking_warnings: bool = False

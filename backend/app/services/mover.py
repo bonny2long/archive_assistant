@@ -214,20 +214,59 @@ def _tv_episode_destination(
 ) -> Path | None:
     metadata = ingest_file.metadata_json or {}
     season_number = metadata.get("season_number")
+    is_special = bool(metadata.get("is_special"))
+    special_label = str(metadata.get("special_label") or "").strip()
+    preserve = bool(metadata.get("preserve_source_filename"))
+    destination_group = str(metadata.get("destination_group") or "").strip()
+
+    suffix = Path(ingest_file.file_name).suffix.lower()
+
+    # Preserve original filename — just need a season/group folder
+    if preserve:
+        if season_number is not None:
+            folder = _tv_season_destination(destination, int(season_number))
+        elif destination_group in {"specials", "oad", "extras"}:
+            folder = destination / "Specials"
+        else:
+            return None
+        return folder / ingest_file.file_name
+
+    # Specials going to Specials folder
+    if is_special and destination_group in {"specials", "oad"}:
+        episode_title = str(metadata.get("episode_title") or "").strip()
+        if special_label:
+            file_name = (
+                f"{special_label} - {safe_tv_path_part(episode_title)}{suffix}"
+                if episode_title
+                else f"{special_label}{suffix}"
+            )
+        else:
+            file_name = ingest_file.file_name
+        return destination / "Specials" / file_name
+
+    # Specials inside a season folder (e.g. S01E13.5, S04SP01)
+    if is_special and special_label:
+        if season_number is None:
+            return None
+        episode_title = str(metadata.get("episode_title") or "").strip()
+        file_name = (
+            f"{special_label} - {safe_tv_path_part(episode_title)}{suffix}"
+            if episode_title
+            else f"{special_label}{suffix}"
+        )
+        return _tv_season_destination(destination, int(season_number)) / file_name
+
+    # Normal episode
     episode_code = metadata.get("episode_code")
     if season_number is None or not episode_code:
         return None
     episode_title = str(metadata.get("episode_title") or "").strip()
-    suffix = Path(ingest_file.file_name).suffix.lower()
     file_name = (
         f"{episode_code} - {safe_tv_path_part(episode_title)}{suffix}"
         if episode_title
         else f"{episode_code}{suffix}"
     )
-    return (
-        _tv_season_destination(destination, int(season_number))
-        / file_name
-    )
+    return _tv_season_destination(destination, int(season_number)) / file_name
 
 
 def _tv_subtitle_destination(
@@ -323,7 +362,11 @@ def _move_tv_batch(
             reserved.add(_path_key(completed))
             continue
 
+        # Skip episodes the user excluded during review
         if ingest_file.detected_role == "tv_episode":
+            ep_meta = ingest_file.metadata_json or {}
+            if not ep_meta.get("include", True):
+                continue
             destination_file = _tv_episode_destination(
                 destination,
                 ingest_file,

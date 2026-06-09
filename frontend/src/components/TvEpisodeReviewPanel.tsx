@@ -1,0 +1,587 @@
+import { useState } from "react";
+import type {
+  BatchSummary,
+  TvEpisode,
+  TvEpisodeReviewPatch,
+  ReviewItem,
+} from "../types/archive";
+
+type Props = {
+  batch: BatchSummary;
+  patches: TvEpisodeReviewPatch[];
+  onPatchChange: (patches: TvEpisodeReviewPatch[]) => void;
+};
+
+function episodeKey(episode: TvEpisode): string {
+  return `${episode.source_file}||${episode.relative_source ?? ""}`;
+}
+
+function patchKey(patch: TvEpisodeReviewPatch): string {
+  return `${patch.source_file}||${patch.relative_source ?? ""}`;
+}
+
+function buildDefaultPatch(episode: TvEpisode): TvEpisodeReviewPatch {
+  const src = episode.source_file ?? "";
+  const isDecimal = /\.\d/.test(src);
+  const isSpecialKeyword = /\b(oad|ova|special|oav)\b/i.test(src);
+
+  if (isDecimal) {
+    const labelMatch = src.match(/S\d+E\d+\.\d+/i);
+    return {
+      source_file: episode.source_file,
+      relative_source: episode.relative_source ?? null,
+      include: true,
+      season_number: episode.season_number ?? null,
+      episode_number: null,
+      is_special: true,
+      special_label: labelMatch ? labelMatch[0].toUpperCase() : null,
+      destination_group: "season",
+      episode_title: episode.episode_title ?? null,
+      preserve_source_filename: false,
+    };
+  }
+  if (isSpecialKeyword) {
+    return {
+      source_file: episode.source_file,
+      relative_source: episode.relative_source ?? null,
+      include: true,
+      season_number: episode.season_number ?? null,
+      episode_number: null,
+      is_special: true,
+      special_label: null,
+      destination_group: "specials",
+      episode_title: episode.episode_title ?? null,
+      preserve_source_filename: false,
+    };
+  }
+  return {
+    source_file: episode.source_file,
+    relative_source: episode.relative_source ?? null,
+    include: true,
+    season_number: episode.season_number ?? null,
+    episode_number: episode.episode_number ?? null,
+    is_special: false,
+    special_label: null,
+    destination_group: null,
+    episode_title: episode.episode_title ?? null,
+    preserve_source_filename: false,
+  };
+}
+
+function getPatch(
+  patches: TvEpisodeReviewPatch[],
+  episode: TvEpisode,
+): TvEpisodeReviewPatch {
+  const key = episodeKey(episode);
+  const existing = patches.find((p) => patchKey(p) === key);
+  return existing ?? buildDefaultPatch(episode);
+}
+
+function upsertPatch(
+  patches: TvEpisodeReviewPatch[],
+  next: TvEpisodeReviewPatch,
+): TvEpisodeReviewPatch[] {
+  const key = patchKey(next);
+  const index = patches.findIndex((p) => patchKey(p) === key);
+  if (index >= 0) {
+    const updated = [...patches];
+    updated[index] = next;
+    return updated;
+  }
+  return [...patches, next];
+}
+
+// ── Single episode card ──────────────────────────────────────────────────────
+
+type EpisodeCardProps = {
+  episode: TvEpisode;
+  blocker: ReviewItem;
+  patch: TvEpisodeReviewPatch;
+  showTitle: string;
+  onChange: (next: TvEpisodeReviewPatch) => void;
+};
+
+function EpisodeCard({ episode, blocker, patch, showTitle, onChange }: EpisodeCardProps) {
+  const destPreview = (() => {
+    if (!patch.include) return "Excluded — will not be moved";
+    if (patch.preserve_source_filename) {
+      const folder =
+        patch.season_number != null
+          ? `Season ${String(patch.season_number).padStart(2, "0")}`
+          : patch.destination_group === "specials"
+          ? "Specials"
+          : "?";
+      return `TV/Library/${showTitle}/${folder}/${episode.source_file}`;
+    }
+    if (patch.is_special && patch.special_label) {
+      const folder =
+        patch.destination_group === "specials" || patch.destination_group === "oad"
+          ? "Specials"
+          : patch.season_number != null
+          ? `Season ${String(patch.season_number).padStart(2, "0")}`
+          : "?";
+      const title = patch.episode_title ? ` - ${patch.episode_title}` : "";
+      const ext = episode.source_file.split(".").pop() ?? "mkv";
+      return `TV/Library/${showTitle}/${folder}/${patch.special_label}${title}.${ext}`;
+    }
+    if (patch.season_number != null && patch.episode_number != null) {
+      const code = `S${String(patch.season_number).padStart(2, "0")}E${String(patch.episode_number).padStart(2, "0")}`;
+      const folder = `Season ${String(patch.season_number).padStart(2, "0")}`;
+      const title = patch.episode_title ? ` - ${patch.episode_title}` : "";
+      const ext = episode.source_file.split(".").pop() ?? "mkv";
+      return `TV/Library/${showTitle}/${folder}/${code}${title}.${ext}`;
+    }
+    return "Incomplete — fill in the fields above";
+  })();
+
+  return (
+    <div className="tv-repair-card">
+      <div className="tv-repair-card__header">
+        <i className="ti ti-alert-triangle" />
+        <span className="tv-repair-card__type">{blocker.message}</span>
+      </div>
+      <div className="tv-repair-card__source">
+        <span>Source</span>
+        <code>{episode.source_file}</code>
+      </div>
+      <div className="tv-repair-card__detected">
+        <span>Detected</span>
+        <code>
+          {episode.season_number != null
+            ? `Season ${episode.season_number}`
+            : "unknown season"}{" "}
+          ·{" "}
+          {episode.episode_number != null
+            ? `Episode ${episode.episode_number}`
+            : "no episode number"}
+        </code>
+      </div>
+
+      <div className="tv-repair-card__fix">
+        <fieldset>
+          <legend>Fix</legend>
+
+          {/* Normal episode */}
+          <label className="tv-repair-card__radio">
+            <input
+              type="radio"
+              checked={!patch.is_special && patch.include && !patch.preserve_source_filename}
+              onChange={() =>
+                onChange({
+                  ...patch,
+                  include: true,
+                  is_special: false,
+                  preserve_source_filename: false,
+                })
+              }
+            />
+            Normal episode
+          </label>
+          {!patch.is_special && patch.include && !patch.preserve_source_filename && (
+            <div className="tv-repair-card__fields">
+              <label>
+                Season
+                <input
+                  type="number"
+                  min="1"
+                  max="99"
+                  value={patch.season_number ?? ""}
+                  onChange={(e) =>
+                    onChange({
+                      ...patch,
+                      season_number: e.target.value ? Number(e.target.value) : null,
+                    })
+                  }
+                />
+              </label>
+              <label>
+                Episode
+                <input
+                  type="number"
+                  min="1"
+                  max="9999"
+                  value={patch.episode_number ?? ""}
+                  onChange={(e) =>
+                    onChange({
+                      ...patch,
+                      episode_number: e.target.value ? Number(e.target.value) : null,
+                    })
+                  }
+                />
+              </label>
+              <label>
+                Title
+                <input
+                  value={patch.episode_title ?? ""}
+                  onChange={(e) =>
+                    onChange({ ...patch, episode_title: e.target.value || null })
+                  }
+                />
+              </label>
+            </div>
+          )}
+
+          {/* Special / OAD */}
+          <label className="tv-repair-card__radio">
+            <input
+              type="radio"
+              checked={patch.is_special && patch.include}
+              onChange={() =>
+                onChange({
+                  ...patch,
+                  include: true,
+                  is_special: true,
+                  preserve_source_filename: false,
+                })
+              }
+            />
+            Special / OAD / Extra
+          </label>
+          {patch.is_special && patch.include && (
+            <div className="tv-repair-card__fields">
+              <label>
+                Group
+                <select
+                  value={patch.destination_group ?? "season"}
+                  onChange={(e) =>
+                    onChange({
+                      ...patch,
+                      destination_group: e.target.value as TvEpisodeReviewPatch["destination_group"],
+                    })
+                  }
+                >
+                  <option value="season">Season folder</option>
+                  <option value="specials">Specials folder</option>
+                  <option value="oad">OAD folder (→ Specials)</option>
+                  <option value="extras">Extras folder</option>
+                </select>
+              </label>
+              {(patch.destination_group === "season" ||
+                patch.destination_group == null) && (
+                <label>
+                  Season
+                  <input
+                    type="number"
+                    min="1"
+                    max="99"
+                    value={patch.season_number ?? ""}
+                    onChange={(e) =>
+                      onChange({
+                        ...patch,
+                        season_number: e.target.value ? Number(e.target.value) : null,
+                      })
+                    }
+                  />
+                </label>
+              )}
+              <label>
+                Label
+                <input
+                  placeholder="e.g. S01E13.5 or S04SP01"
+                  value={patch.special_label ?? ""}
+                  onChange={(e) =>
+                    onChange({ ...patch, special_label: e.target.value || null })
+                  }
+                />
+              </label>
+              <label>
+                Title
+                <input
+                  value={patch.episode_title ?? ""}
+                  onChange={(e) =>
+                    onChange({ ...patch, episode_title: e.target.value || null })
+                  }
+                />
+              </label>
+            </div>
+          )}
+
+          {/* Preserve source filename */}
+          <label className="tv-repair-card__radio">
+            <input
+              type="radio"
+              checked={patch.preserve_source_filename && patch.include}
+              onChange={() =>
+                onChange({
+                  ...patch,
+                  include: true,
+                  is_special: false,
+                  preserve_source_filename: true,
+                })
+              }
+            />
+            Preserve original filename
+          </label>
+          {patch.preserve_source_filename && patch.include && (
+            <div className="tv-repair-card__fields">
+              <label>
+                Season
+                <input
+                  type="number"
+                  min="1"
+                  max="99"
+                  value={patch.season_number ?? ""}
+                  onChange={(e) =>
+                    onChange({
+                      ...patch,
+                      season_number: e.target.value ? Number(e.target.value) : null,
+                    })
+                  }
+                />
+              </label>
+            </div>
+          )}
+
+          {/* Exclude */}
+          <label className="tv-repair-card__radio">
+            <input
+              type="radio"
+              checked={!patch.include}
+              onChange={() =>
+                onChange({ ...patch, include: false })
+              }
+            />
+            Exclude from move
+          </label>
+        </fieldset>
+      </div>
+
+      <div className="tv-repair-card__preview">
+        <span>Destination preview</span>
+        <code>{destPreview}</code>
+      </div>
+    </div>
+  );
+}
+
+// ── Duplicate group card ─────────────────────────────────────────────────────
+
+type DuplicateCardProps = {
+  episodeCode: string;
+  episodes: TvEpisode[];
+  patches: TvEpisodeReviewPatch[];
+  showTitle: string;
+  onChange: (next: TvEpisodeReviewPatch) => void;
+};
+
+function DuplicateGroupCard({
+  episodeCode,
+  episodes,
+  patches,
+  showTitle,
+  onChange,
+}: DuplicateCardProps) {
+  return (
+    <div className="tv-repair-card tv-repair-card--duplicate">
+      <div className="tv-repair-card__header">
+        <i className="ti ti-copy" />
+        <span className="tv-repair-card__type">
+          Duplicate episode code: {episodeCode}
+        </span>
+      </div>
+      <p className="tv-repair-card__hint">
+        These files share the same episode code. Resolve each one below.
+      </p>
+      {episodes.map((episode) => {
+        const patch = getPatch(patches, episode);
+        const blocker: ReviewItem = {
+          type: "duplicate_episode_code",
+          message: `Duplicate episode code: ${episodeCode}`,
+          episode_code: episodeCode,
+        };
+        return (
+          <EpisodeCard
+            key={episodeKey(episode)}
+            episode={episode}
+            blocker={blocker}
+            patch={patch}
+            showTitle={showTitle}
+            onChange={onChange}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Season preview ───────────────────────────────────────────────────────────
+
+type SeasonPreviewProps = {
+  batch: BatchSummary;
+};
+
+function SeasonPreview({ batch }: SeasonPreviewProps) {
+  const [expanded, setExpanded] = useState(false);
+
+  const issuesByCode = new Set(
+    (batch.blocking_review_items ?? [])
+      .filter((i) => i.episode_code)
+      .map((i) => i.episode_code),
+  );
+  const issuesByFile = new Set(
+    (batch.blocking_review_items ?? [])
+      .filter((i) => i.file_name)
+      .map((i) => i.file_name),
+  );
+
+  return (
+    <div className="tv-season-preview">
+      <span className="tv-season-preview__label">Season preview</span>
+      <div className="tv-season-preview__list">
+        {batch.seasons.map((season) => {
+          const issueCount = season.episodes.filter(
+            (ep) =>
+              issuesByFile.has(ep.source_file) ||
+              (ep.episode_code != null && issuesByCode.has(ep.episode_code)),
+          ).length;
+          return (
+            <div key={season.season_number ?? "specials"} className="tv-season-preview__row">
+              <code>
+                Season {season.season_number != null
+                  ? String(season.season_number).padStart(2, "0")
+                  : "??"}
+              </code>
+              <span>· {season.episode_count} episodes</span>
+              {issueCount > 0 ? (
+                <span className="tv-season-preview__issue">· {issueCount} issue{issueCount !== 1 ? "s" : ""}</span>
+              ) : (
+                <span className="tv-season-preview__clean">· clean</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {batch.episode_count > 0 && (
+        <button
+          type="button"
+          className="btn-sm"
+          onClick={() => setExpanded((v) => !v)}
+        >
+          {expanded ? "Hide episodes" : "View all episodes"}
+        </button>
+      )}
+      {expanded && (
+        <div className="tv-episode-readonly-list">
+          {batch.seasons.map((season) =>
+            season.episodes.map((ep) => (
+              <code
+                key={`${ep.source_file}||${ep.relative_source ?? ""}`}
+                className="tv-episode-readonly-list__row"
+              >
+                {ep.episode_code ?? "—"} · {ep.episode_title ?? ep.source_file}
+              </code>
+            )),
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main export ──────────────────────────────────────────────────────────────
+
+export default function TvEpisodeReviewPanel({
+  batch,
+  patches,
+  onPatchChange,
+}: Props) {
+  const allEpisodes = batch.seasons.flatMap((s) => s.episodes);
+  const blockingItems = batch.blocking_review_items ?? [];
+  const nonBlockingItems = batch.non_blocking_review_items ?? [];
+
+  // Collect missing-episode-number blockers (keyed by file_name)
+  const missingEpBlockers = blockingItems.filter(
+    (item) => item.type === "missing_episode_number" || item.type === "missing_season_number",
+  );
+  const missingEpFiles = new Set(missingEpBlockers.map((i) => i.file_name).filter(Boolean));
+
+  // Collect duplicate code blockers
+  const duplicateCodes = blockingItems
+    .filter((item) => item.type === "duplicate_episode_code")
+    .map((item) => item.episode_code)
+    .filter((code): code is string => Boolean(code));
+  const uniqueDuplicateCodes = [...new Set(duplicateCodes)];
+
+  // Files that are already covered by a duplicate group — don't double-show them
+  const duplicateGroupFiles = new Set(
+    uniqueDuplicateCodes.flatMap((code) =>
+      allEpisodes
+        .filter((ep) => ep.episode_code === code)
+        .map((ep) => ep.source_file),
+    ),
+  );
+
+  const missingEpEpisodes = allEpisodes.filter(
+    (ep) => missingEpFiles.has(ep.source_file) && !duplicateGroupFiles.has(ep.source_file),
+  );
+
+  const handlePatchChange = (next: TvEpisodeReviewPatch) => {
+    onPatchChange(upsertPatch(patches, next));
+  };
+
+  const showTitle = batch.show_title ?? "Unknown Show";
+  const hasBlockers = blockingItems.length > 0;
+
+  if (!hasBlockers && nonBlockingItems.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className="tv-review-panel">
+      <div className="tv-review-panel__summary">
+        <strong>
+          {blockingItems.length} blocking item{blockingItems.length !== 1 ? "s" : ""} ·{" "}
+          {nonBlockingItems.length} warning{nonBlockingItems.length !== 1 ? "s" : ""}
+        </strong>
+      </div>
+
+      {/* Missing episode number cards */}
+      {missingEpEpisodes.map((episode) => {
+        const blocker =
+          missingEpBlockers.find((b) => b.file_name === episode.source_file) ??
+          missingEpBlockers[0];
+        return (
+          <EpisodeCard
+            key={episodeKey(episode)}
+            episode={episode}
+            blocker={blocker}
+            patch={getPatch(patches, episode)}
+            showTitle={showTitle}
+            onChange={handlePatchChange}
+          />
+        );
+      })}
+
+      {/* Duplicate episode code groups */}
+      {uniqueDuplicateCodes.map((code) => {
+        const groupEpisodes = allEpisodes.filter((ep) => ep.episode_code === code);
+        return (
+          <DuplicateGroupCard
+            key={code}
+            episodeCode={code}
+            episodes={groupEpisodes}
+            patches={patches}
+            showTitle={showTitle}
+            onChange={handlePatchChange}
+          />
+        );
+      })}
+
+      {/* Warnings (non-blocking) */}
+      {nonBlockingItems.length > 0 && (
+        <div className="tv-review-panel__warnings">
+          <span>Warnings</span>
+          {nonBlockingItems.map((item, index) => (
+            <p key={`${item.type}-${item.file_name ?? index}`} className="tv-review-panel__warning-row">
+              <i className="ti ti-info-circle" /> {item.message}
+              {item.file_name && <small>{item.file_name}</small>}
+            </p>
+          ))}
+        </div>
+      )}
+
+      {/* Season preview */}
+      <SeasonPreview batch={batch} />
+    </section>
+  );
+}

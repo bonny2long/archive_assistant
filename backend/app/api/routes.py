@@ -25,6 +25,7 @@ from app.schemas.archive import (
     PaginatedResponse,
     ScanMusicResponse,
     TvMetadataUpdate,
+    TvEpisodeReviewUpdate,
     ReviewConfirmationUpdate,
 )
 from app.services.dev_reset import (
@@ -53,6 +54,7 @@ from app.services.scanner import scan_music_ingest
 from app.services.mover import move_approved_batches
 from app.services.quarantine import quarantine_batch, restore_quarantined_batch
 from app.services.video_metadata import safe_movie_path_part, safe_tv_path_part
+from app.services.tv_review import apply_tv_episode_review_patches
 from app.services.review_state import build_review_state
 from app.core.config import settings
 from app.core.time import configured_timezone, now_local, now_utc, serialize_utc
@@ -808,6 +810,72 @@ def update_tv_metadata(
     batch.updated_at = now_utc()
     db.commit()
     return _batch_to_summary(batch, action_message="TV metadata saved.")
+
+
+@router.patch("/batches/{batch_id}/tv-episode-review", response_model=BatchSummary)
+def update_tv_episode_review(
+    batch_id: int,
+    update: TvEpisodeReviewUpdate,
+    db: Session = Depends(get_db),
+):
+    batch = (
+        db.query(IngestBatch)
+        .options(selectinload(IngestBatch.files))
+        .filter(IngestBatch.id == batch_id)
+        .first()
+    )
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    if batch.detected_type != "video_tv_show":
+        raise HTTPException(status_code=400, detail="Batch is not a TV show")
+    if batch.status in {"moved", "merged"}:
+        raise HTTPException(status_code=400, detail="Moved batches cannot be edited")
+
+    metadata = dict(batch.metadata_json or {})
+
+    if update.show_title is not None:
+        stripped = update.show_title.strip()
+        if stripped:
+            metadata["show_title"] = stripped
+
+    if update.year is not None:
+        year = update.year.strip()
+        metadata["year"] = year or None
+
+    metadata = apply_tv_episode_review_patches(metadata, batch.files, update.patches)
+
+    if update.confirm_non_blocking_warnings:
+        metadata["review_confirmed"] = True
+
+    metadata = build_review_state(batch.detected_type, metadata)
+
+    if metadata.get("blocking_review_items"):
+        batch.status = "needs_metadata_review"
+        metadata["metadata_quality"] = "weak"
+    else:
+        metadata["metadata_quality"] = "reviewed"
+        metadata["review_confirmed"] = True
+        if batch.status in {"needs_metadata_review", "pending_review"}:
+            batch.status = "pending_review"
+
+    batch.metadata_json = metadata
+    batch.metadata_confirmed = True
+    batch.suggested_metadata = {
+        "show_title": metadata.get("show_title"),
+        "year": metadata.get("year"),
+        "sources": {
+            "show_title": "manual review",
+            "year": "manual review",
+        },
+    }
+    show_title_safe = str(metadata.get("show_title") or "Unknown TV Show")
+    batch.suggested_destination = str(
+        settings.tv_dir / safe_tv_path_part(show_title_safe)
+    )
+    batch.confidence = metadata.get("confidence", 1.0)
+    batch.updated_at = now_utc()
+    db.commit()
+    return _batch_to_summary(batch, action_message="TV episode review saved.")
 
 
 @router.patch(

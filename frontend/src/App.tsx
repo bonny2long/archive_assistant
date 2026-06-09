@@ -11,6 +11,7 @@ import type {
   SystemTimeResponse,
   TabKey,
   TvMetadataUpdate,
+  TvEpisodeReviewUpdate,
 } from "./types/archive";
 import { api } from "./api/client";
 import ActionBar from "./components/ActionBar";
@@ -344,6 +345,24 @@ export default function App() {
     }
   };
 
+  const handleTvEpisodeReviewSave = async (update: TvEpisodeReviewUpdate) => {
+    if (!editingBatch) return;
+    setSavingMetadata(true);
+    try {
+      const result = await api.updateTvEpisodeReview(editingBatch.id, update);
+      showToast(result.action_message ?? "TV episode review saved");
+      setEditingBatch(null);
+      await loadBatches();
+    } catch (saveError: unknown) {
+      showToast(
+        saveError instanceof Error ? saveError.message : "TV episode review save failed",
+        "error",
+      );
+    } finally {
+      setSavingMetadata(false);
+    }
+  };
+
   const handleReviewConfirm = async () => {
     if (!editingBatch) return;
     setSavingMetadata(true);
@@ -601,6 +620,7 @@ export default function App() {
           batch={editingBatch}
           saving={savingMetadata}
           onSave={handleTvSave}
+          onSaveEpisodeReview={handleTvEpisodeReviewSave}
           onConfirm={handleReviewConfirm}
           onClose={() => {
             if (!savingMetadata) setEditingBatch(null);

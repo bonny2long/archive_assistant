@@ -181,7 +181,14 @@ export type TvEpisode = {
   episode_title?: string | null;
   subtitle_count?: number;
   source_file: string;
-  relative_source?: string;
+  relative_source?: string | null;
+  // Review patch fields (set by user during episode review)
+  include?: boolean;
+  is_special?: boolean;
+  special_label?: string | null;
+  destination_group?: "season" | "specials" | "oad" | "extras" | null;
+  preserve_source_filename?: boolean;
+  reviewed?: boolean;
 };
 
 export type TvSeason = {
@@ -320,6 +327,26 @@ export type BulkApproveResult = {
   approved: number[];
   skipped: number[];
   errors: BulkApproveError[];
+};
+
+export type TvEpisodeReviewPatch = {
+  source_file: string;
+  relative_source?: string | null;
+  include: boolean;
+  season_number?: number | null;
+  episode_number?: number | null;
+  is_special?: boolean;
+  special_label?: string | null;
+  destination_group?: "season" | "specials" | "oad" | "extras" | null;
+  episode_title?: string | null;
+  preserve_source_filename?: boolean;
+};
+
+export type TvEpisodeReviewUpdate = {
+  show_title?: string | null;
+  year?: string | null;
+  patches: TvEpisodeReviewPatch[];
+  confirm_non_blocking_warnings?: boolean;
 };
 
 export type TabKey = "all" | "pending" | "needs_metadata" | "quarantine" | "approved" | "moved";
