@@ -329,6 +329,9 @@ def _tv_batch_data(source: Path) -> dict | None:
         "media_kind": "tv_show",
         "show_title": show_title,
         "year": year,
+        "season_number": (
+            seasons[0]["season_number"] if len(seasons) == 1 else None
+        ),
         "season_count": len(seasons),
         "episode_count": len(episodes),
         "video_file_count": len(files["video"]),
@@ -435,6 +438,7 @@ def _create_tv_batch(db: Session, source: Path) -> IngestBatch | None:
             IngestBatch.status.in_(
                 [
                     "needs_quarantine_review",
+                    "quarantined",
                     "needs_metadata_review",
                     "pending_review",
                 ]
@@ -442,9 +446,6 @@ def _create_tv_batch(db: Session, source: Path) -> IngestBatch | None:
         )
         .all()
     )
-    for stale_batch in stale_batches:
-        stale_batch.status = "merged"
-
     existing = (
         db.query(IngestBatch)
         .filter(
@@ -455,6 +456,8 @@ def _create_tv_batch(db: Session, source: Path) -> IngestBatch | None:
         .first()
     )
     if existing:
+        for stale_batch in stale_batches:
+            stale_batch.status = "merged"
         if stale_batches:
             db.commit()
         return None
@@ -462,32 +465,17 @@ def _create_tv_batch(db: Session, source: Path) -> IngestBatch | None:
     data = _tv_batch_data(source)
     if data is None:
         return None
-    batch = IngestBatch(
-        source_kind="manual-drop",
-        source_path=str(source),
-    )
-    db.add(batch)
-    db.flush()
-    _apply_tv_batch_data(db, batch, source, data)
-    db.commit()
-    db.refresh(batch)
-    write_json_report(settings.reports_dir, batch.id, data["metadata"])
-    return batch
-
-
-def convert_unknown_batch_to_tv(
-    db: Session,
-    batch: IngestBatch,
-) -> IngestBatch:
-    source = Path(batch.source_path)
-    if not source.is_dir():
-        raise ValueError("TV conversion requires an existing source folder")
-    files = _tv_files(source)
-    if not folder_looks_like_tv_show(source, files["video"]):
-        raise ValueError("No parseable TV episodes were found")
-    data = _tv_batch_data(source)
-    if data is None:
-        raise ValueError("No TV video files were found")
+    if stale_batches:
+        batch = stale_batches[0]
+        for stale_batch in stale_batches[1:]:
+            stale_batch.status = "merged"
+    else:
+        batch = IngestBatch(
+            source_kind="manual-drop",
+            source_path=str(source),
+        )
+        db.add(batch)
+        db.flush()
     _apply_tv_batch_data(db, batch, source, data)
     db.commit()
     db.refresh(batch)
@@ -496,6 +484,24 @@ def convert_unknown_batch_to_tv(
 
 
 def _create_movie_batch(db: Session, source: Path) -> IngestBatch | None:
+    stale_batches = (
+        db.query(IngestBatch)
+        .filter(
+            IngestBatch.source_path == str(source),
+            IngestBatch.detected_type.in_(
+                ["unknown_type", "unsupported_file"]
+            ),
+            IngestBatch.status.in_(
+                [
+                    "needs_quarantine_review",
+                    "quarantined",
+                    "needs_metadata_review",
+                    "pending_review",
+                ]
+            ),
+        )
+        .all()
+    )
     existing = (
         db.query(IngestBatch)
         .filter(
@@ -506,10 +512,16 @@ def _create_movie_batch(db: Session, source: Path) -> IngestBatch | None:
         .first()
     )
     if existing:
+        for stale_batch in stale_batches:
+            stale_batch.status = "merged"
+        if stale_batches:
+            db.commit()
         return None
     files = _movie_files(source)
     if len(files["video"]) != 1:
         return None
+    for stale_batch in stale_batches:
+        stale_batch.status = "merged"
     main_video = files["video"][0]
     original_release_name = source.name if source.is_dir() else main_video.name
     parsed = parse_movie_name(original_release_name)
@@ -600,6 +612,43 @@ def _create_movie_batch(db: Session, source: Path) -> IngestBatch | None:
     return batch
 
 
+def repair_stale_media_batches(
+    db: Session,
+    classifications: dict[Path, str],
+) -> list[IngestBatch]:
+    repaired = []
+    stale = (
+        db.query(IngestBatch)
+        .filter(
+            IngestBatch.detected_type.in_(
+                ["unknown_type", "unsupported_file"]
+            ),
+            IngestBatch.status.in_(
+                [
+                    "needs_quarantine_review",
+                    "quarantined",
+                    "needs_metadata_review",
+                    "pending_review",
+                ]
+            ),
+        )
+        .all()
+    )
+    stale_paths = {batch.source_path for batch in stale}
+    for source, classification in classifications.items():
+        if str(source) not in stale_paths:
+            continue
+        if classification == "video_tv_show":
+            batch = _create_tv_batch(db, source)
+        elif classification == "video_movie":
+            batch = _create_movie_batch(db, source)
+        else:
+            batch = None
+        if batch:
+            repaired.append(batch)
+    return repaired
+
+
 def _unknown_metadata(
     path: Path,
     classification: str,
@@ -666,6 +715,18 @@ def _create_unknown_batch(
     *,
     music_parent: Path | None = None,
 ) -> IngestBatch | None:
+    if path.is_dir():
+        video_files = _movie_files(path)
+        if folder_looks_like_tv_show(path, video_files["video"]):
+            return None
+        if len(video_files["video"]) == 1:
+            return None
+        if any(
+            candidate.is_file() and is_audio_file(candidate)
+            for candidate in path.rglob("*")
+        ):
+            return None
+
     existing = (
         db.query(IngestBatch)
         .filter(
@@ -1124,8 +1185,13 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
         item: classify_ingest_item(item)
         for item in sorted(settings.ingest_root.iterdir())
     }
-    batches: list[IngestBatch] = []
-    tv_batches = []
+    repaired_batches = repair_stale_media_batches(db, classifications)
+    batches: list[IngestBatch] = list(repaired_batches)
+    tv_batches = [
+        batch
+        for batch in repaired_batches
+        if batch.detected_type == "video_tv_show"
+    ]
     for item, classification in classifications.items():
         if classification != "video_tv_show":
             continue
@@ -1133,7 +1199,11 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
         if batch:
             tv_batches.append(batch)
             batches.append(batch)
-    movie_batches = []
+    movie_batches = [
+        batch
+        for batch in repaired_batches
+        if batch.detected_type == "video_movie"
+    ]
     for item, classification in classifications.items():
         if classification != "video_movie":
             continue

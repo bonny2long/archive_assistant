@@ -300,6 +300,7 @@ type TvEpisodeDetail = {
 
 type TvSeasonDetail = {
   season_number?: number;
+  season_title?: string | null;
   episode_count?: number;
   episodes?: TvEpisodeDetail[];
 };
@@ -315,7 +316,15 @@ function TvBatchDetail({ batch, moveSummary }: Props) {
   const warnings = metadataWarnings(batch);
   const alerts = metadataAlertMessages(batch);
   const moved = batch.status === "moved";
-  const destination = readableLibraryPath(batch.suggested_destination);
+  const season = seasons.length === 1 ? seasons[0] : null;
+  const seasonNumber = season?.season_number;
+  const seasonLabel = seasonNumber === undefined
+    ? `${seasons.length} seasons`
+    : `Season ${String(seasonNumber).padStart(2, "0")}`;
+  const destinationRoot = readableLibraryPath(batch.suggested_destination);
+  const destination = seasonNumber === undefined
+    ? destinationRoot
+    : `${destinationRoot}/Season ${String(seasonNumber).padStart(2, "0")}`;
 
   return (
     <div className={`batch-detail ${moved ? "batch-detail--moved" : "batch-detail--review"}`}>
@@ -323,7 +332,7 @@ function TvBatchDetail({ batch, moveSummary }: Props) {
         <div className="library-status__icon"><i className="ti ti-device-tv" /></div>
         <div>
           <div className="library-status__eyebrow">TV show detected</div>
-          <h2>{metadataValue(batch, "show_title")}</h2>
+          <h2>{metadataValue(batch, "show_title")} - {seasonLabel}</h2>
           <p>
             {metadataValue(batch, "season_count")} season(s) ·{" "}
             {metadataValue(batch, "episode_count")} episode(s)
@@ -340,6 +349,10 @@ function TvBatchDetail({ batch, moveSummary }: Props) {
           <h3>TV Show</h3>
           <dl className="library-fields">
             <div><dt>Show</dt><dd>{metadataValue(batch, "show_title")}</dd></div>
+            <div><dt>Season</dt><dd>{seasonNumber ?? "-"}</dd></div>
+            {season?.season_title && (
+              <div><dt>Season title</dt><dd>{season.season_title}</dd></div>
+            )}
             <div><dt>Year</dt><dd>{metadataValue(batch, "year")}</dd></div>
             <div><dt>Seasons</dt><dd>{metadataValue(batch, "season_count")}</dd></div>
             <div><dt>Episodes</dt><dd>{metadataValue(batch, "episode_count")}</dd></div>

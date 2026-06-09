@@ -85,8 +85,10 @@ export type SuggestedMetadata = {
   edition?: string | null;
   format?: string | null;
   show_title?: string | null;
+  season_number?: number | null;
+  season_title?: string | null;
   sources?: Partial<Record<
-    "artist" | "album" | "year" | "genre" | "title" | "edition" | "format" | "show_title",
+    "artist" | "album" | "year" | "genre" | "title" | "edition" | "format" | "show_title" | "season_number" | "season_title",
     string
   >>;
   compilation?: boolean;
@@ -146,7 +148,9 @@ export type MovieMetadataUpdate = {
 
 export type TvMetadataUpdate = {
   show_title: string;
+  season_number?: number | null;
   year?: string | null;
+  season_title?: string | null;
 };
 
 export type TvEpisode = {
@@ -161,6 +165,7 @@ export type TvEpisode = {
 
 export type TvSeason = {
   season_number: number;
+  season_title?: string | null;
   episode_count: number;
   episodes: TvEpisode[];
 };

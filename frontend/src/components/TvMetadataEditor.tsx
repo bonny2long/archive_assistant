@@ -24,12 +24,28 @@ export default function TvMetadataEditor({
   const [year, setYear] = useState(
     () => batch.suggested_metadata?.year ?? batch.year ?? "",
   );
-  const yearValid = year.trim() === "" || /^(19|20)\d{2}$/.test(year.trim());
-  const valid = showTitle.trim() !== "" && yearValid;
-  const preview = useMemo(
-    () => `TV/Library/${sanitizePathPart(showTitle) || "Unknown TV Show"}`,
-    [showTitle],
+  const initialSeason = batch.seasons[0];
+  const [seasonNumber, setSeasonNumber] = useState(
+    () => String(
+      batch.suggested_metadata?.season_number
+      ?? initialSeason?.season_number
+      ?? "",
+    ),
   );
+  const [seasonTitle, setSeasonTitle] = useState(
+    () => batch.suggested_metadata?.season_title ?? initialSeason?.season_title ?? "",
+  );
+  const yearValid = year.trim() === "" || /^(19|20)\d{2}$/.test(year.trim());
+  const seasonValid = /^(?:0|[1-9]\d?)$/.test(seasonNumber.trim());
+  const valid = showTitle.trim() !== "" && yearValid && seasonValid;
+  const preview = useMemo(
+    () => (
+      `TV/Library/${sanitizePathPart(showTitle) || "Unknown TV Show"}`
+      + `/Season ${seasonNumber.trim().padStart(2, "0")}`
+    ),
+    [showTitle, seasonNumber],
+  );
+  const episodes = initialSeason?.episodes ?? [];
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -41,14 +57,16 @@ export default function TvMetadataEditor({
           if (!valid) return;
           void onSave({
             show_title: showTitle.trim(),
+            season_number: Number(seasonNumber),
             year: year.trim() || null,
+            season_title: seasonTitle.trim() || null,
           });
         }}
       >
         <div className="metadata-editor__header">
           <div>
             <h2>Correct TV metadata</h2>
-            <p>Batch {batch.id}. Episode numbering remains read-only in this update.</p>
+            <p>Batch {batch.id}. Episode numbers remain read-only.</p>
           </div>
           <button type="button" className="btn-sm" title="Close" onClick={onClose}>
             <i className="ti ti-x" />
@@ -72,11 +90,28 @@ export default function TvMetadataEditor({
           />
         </label>
         <label>
+          <span>Season number</span>
+          <input
+            type="number"
+            min="0"
+            max="99"
+            value={seasonNumber}
+            onChange={(event) => setSeasonNumber(event.target.value)}
+          />
+        </label>
+        <label>
           <span>Year optional</span>
           <input
             value={year}
             maxLength={4}
             onChange={(event) => setYear(event.target.value)}
+          />
+        </label>
+        <label>
+          <span>Season title optional</span>
+          <input
+            value={seasonTitle}
+            onChange={(event) => setSeasonTitle(event.target.value)}
           />
         </label>
         <div className="metadata-editor__preview">
@@ -85,6 +120,19 @@ export default function TvMetadataEditor({
         </div>
         {!yearValid && (
           <p className="metadata-editor__error">Year must be a four-digit year.</p>
+        )}
+        {!seasonValid && (
+          <p className="metadata-editor__error">Season must be between 0 and 99.</p>
+        )}
+        {episodes.length > 0 && (
+          <div className="tv-editor__episodes">
+            <span>Episode preview</span>
+            {episodes.slice(0, 10).map((episode) => (
+              <code key={`${episode.episode_code}-${episode.source_file}`}>
+                {episode.episode_code ?? "Episode"} - {episode.episode_title ?? episode.source_file}
+              </code>
+            ))}
+          </div>
         )}
         <div className="metadata-editor__actions">
           <button type="button" className="btn" disabled={saving} onClick={onClose}>

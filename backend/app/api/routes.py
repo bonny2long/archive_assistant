@@ -44,7 +44,7 @@ from app.services.music_metadata import (
     sort_music_tracks,
     suggest_music_destination,
 )
-from app.services.scanner import convert_unknown_batch_to_tv, scan_music_ingest
+from app.services.scanner import scan_music_ingest
 from app.services.mover import move_approved_batches
 from app.services.quarantine import quarantine_batch, restore_quarantined_batch
 from app.services.video_metadata import safe_movie_path_part, safe_tv_path_part
@@ -671,13 +671,56 @@ def update_tv_metadata(
     if not show_title:
         raise HTTPException(status_code=422, detail="TV show title is required")
     year = update.year.strip() if update.year else None
+    season_title = update.season_title.strip() if update.season_title else None
     metadata = dict(batch.metadata_json or {})
+    seasons = [
+        dict(season)
+        for season in metadata.get("seasons", [])
+        if isinstance(season, dict)
+    ]
+    season_number = update.season_number
+    if season_number is None and len(seasons) == 1:
+        season_number = seasons[0].get("season_number")
+    if season_number is not None:
+        all_episodes = []
+        for season in seasons:
+            for episode_value in season.get("episodes", []):
+                episode = dict(episode_value)
+                episode["season_number"] = season_number
+                if episode.get("episode_number") is not None:
+                    episode["episode_code"] = (
+                        f"S{season_number:02d}"
+                        f"E{int(episode['episode_number']):02d}"
+                    )
+                all_episodes.append(episode)
+        seasons = [{
+            "season_number": season_number,
+            "season_title": season_title,
+            "episode_count": len(all_episodes),
+            "episodes": all_episodes,
+        }]
+        for ingest_file in batch.files:
+            if ingest_file.detected_role not in {"tv_episode", "tv_subtitle"}:
+                continue
+            file_metadata = dict(ingest_file.metadata_json or {})
+            file_metadata["season_number"] = season_number
+            if file_metadata.get("episode_number") is not None:
+                file_metadata["episode_code"] = (
+                    f"S{season_number:02d}"
+                    f"E{int(file_metadata['episode_number']):02d}"
+                )
+            ingest_file.metadata_json = file_metadata
+    metadata["seasons"] = seasons
+    metadata["season_number"] = season_number
+    metadata["season_count"] = len(seasons)
+    metadata["season_title"] = season_title
     warnings = [
         warning
         for warning in metadata.get("metadata_warnings", [])
         if warning not in {
             "tv_show_title_missing",
             "tv_show_title_from_folder",
+            "tv_metadata_review_required",
             "tv_destination_exists",
         }
     ]
@@ -689,7 +732,19 @@ def update_tv_metadata(
             and alert.get("type") == "tv_destination_exists"
         )
     ]
-    parse_failed = "tv_episode_parse_failed" in warnings
+    parse_failed = any(
+        episode.get("season_number") is None
+        or episode.get("episode_number") is None
+        for season in seasons
+        for episode in season.get("episodes", [])
+        if isinstance(episode, dict)
+    )
+    if not parse_failed:
+        warnings = [
+            warning
+            for warning in warnings
+            if warning != "tv_episode_parse_failed"
+        ]
     metadata.update(
         {
             "show_title": show_title,
@@ -703,9 +758,13 @@ def update_tv_metadata(
     batch.suggested_metadata = {
         "show_title": show_title,
         "year": year,
+        "season_number": season_number,
+        "season_title": season_title,
         "sources": {
             "show_title": "manual correction",
             "year": "manual correction",
+            "season_number": "manual correction",
+            "season_title": "manual correction",
         },
     }
     batch.suggested_destination = str(
@@ -717,32 +776,6 @@ def update_tv_metadata(
     batch.updated_at = now_utc()
     db.commit()
     return _batch_to_summary(batch, action_message="TV metadata saved.")
-
-
-@router.post("/batches/{batch_id}/convert-to-tv", response_model=BatchSummary)
-def convert_to_tv(
-    batch_id: int,
-    db: Session = Depends(get_db),
-):
-    batch = db.get(IngestBatch, batch_id)
-    if not batch:
-        raise HTTPException(status_code=404, detail="Batch not found")
-    if (
-        batch.detected_type != "unknown_type"
-        or batch.status != "needs_quarantine_review"
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail="Only pending unknown-type quarantine rows can be converted",
-        )
-    try:
-        convert_unknown_batch_to_tv(db, batch)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return _batch_to_summary(
-        batch,
-        action_message="Item converted to a TV show.",
-    )
 
 
 @router.post("/batches/{batch_id}/approve", response_model=ApproveResponse)
