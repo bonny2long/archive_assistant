@@ -1,4 +1,4 @@
-"""Preview or apply the reusable Archive Assistant music test reset."""
+"""Preview or apply the reusable Archive Assistant all-media test reset."""
 
 from __future__ import annotations
 
@@ -15,15 +15,15 @@ from app.db.init_db import init_db  # noqa: E402
 from app.db.session import SessionLocal  # noqa: E402
 from app.services.dev_reset import (  # noqa: E402
     DevResetBlockedError,
-    reset_music_test_data,
+    reset_test_data,
 )
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Restore moved music to its original ingest paths and clear music "
-            "test rows without dropping database tables."
+            "Restore moved or quarantined media to original ingest paths and "
+            "clear all test rows without dropping database tables."
         )
     )
     parser.add_argument(
@@ -39,7 +39,7 @@ def main() -> int:
     init_db()
     with SessionLocal() as db:
         try:
-            summary = reset_music_test_data(db, apply=args.apply)
+            summary = reset_test_data(db, apply=args.apply)
         except DevResetBlockedError as exc:
             print("Reset blocked:", file=sys.stderr)
             for error in exc.errors:
@@ -48,7 +48,7 @@ def main() -> int:
 
     print(summary.message)
     print(f"Status: {summary.status}")
-    print(f"Tracks: {summary.restored_tracks}")
+    print(f"Files: {summary.restored_files}")
     print(f"Reports: {summary.removed_reports}")
     print(f"Move logs: {summary.removed_move_logs}")
     print(f"Empty directories: {summary.removed_empty_dirs}")

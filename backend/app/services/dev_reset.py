@@ -14,6 +14,7 @@ from app.models.archive import ArchiveItem, IngestBatch, IngestFile, MoveAction
 class DevResetSummary:
     status: str
     restored_tracks: int
+    restored_files: int
     removed_reports: int
     removed_move_logs: int
     removed_empty_dirs: int
@@ -65,39 +66,37 @@ def _remove_batch_reports(batch_ids: list[int]) -> int:
 
 def _remove_move_logs() -> int:
     removed = 0
-    roots = [
+    for pattern in (
+        "batch-*-move-log.json",
+        "batch-*-movie-move-log.json",
+        "batch-*-tv-move-log.json",
+        "discography-move-log.json",
+    ):
+        for path in settings.data_root.rglob(pattern):
+            if path.is_file():
+                path.unlink()
+                removed += 1
+    return removed
+
+
+def _media_roots() -> list[Path]:
+    return [
         settings.data_root / "Music" / "Library",
         settings.music_discographies_dir,
+        settings.quarantine_discography_dir,
         settings.movies_dir,
+        settings.movies_metadata_dir,
         settings.tv_dir,
-        settings.move_logs_dir,
+        settings.tv_metadata_dir,
+        settings.books_dir,
+        settings.audiobooks_dir,
     ]
-    for root in roots:
-        if not root.exists():
-            continue
-        for pattern in (
-            "batch-*-move-log.json",
-            "batch-*-movie-move-log.json",
-            "batch-*-tv-move-log.json",
-            "discography-move-log.json",
-        ):
-            for path in root.rglob(pattern):
-                if path.is_file():
-                    path.unlink()
-                    removed += 1
-    return removed
 
 
 def _validate_moves(moves: list[MoveAction]) -> list[str]:
     errors: list[str] = []
     seen_sources: set[Path] = set()
-    library_roots = [
-        settings.data_root / "Music" / "Library",
-        settings.music_discographies_dir,
-        settings.quarantine_discography_dir,
-        settings.movies_dir,
-        settings.tv_dir,
-    ]
+    library_roots = _media_roots()
 
     for move in moves:
         if move.status != "completed":
@@ -108,7 +107,7 @@ def _validate_moves(moves: list[MoveAction]) -> list[str]:
         if not _is_within(source, settings.ingest_root):
             errors.append(f"Source is outside ingest root: {source}")
         if not any(_is_within(destination, root) for root in library_roots):
-            errors.append(f"Destination is outside music library: {destination}")
+            errors.append(f"Destination is outside managed media roots: {destination}")
         if source in seen_sources:
             errors.append(f"Duplicate restore target: {source}")
         seen_sources.add(source)
@@ -118,25 +117,73 @@ def _validate_moves(moves: list[MoveAction]) -> list[str]:
     return errors
 
 
-def reset_music_test_data(db: Session, *, apply: bool) -> DevResetSummary:
-    batches = (
-        db.query(IngestBatch)
-        .filter(
-            IngestBatch.detected_type.in_(
-                [
-                    "music_album",
-                    "music_discography",
-                    "video_movie",
-                    "video_tv_show",
-                    "unknown_type",
-                    "unsupported_file",
-                ]
-            ),
-            IngestBatch.status != "quarantined",
+def _quarantine_restore_plan(
+    batches: list[IngestBatch],
+) -> tuple[list[tuple[Path, Path]], list[str]]:
+    plan: list[tuple[Path, Path]] = []
+    errors: list[str] = []
+    quarantine_root = settings.data_root / "_QUARANTINE"
+    for batch in batches:
+        if batch.status != "quarantined":
+            continue
+        metadata = batch.metadata_json or {}
+        quarantine_source = Path(
+            metadata.get("quarantine_destination")
+            or batch.suggested_destination
+            or ""
         )
-        .order_by(IngestBatch.id.asc())
-        .all()
-    )
+        if not quarantine_source.exists():
+            errors.append(
+                f"Quarantine source not found for batch {batch.id}: "
+                f"{quarantine_source}"
+            )
+            continue
+        if not _is_within(quarantine_source, quarantine_root):
+            errors.append(
+                f"Quarantine source is outside quarantine root: "
+                f"{quarantine_source}"
+            )
+            continue
+
+        grouped_paths = [
+            Path(value)
+            for value in metadata.get("grouped_loose_files", [])
+            if isinstance(value, str)
+        ]
+        if grouped_paths:
+            for original in grouped_paths:
+                candidate = quarantine_source / original.name
+                if not candidate.exists():
+                    errors.append(
+                        f"Grouped quarantine file not found: {candidate}"
+                    )
+                    continue
+                plan.append((candidate, original))
+        else:
+            plan.append((quarantine_source, Path(batch.source_path)))
+
+    for quarantine_source, original in plan:
+        if not _is_within(original, settings.ingest_root):
+            errors.append(f"Restore destination is outside ingest: {original}")
+        if original.exists():
+            errors.append(f"Restore destination already exists: {original}")
+    return plan, errors
+
+
+def _remove_quarantine_reports(batch_ids: list[int]) -> int:
+    if not settings.quarantine_reports_dir.exists():
+        return 0
+    batch_suffixes = tuple(f"_{batch_id}.json" for batch_id in batch_ids)
+    removed = 0
+    for path in settings.quarantine_reports_dir.glob("*.json"):
+        if path.name.endswith(batch_suffixes):
+            path.unlink()
+            removed += 1
+    return removed
+
+
+def reset_test_data(db: Session, *, apply: bool) -> DevResetSummary:
+    batches = db.query(IngestBatch).order_by(IngestBatch.id.asc()).all()
     batch_ids = [batch.id for batch in batches]
     moves = (
         db.query(MoveAction)
@@ -147,7 +194,8 @@ def reset_music_test_data(db: Session, *, apply: bool) -> DevResetSummary:
         else []
     )
 
-    errors = _validate_moves(moves)
+    quarantine_plan, quarantine_errors = _quarantine_restore_plan(batches)
+    errors = [*_validate_moves(moves), *quarantine_errors]
     if errors:
         raise DevResetBlockedError(errors)
 
@@ -160,13 +208,15 @@ def reset_music_test_data(db: Session, *, apply: bool) -> DevResetSummary:
         return DevResetSummary(
             status="dry_run",
             restored_tracks=len(restorable),
+            restored_files=len(restorable) + len(quarantine_plan),
             removed_reports=len(batch_ids),
             removed_move_logs=0,
             removed_empty_dirs=0,
             cleared_batches=len(batch_ids),
             message=(
                 "Dry run only. "
-                f"Would restore {len(restorable)} track(s) to ingest and "
+                f"Would restore {len(restorable) + len(quarantine_plan)} "
+                "file(s) to ingest and "
                 f"clear {len(batch_ids)} ingest batch(es)."
             ),
         )
@@ -178,18 +228,21 @@ def reset_music_test_data(db: Session, *, apply: bool) -> DevResetSummary:
         source.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(destination), str(source))
         restored_tracks += 1
+    restored_files = restored_tracks
 
-    removed_reports = _remove_batch_reports(batch_ids)
+    for quarantine_source, original in quarantine_plan:
+        original.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(quarantine_source), str(original))
+        restored_files += 1
+
+    removed_reports = (
+        _remove_batch_reports(batch_ids)
+        + _remove_quarantine_reports(batch_ids)
+    )
     removed_move_logs = _remove_move_logs()
     removed_empty_dirs = sum(
         _remove_empty_directories(root)
-        for root in (
-            settings.data_root / "Music" / "Library",
-            settings.music_discographies_dir,
-            settings.quarantine_discography_dir,
-            settings.movies_dir,
-            settings.tv_dir,
-        )
+        for root in [*_media_roots(), settings.data_root / "_QUARANTINE"]
     )
 
     if batch_ids:
@@ -199,11 +252,7 @@ def reset_music_test_data(db: Session, *, apply: bool) -> DevResetSummary:
         db.query(IngestFile).filter(IngestFile.batch_id.in_(batch_ids)).delete(
             synchronize_session=False
         )
-        db.query(ArchiveItem).filter(
-            ArchiveItem.media_type.in_(["music", "video", "tv"])
-        ).delete(
-            synchronize_session=False
-        )
+        db.query(ArchiveItem).delete(synchronize_session=False)
         db.query(IngestBatch).filter(IngestBatch.id.in_(batch_ids)).delete(
             synchronize_session=False
         )
@@ -212,13 +261,19 @@ def reset_music_test_data(db: Session, *, apply: bool) -> DevResetSummary:
     return DevResetSummary(
         status="ok",
         restored_tracks=restored_tracks,
+        restored_files=restored_files,
         removed_reports=removed_reports,
         removed_move_logs=removed_move_logs,
         removed_empty_dirs=removed_empty_dirs,
         cleared_batches=len(batch_ids),
         message=(
-            "Ingest test data reset. "
-            f"Restored {restored_tracks} track(s) and cleared "
+            "All ingest test data reset. "
+            f"Restored {restored_files} file(s) and cleared "
             f"{len(batch_ids)} batch(es). Source files were not deleted."
         ),
     )
+
+
+def reset_music_test_data(db: Session, *, apply: bool) -> DevResetSummary:
+    """Compatibility alias for existing scripts and older API clients."""
+    return reset_test_data(db, apply=apply)

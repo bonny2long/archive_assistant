@@ -26,7 +26,11 @@ from app.schemas.archive import (
     ScanMusicResponse,
     TvMetadataUpdate,
 )
-from app.services.dev_reset import DevResetBlockedError, reset_music_test_data
+from app.services.dev_reset import (
+    DevResetBlockedError,
+    reset_music_test_data,
+    reset_test_data,
+)
 from app.services.batch_display import build_batch_display_fields
 from app.services.batch_merge import (
     find_archived_duplicate_candidate,
@@ -108,10 +112,22 @@ def scan_music(db: Session = Depends(get_db)):
 
 @router.post("/dev/reset/music-test", response_model=DevResetResponse)
 def dev_reset_music_test(db: Session = Depends(get_db)):
+    """Compatibility route for older clients."""
     if not (settings.debug and settings.dev_tools_enabled):
         raise HTTPException(status_code=404, detail="Dev reset is not available")
     try:
         summary = reset_music_test_data(db, apply=True)
+    except DevResetBlockedError as exc:
+        raise HTTPException(status_code=409, detail=exc.errors) from exc
+    return DevResetResponse(**summary.__dict__)
+
+
+@router.post("/dev/reset/test-data", response_model=DevResetResponse)
+def dev_reset_test_data(db: Session = Depends(get_db)):
+    if not (settings.debug and settings.dev_tools_enabled):
+        raise HTTPException(status_code=404, detail="Dev reset is not available")
+    try:
+        summary = reset_test_data(db, apply=True)
     except DevResetBlockedError as exc:
         raise HTTPException(status_code=409, detail=exc.errors) from exc
     return DevResetResponse(**summary.__dict__)

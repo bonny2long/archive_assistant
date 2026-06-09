@@ -239,7 +239,7 @@ The dashboard is a **React + TypeScript** SPA built with **Vite**. Features:
 - **Batch table**: selectable rows, expandable detail panels, inline status badges.
 - **Moved library detail**: final destination, metadata used, timeline, move counts, and per-file move history.
 - **Library summary**: moved albums, moved tracks, failed moves, and review counts.
-- **Dev reset**: restores moved test tracks and clears music test rows from the frontend in local debug mode.
+- **Dev reset**: restores moved or quarantined test media and clears all ingest/archive test rows from the frontend in local debug mode.
 - **Bulk actions**: select all / approve multiple / reject multiple.
 - **Metadata editor**: modal form with artist, album, year, genre fields and live destination preview.
 - **Discography intake**: deterministic collection detection, album summary table, artist correction, and guarded moves.
@@ -275,7 +275,8 @@ Available scripts (`cd frontend`):
 | `POST` | `/api/batches/bulk-approve` | Bulk approve by IDs |
 | `POST` | `/api/scan/music` | Trigger scan and report created/skipped duplicate counts |
 | `POST` | `/api/move/approved` | Move all approved batches |
-| `POST` | `/api/dev/reset/music-test` | Reset local music test data; debug/dev mode only |
+| `POST` | `/api/dev/reset/test-data` | Reset all local media test data; debug/dev mode only |
+| `POST` | `/api/dev/reset/music-test` | Compatibility alias for older reset clients |
 
 Interactive docs are disabled by default. Enable with `API_DOCS_ENABLED=true` in `backend/.env`.
 
@@ -316,8 +317,10 @@ python scripts/reset_music_test.py --apply
 
 This restores moved tracks to their original `data/_INGEST` paths, removes generated music reports and move logs, and clears music records without dropping or recreating database tables.
 
-In local debug mode, the same guarded reset is available from the dashboard using
-**Reset test data**. The button asks for confirmation and is hidden when debug
+In local debug mode, the same guarded all-media reset is available from the dashboard using
+**Reset test data**. It restores completed library/quarantine moves to `_INGEST`,
+clears batches, archive rows, reports, and move logs, and preserves database
+tables. The button asks for confirmation and is hidden when debug
 tools are disabled.
 
 ### Worse metadata test folders

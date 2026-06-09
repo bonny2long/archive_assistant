@@ -193,6 +193,7 @@ class ScanMusicResponse(BaseModel):
 class DevResetResponse(BaseModel):
     status: str
     restored_tracks: int
+    restored_files: int
     removed_reports: int
     removed_move_logs: int
     removed_empty_dirs: int

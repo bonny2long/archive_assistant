@@ -428,19 +428,19 @@ export default function App() {
 
   const handleReset = async () => {
     const confirmed = window.confirm(
-      "Reset local ingest test data? This restores moved music files to _INGEST "
-      + "and clears music, unknown, and unsupported review batches. "
-      + "It will not delete source files or clear completed quarantine records.",
+      "Reset all local ingest test data? This restores moved and quarantined "
+      + "media to _INGEST, clears every review batch, archive row, report, "
+      + "and move log. Database tables and source files are preserved.",
     );
     if (!confirmed) return;
 
     setLoadingAction("reset");
     try {
-      const result = await api.resetMusicTest();
+      const result = await api.resetTestData();
       showToast(result.message);
       setQaSummary({
         title: "Reset summary",
-        text: `${result.restored_tracks} tracks restored · ${result.cleared_batches} batches cleared · ${result.removed_move_logs} move logs removed`,
+        text: `${result.restored_files} files restored · ${result.cleared_batches} batches cleared · ${result.removed_move_logs} move logs removed`,
       });
       setTab("all");
       setSelected(new Set());

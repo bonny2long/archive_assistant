@@ -62,5 +62,5 @@ export const api = {
     request<BatchSummary>(`/batches/${id}/restore-quarantine`, "POST"),
   moveApproved: () => request<MoveResult>("/move/approved", "POST"),
   getLibrarySummary: () => request<LibrarySummary>("/library/summary"),
-  resetMusicTest: () => request<DevResetResponse>("/dev/reset/music-test", "POST"),
+  resetTestData: () => request<DevResetResponse>("/dev/reset/test-data", "POST"),
 };

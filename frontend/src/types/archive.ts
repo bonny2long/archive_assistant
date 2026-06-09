@@ -202,6 +202,7 @@ export type ScanMusicResponse = {
 export type DevResetResponse = {
   status: string;
   restored_tracks: number;
+  restored_files: number;
   removed_reports: number;
   removed_move_logs: number;
   removed_empty_dirs: number;
