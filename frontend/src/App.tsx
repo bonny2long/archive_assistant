@@ -272,6 +272,21 @@ export default function App() {
     }
   };
 
+  const handleConvertToTv = async (id: number) => {
+    try {
+      const result = await api.convertToTv(id);
+      showToast(result.action_message ?? "Item converted to a TV show");
+      await loadBatches();
+    } catch (convertError: unknown) {
+      showToast(
+        convertError instanceof Error
+          ? convertError.message
+          : "TV conversion failed",
+        "error",
+      );
+    }
+  };
+
   const handleMetadataSave = async (update: BatchMetadataUpdate) => {
     if (!editingBatch) return;
     setSavingMetadata(true);
@@ -526,6 +541,7 @@ export default function App() {
           onRecovery={(id) => void handleRecovery(id)}
           onQuarantine={(id) => void handleQuarantine(id)}
           onRestoreQuarantine={(id) => void handleRestoreQuarantine(id)}
+          onConvertToTv={(id) => void handleConvertToTv(id)}
           onEdit={setEditingBatch}
           onBulkApprove={() => {
             setShowBulkApprove(true);

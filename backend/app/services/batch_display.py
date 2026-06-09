@@ -69,6 +69,19 @@ def build_batch_display_fields(batch: IngestBatch) -> dict:
         episode_count = int(metadata.get("episode_count") or 0)
         season_label = "season" if season_count == 1 else "seasons"
         episode_label = "episode" if episode_count == 1 else "episodes"
+        seasons = metadata.get("seasons") or []
+        season_number = (
+            seasons[0].get("season_number")
+            if season_count == 1
+            and len(seasons) == 1
+            and isinstance(seasons[0], dict)
+            else None
+        )
+        season_text = (
+            f"Season {int(season_number):02d}"
+            if season_number is not None
+            else f"{season_count} {season_label}"
+        )
         return {
             "media_category": "tv",
             "media_label": "TV Show",
@@ -80,6 +93,9 @@ def build_batch_display_fields(batch: IngestBatch) -> dict:
             "item_label": "episodes",
             "item_count": episode_count,
             "edit_kind": "tv_show",
+            "secondary_name": (
+                f"{season_text} - {episode_count} {episode_label}"
+            ),
         }
 
     if detected_type in QUARANTINE_TYPES:

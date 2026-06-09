@@ -306,6 +306,14 @@ function TvBatchDetail({ batch, moveSummary }: Props) {
   const warnings = metadataWarnings(batch);
   const alerts = metadataAlertMessages(batch);
   const moved = batch.status === "moved";
+  const onlySeasonNumber = (
+    seasons.length === 1
+    && seasons[0].season_number !== undefined
+  ) ? seasons[0].season_number : null;
+  const destination = readableLibraryPath(batch.suggested_destination);
+  const destinationPreview = onlySeasonNumber === null
+    ? destination
+    : `${destination}/Season ${String(onlySeasonNumber).padStart(2, "0")}`;
 
   return (
     <div className={`batch-detail ${moved ? "batch-detail--moved" : "batch-detail--review"}`}>
@@ -330,6 +338,7 @@ function TvBatchDetail({ batch, moveSummary }: Props) {
           <h3>TV Show</h3>
           <dl className="library-fields">
             <div><dt>Show</dt><dd>{metadataValue(batch, "show_title")}</dd></div>
+            <div><dt>Year</dt><dd>{metadataValue(batch, "year")}</dd></div>
             <div><dt>Seasons</dt><dd>{metadataValue(batch, "season_count")}</dd></div>
             <div><dt>Episodes</dt><dd>{metadataValue(batch, "episode_count")}</dd></div>
             <div><dt>Video files</dt><dd>{metadataValue(batch, "video_file_count")}</dd></div>
@@ -352,7 +361,7 @@ function TvBatchDetail({ batch, moveSummary }: Props) {
 
       <section className="library-destination">
         <span>{moved ? "Final destination" : "Destination preview"}</span>
-        <strong>{readableLibraryPath(batch.suggested_destination)}</strong>
+        <strong>{destinationPreview}</strong>
       </section>
 
       {warnings.length > 0 && (

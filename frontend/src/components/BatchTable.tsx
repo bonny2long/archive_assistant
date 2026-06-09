@@ -32,6 +32,7 @@ type Props = {
   onRecovery: (id: number) => void;
   onQuarantine: (id: number) => void;
   onRestoreQuarantine: (id: number) => void;
+  onConvertToTv: (id: number) => void;
   onEdit: (batch: BatchSummary) => void;
   onBulkApprove: () => Promise<void>;
   onBulkReject: () => Promise<void>;
@@ -56,6 +57,7 @@ export default function BatchTable({
   onRecovery,
   onQuarantine,
   onRestoreQuarantine,
+  onConvertToTv,
   onEdit,
   onBulkApprove,
   onBulkReject,
@@ -110,14 +112,14 @@ export default function BatchTable({
           <colgroup>
             <col style={{ width: 36 }} />
             <col style={{ width: 42 }} />
-            <col style={{ width: 95 }} />
-            <col style={{ width: 145 }} />
+            <col style={{ width: 90 }} />
+            <col />
             <col />
             <col style={{ width: 65 }} />
-            <col style={{ width: 80 }} />
+            <col style={{ width: 90 }} />
             <col style={{ width: 120 }} />
             <col style={{ width: 110 }} />
-            <col style={{ width: 190 }} />
+            <col style={{ width: 180 }} />
           </colgroup>
           <thead>
             <tr>
@@ -166,6 +168,7 @@ export default function BatchTable({
                 onRecovery={onRecovery}
                 onQuarantine={onQuarantine}
                 onRestoreQuarantine={onRestoreQuarantine}
+                onConvertToTv={onConvertToTv}
                 onEdit={onEdit}
               />
             ))}

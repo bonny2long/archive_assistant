@@ -217,9 +217,18 @@ def _tv_episode_destination(
     episode_code = metadata.get("episode_code")
     if season_number is None or not episode_code:
         return None
+    episode_title = str(
+        metadata.get("episode_title")
+        or metadata.get("show_title")
+        or Path(ingest_file.file_name).stem
+    )
+    file_name = (
+        f"{episode_code} - {safe_tv_path_part(episode_title)}"
+        f"{Path(ingest_file.file_name).suffix.lower()}"
+    )
     return (
         _tv_season_destination(destination, int(season_number))
-        / f"{episode_code} - {ingest_file.file_name}"
+        / file_name
     )
 
 

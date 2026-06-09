@@ -38,9 +38,11 @@ from app.services.video_metadata import (
     is_movie_artwork,
     is_subtitle_file,
     is_video_file,
+    folder_looks_like_tv_show,
     looks_like_tv,
     looks_like_tv_episode,
     parse_movie_name,
+    parse_tv_folder_name,
     parse_tv_episode_name,
     safe_movie_path_part,
     safe_tv_path_part,
@@ -109,12 +111,7 @@ def classify_ingest_item(path: Path) -> str:
         if candidate.is_file() and is_video_file(candidate)
     ]
     if video_files and not audio_files:
-        tv_names = [
-            path.name
-            for path in [path, *path.rglob("*")]
-            if path.is_dir() or path in video_files
-        ]
-        if any(looks_like_tv(name) for name in tv_names):
+        if folder_looks_like_tv_show(path, video_files):
             return "video_tv_show"
         if (
             len(video_files) == 1
@@ -244,13 +241,7 @@ def _season_number_from_path(path: Path, root: Path) -> int | None:
 
 
 def _clean_tv_show_folder_name(value: str) -> str:
-    cleaned = re.sub(
-        r"(?i)\s*[-_. ]*season[ ._-]*\d{1,2}\s*$",
-        "",
-        value,
-    )
-    cleaned = re.sub(r"[._]+", " ", cleaned)
-    return re.sub(r"\s+", " ", cleaned).strip(" -._()[]")
+    return str(parse_tv_folder_name(value).get("show_title") or "")
 
 
 def _tv_episode_metadata(path: Path, root: Path) -> dict:
@@ -270,30 +261,24 @@ def _tv_episode_metadata(path: Path, root: Path) -> dict:
     return parsed
 
 
-def _create_tv_batch(db: Session, source: Path) -> IngestBatch | None:
-    existing = (
-        db.query(IngestBatch)
-        .filter(
-            IngestBatch.source_path == str(source),
-            IngestBatch.detected_type == "video_tv_show",
-            IngestBatch.status != "merged",
-        )
-        .first()
-    )
-    if existing:
-        return None
-
+def _tv_batch_data(source: Path) -> dict | None:
     files = _tv_files(source)
     if not files["video"]:
         return None
+
     episodes = [_tv_episode_metadata(path, source) for path in files["video"]]
     parsed_titles = [
         str(episode["show_title"]).strip()
         for episode in episodes
         if episode.get("show_title")
     ]
-    folder_title = _clean_tv_show_folder_name(source.name)
-    show_title = Counter(parsed_titles).most_common(1)[0][0] if parsed_titles else folder_title
+    folder_metadata = parse_tv_folder_name(source.name)
+    folder_title = str(folder_metadata.get("show_title") or "")
+    show_title = (
+        Counter(parsed_titles).most_common(1)[0][0]
+        if parsed_titles
+        else folder_title
+    )
     warnings = []
     if not parsed_titles:
         warnings.append("tv_show_title_from_folder")
@@ -325,8 +310,16 @@ def _create_tv_batch(db: Session, source: Path) -> IngestBatch | None:
         }
         for season_number, season_episodes in sorted(seasons_by_number.items())
     ]
-    year_values = [episode.get("year") for episode in episodes if episode.get("year")]
-    year = Counter(year_values).most_common(1)[0][0] if year_values else None
+    year_values = [
+        episode.get("year")
+        for episode in episodes
+        if episode.get("year")
+    ]
+    year = (
+        Counter(year_values).most_common(1)[0][0]
+        if year_values
+        else folder_metadata.get("year")
+    )
     metadata = {
         "media_kind": "tv_show",
         "show_title": show_title,
@@ -334,48 +327,74 @@ def _create_tv_batch(db: Session, source: Path) -> IngestBatch | None:
         "season_count": len(seasons),
         "episode_count": len(episodes),
         "video_file_count": len(files["video"]),
+        "format": files["video"][0].suffix.lstrip(".").upper(),
         "subtitle_count": len(files["subtitles"]),
         "artwork_count": len(files["artwork"]),
         "ignored_sidecar_count": len(files["ignored"]),
-        "artwork_files": [str(path.relative_to(source)) for path in files["artwork"]],
-        "subtitle_files": [str(path.relative_to(source)) for path in files["subtitles"]],
+        "artwork_files": [
+            str(path.relative_to(source)) for path in files["artwork"]
+        ],
+        "subtitle_files": [
+            str(path.relative_to(source)) for path in files["subtitles"]
+        ],
         "ignored_sidecar_files": [
             str(path.relative_to(source)) for path in files["ignored"]
         ],
         "seasons": seasons,
-        "metadata_quality": "weak" if parse_failed or not show_title else "good",
+        "metadata_quality": "weak" if parse_failed else "good",
         "metadata_warnings": list(dict.fromkeys(warnings)),
         "confidence": 0.6 if parse_failed else 0.85,
     }
-    destination = settings.tv_dir / safe_tv_path_part(show_title)
-    batch = IngestBatch(
-        source_kind="manual-drop",
-        source_path=str(source),
-        detected_type="video_tv_show",
-        status="needs_metadata_review" if parse_failed else "pending_review",
-        confidence=metadata["confidence"],
-        suggested_destination=str(destination),
-        suggested_metadata={
+    return {
+        "files": files,
+        "metadata": metadata,
+        "status": "needs_metadata_review" if parse_failed else "pending_review",
+        "suggested_destination": str(
+            settings.tv_dir / safe_tv_path_part(show_title)
+        ),
+        "suggested_metadata": {
             "show_title": show_title,
             "year": year,
             "sources": {
-                "show_title": "episode filenames" if parsed_titles else "folder name",
-                "year": "episode filenames",
+                "show_title": (
+                    "episode filenames" if parsed_titles else "folder name"
+                ),
+                "year": (
+                    "episode filenames" if year_values else "folder name"
+                ),
             },
         },
-        metadata_json=metadata,
-    )
+    }
+
+
+def _apply_tv_batch_data(
+    db: Session,
+    batch: IngestBatch,
+    source: Path,
+    data: dict,
+) -> None:
+    db.query(IngestFile).filter(IngestFile.batch_id == batch.id).delete()
+    batch.detected_type = "video_tv_show"
+    batch.status = data["status"]
+    batch.confidence = data["metadata"]["confidence"]
+    batch.suggested_destination = data["suggested_destination"]
+    batch.suggested_metadata = data["suggested_metadata"]
+    batch.metadata_json = data["metadata"]
+    batch.metadata_confirmed = False
     db.add(batch)
     db.flush()
 
+    files = data["files"]
     for path, role in (
         [(path, "tv_episode") for path in files["video"]]
         + [(path, "tv_subtitle") for path in files["subtitles"]]
         + [(path, "tv_artwork") for path in files["artwork"]]
     ):
-        file_metadata = _tv_episode_metadata(path, source) if role != "tv_artwork" else {
-            "relative_source": str(path.relative_to(source)),
-        }
+        file_metadata = (
+            _tv_episode_metadata(path, source)
+            if role != "tv_artwork"
+            else {"relative_source": str(path.relative_to(source))}
+        )
         db.add(
             IngestFile(
                 batch_id=batch.id,
@@ -383,14 +402,59 @@ def _create_tv_batch(db: Session, source: Path) -> IngestBatch | None:
                 file_name=path.name,
                 extension=path.suffix.lower(),
                 size_bytes=path.stat().st_size,
-                checksum=file_sha256(path),
+                checksum=None,
                 detected_role=role,
                 metadata_json=file_metadata,
             )
         )
+
+
+def _create_tv_batch(db: Session, source: Path) -> IngestBatch | None:
+    existing = (
+        db.query(IngestBatch)
+        .filter(
+            IngestBatch.source_path == str(source),
+            IngestBatch.detected_type == "video_tv_show",
+            IngestBatch.status != "merged",
+        )
+        .first()
+    )
+    if existing:
+        return None
+
+    data = _tv_batch_data(source)
+    if data is None:
+        return None
+    batch = IngestBatch(
+        source_kind="manual-drop",
+        source_path=str(source),
+    )
+    db.add(batch)
+    db.flush()
+    _apply_tv_batch_data(db, batch, source, data)
     db.commit()
     db.refresh(batch)
-    write_json_report(settings.reports_dir, batch.id, metadata)
+    write_json_report(settings.reports_dir, batch.id, data["metadata"])
+    return batch
+
+
+def convert_unknown_batch_to_tv(
+    db: Session,
+    batch: IngestBatch,
+) -> IngestBatch:
+    source = Path(batch.source_path)
+    if not source.is_dir():
+        raise ValueError("TV conversion requires an existing source folder")
+    files = _tv_files(source)
+    if not folder_looks_like_tv_show(source, files["video"]):
+        raise ValueError("No parseable TV episodes were found")
+    data = _tv_batch_data(source)
+    if data is None:
+        raise ValueError("No TV video files were found")
+    _apply_tv_batch_data(db, batch, source, data)
+    db.commit()
+    db.refresh(batch)
+    write_json_report(settings.reports_dir, batch.id, data["metadata"])
     return batch
 
 

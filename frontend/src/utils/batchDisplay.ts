@@ -132,6 +132,17 @@ export function getBatchSecondaryName(batch: DisplayBatch): string {
       ?? metadataValue(batch, "episode_count")
       ?? 0,
     );
+    const seasonRows = metadataValue(batch, "seasons");
+    const seasonNumber = (
+      seasons === 1
+      && Array.isArray(seasonRows)
+      && typeof seasonRows[0] === "object"
+      && seasonRows[0] !== null
+      && "season_number" in seasonRows[0]
+    ) ? Number(seasonRows[0].season_number) : null;
+    if (seasonNumber !== null && Number.isFinite(seasonNumber)) {
+      return `Season ${String(seasonNumber).padStart(2, "0")} - ${episodes} ${episodes === 1 ? "episode" : "episodes"}`;
+    }
     return `${seasons} ${seasons === 1 ? "season" : "seasons"} · ${episodes} ${episodes === 1 ? "episode" : "episodes"}`;
   }
   if (batch.detected_type === "unknown_type" || batch.detected_type === "unsupported_file") {

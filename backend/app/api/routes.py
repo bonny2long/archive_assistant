@@ -44,7 +44,7 @@ from app.services.music_metadata import (
     sort_music_tracks,
     suggest_music_destination,
 )
-from app.services.scanner import scan_music_ingest
+from app.services.scanner import convert_unknown_batch_to_tv, scan_music_ingest
 from app.services.mover import move_approved_batches
 from app.services.quarantine import quarantine_batch, restore_quarantined_batch
 from app.services.video_metadata import safe_movie_path_part, safe_tv_path_part
@@ -717,6 +717,32 @@ def update_tv_metadata(
     batch.updated_at = now_utc()
     db.commit()
     return _batch_to_summary(batch, action_message="TV metadata saved.")
+
+
+@router.post("/batches/{batch_id}/convert-to-tv", response_model=BatchSummary)
+def convert_to_tv(
+    batch_id: int,
+    db: Session = Depends(get_db),
+):
+    batch = db.get(IngestBatch, batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    if (
+        batch.detected_type != "unknown_type"
+        or batch.status != "needs_quarantine_review"
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Only pending unknown-type quarantine rows can be converted",
+        )
+    try:
+        convert_unknown_batch_to_tv(db, batch)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return _batch_to_summary(
+        batch,
+        action_message="Item converted to a TV show.",
+    )
 
 
 @router.post("/batches/{batch_id}/approve", response_model=ApproveResponse)

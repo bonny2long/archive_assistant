@@ -33,6 +33,10 @@ SEASON_PATTERN = re.compile(
     r"(?<![a-z0-9])season[ ._-]*(?P<season>\d{1,2})(?![a-z0-9])",
     re.IGNORECASE,
 )
+TV_FOLDER_SEASON_PATTERN = re.compile(
+    r"(?<![a-z0-9])(?:season|series|s)[ ._-]*(?P<season>\d{1,2})(?![a-z0-9])",
+    re.IGNORECASE,
+)
 EPISODE_ONLY_PATTERN = re.compile(
     r"(?<![a-z0-9])episode[ ._-]*(?P<episode>\d{1,3})(?![a-z0-9])",
     re.IGNORECASE,
@@ -80,6 +84,57 @@ def looks_like_tv_episode(value: str) -> bool:
         or TV_X_PATTERN.search(value)
         or EPISODE_ONLY_PATTERN.search(value)
     )
+
+
+def folder_looks_like_tv_show(root: Path, video_files: list[Path]) -> bool:
+    if not video_files:
+        return False
+
+    parsed = [parse_tv_episode_name(path.name) for path in video_files]
+    parsed_count = sum(
+        item.get("season_number") is not None
+        and item.get("episode_number") is not None
+        for item in parsed
+    )
+    if parsed_count and parsed_count / len(video_files) >= 0.6:
+        return True
+
+    season_folders = [root.name]
+    season_folders.extend(
+        parent.name
+        for video_file in video_files
+        for parent in video_file.parents
+        if parent == root or root in parent.parents
+    )
+    has_season_folder = any(
+        TV_FOLDER_SEASON_PATTERN.search(name)
+        for name in season_folders
+    )
+    if len(video_files) >= 2 and has_season_folder:
+        return True
+    return parsed_count >= 1 and has_season_folder
+
+
+def parse_tv_folder_name(value: str) -> dict:
+    raw = Path(value).name
+    year_matches = list(YEAR_PATTERN.finditer(raw))
+    year = year_matches[-1].group(1) if year_matches else None
+    season_match = TV_FOLDER_SEASON_PATTERN.search(raw)
+    season_number = (
+        int(season_match.group("season"))
+        if season_match
+        else None
+    )
+    title = YEAR_PATTERN.sub(" ", raw)
+    title = TV_FOLDER_SEASON_PATTERN.sub(" ", title)
+    title = re.sub(r"[._]+", " ", title)
+    title = re.sub(r"\s*[-]+\s*", " ", title)
+    title = re.sub(r"\s+", " ", title).strip(" -._()[]")
+    return {
+        "show_title": title or None,
+        "season_number": season_number,
+        "year": year,
+    }
 
 
 def safe_movie_path_part(value: str) -> str:
