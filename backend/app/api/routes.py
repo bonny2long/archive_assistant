@@ -19,12 +19,14 @@ from app.schemas.archive import (
     IngestBatchOut, 
     IngestFileOut,
     LibrarySummary,
+    MovieMetadataUpdate,
     MoveActionOut,
     MoveResponse,
     PaginatedResponse,
     ScanMusicResponse,
 )
 from app.services.dev_reset import DevResetBlockedError, reset_music_test_data
+from app.services.batch_display import build_batch_display_fields
 from app.services.batch_merge import (
     find_archived_duplicate_candidate,
     find_merge_candidate_batches,
@@ -44,6 +46,7 @@ from app.services.music_metadata import (
 from app.services.scanner import scan_music_ingest
 from app.services.mover import move_approved_batches
 from app.services.quarantine import quarantine_batch
+from app.services.video_metadata import safe_movie_path_part
 from app.core.config import settings
 from app.core.time import configured_timezone, now_local, now_utc, serialize_utc
 
@@ -331,6 +334,8 @@ def library_summary(db: Session = Depends(get_db)):
     return LibrarySummary(
         moved_albums=moved_albums,
         moved_tracks=moved_tracks,
+        moved_batches=moved_albums,
+        moved_files=moved_tracks,
         failed_moves=failed_moves,
         approved_waiting=approved_waiting,
         needs_metadata=needs_metadata,
@@ -446,6 +451,69 @@ def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Sessio
         merge_result.batch,
         action_message=action_message or "Metadata saved.",
     )
+
+
+@router.patch("/batches/{batch_id}/movie-metadata", response_model=BatchSummary)
+def update_movie_metadata(
+    batch_id: int,
+    update: MovieMetadataUpdate,
+    db: Session = Depends(get_db),
+):
+    batch = db.get(IngestBatch, batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    if batch.detected_type != "video_movie":
+        raise HTTPException(status_code=400, detail="Batch is not a movie")
+    if batch.status in {"moved", "merged"}:
+        raise HTTPException(status_code=400, detail="Moved batches cannot be edited")
+
+    title = update.title.strip()
+    year = update.year.strip() if update.year else None
+    edition = update.edition.strip() if update.edition else None
+    movie_format = update.format.strip().upper() if update.format else None
+    metadata = dict(batch.metadata_json or {})
+    warnings = [
+        warning
+        for warning in metadata.get("metadata_warnings", [])
+        if warning not in {"movie_year_missing", "movie_destination_exists"}
+    ]
+    if not year:
+        warnings.append("movie_year_missing")
+
+    metadata.update(
+        {
+            "title": title,
+            "year": year,
+            "edition": edition,
+            "metadata_quality": "good" if year else "weak",
+            "metadata_warnings": warnings,
+            "confidence": 1.0 if year else 0.65,
+        }
+    )
+    if movie_format:
+        metadata["format"] = movie_format
+
+    folder = safe_movie_path_part(f"{year or 'Unknown Year'} - {title}")
+    batch.metadata_json = metadata
+    batch.suggested_metadata = {
+        "title": title,
+        "year": year,
+        "edition": edition,
+        "format": metadata.get("format"),
+        "sources": {
+            "title": "manual correction",
+            "year": "manual correction",
+            "edition": "manual correction",
+            "format": "manual correction",
+        },
+    }
+    batch.suggested_destination = str(settings.movies_dir / folder)
+    batch.metadata_confirmed = True
+    batch.confidence = metadata["confidence"]
+    batch.status = "pending_review" if year else "needs_metadata_review"
+    batch.updated_at = now_utc()
+    db.commit()
+    return _batch_to_summary(batch, action_message="Movie metadata saved.")
 
 
 @router.patch("/batches/{batch_id}/discography", response_model=BatchSummary)
@@ -752,6 +820,7 @@ def _batch_to_summary(
     action_message: str | None = None,
 ) -> BatchSummary:
     meta = batch.metadata_json or {}
+    display = build_batch_display_fields(batch)
     return BatchSummary(
         id=batch.id,
         detected_type=batch.detected_type,
@@ -784,5 +853,6 @@ def _batch_to_summary(
         suggested_metadata=batch.suggested_metadata,
         metadata_confirmed=batch.metadata_confirmed,
         action_message=action_message,
+        **display,
         created_at=batch.created_at,
     )

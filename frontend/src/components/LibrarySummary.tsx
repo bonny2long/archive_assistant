@@ -9,9 +9,9 @@ export default function LibrarySummary({ summary }: Props) {
     <div className="library-summary" aria-label="Library summary">
       <i className="ti ti-library" />
       <span>Library summary:</span>
-      <strong>{summary.moved_albums} albums moved</strong>
+      <strong>{summary.moved_batches} batches moved</strong>
       <span>·</span>
-      <strong>{summary.moved_tracks} tracks</strong>
+      <strong>{summary.moved_files} files</strong>
       <span>·</span>
       <strong className={summary.failed_moves ? "library-summary__warning" : ""}>
         {summary.failed_moves} failed moves

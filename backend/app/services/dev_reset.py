@@ -68,6 +68,7 @@ def _remove_move_logs() -> int:
     roots = [
         settings.data_root / "Music" / "Library",
         settings.music_discographies_dir,
+        settings.movies_dir,
         settings.move_logs_dir,
     ]
     for root in roots:

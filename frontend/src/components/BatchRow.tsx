@@ -1,6 +1,12 @@
 import type { BatchMoveSummary, BatchReview, BatchSummary, IngestBatch } from "../types/archive";
 import BatchDetail from "./BatchDetail";
-import { getReleaseCount } from "../utils/batchDisplay";
+import {
+  getBatchEditKind,
+  getBatchItemText,
+  getBatchMediaLabel,
+  getBatchPrimaryName,
+  getBatchSecondaryName,
+} from "../utils/batchDisplay";
 
 type Props = {
   batch: BatchSummary;
@@ -54,27 +60,12 @@ export default function BatchRow({
   onEdit,
 }: Props) {
   const quarantineReview = batch.status === "needs_quarantine_review";
-  const releaseCount = getReleaseCount(batch);
-  const artist = quarantineReview
-    ? batch.name ?? "Unknown item"
-    : batch.detected_type === "video_movie"
-      ? "Movie"
-    : batch.artist ?? batch.suggested_metadata?.artist ?? "Unknown Artist";
-  const album = quarantineReview
-    ? batch.reason ?? batch.detected_type
-    : batch.detected_type === "music_discography"
-      ? releaseCount > 0
-        ? `${releaseCount} release discography`
-        : "Discography"
-      : batch.detected_type === "video_movie"
-        ? batch.title ?? "Unknown Movie"
-      : batch.album ?? batch.suggested_metadata?.album ?? "Unknown Album";
+  const mediaLabel = getBatchMediaLabel(batch);
+  const primaryName = getBatchPrimaryName(batch);
+  const secondaryName = getBatchSecondaryName(batch);
+  const itemText = getBatchItemText(batch);
+  const editKind = getBatchEditKind(batch);
   const year = batch.year ?? "-";
-  const tracks = quarantineReview
-    ? batch.file_count
-    : batch.detected_type === "video_movie"
-      ? batch.video_file_count
-      : batch.track_count || "-";
   const percent = Math.round((batch.confidence ?? 0) * 100);
 
   return (
@@ -92,9 +83,10 @@ export default function BatchRow({
           />
         </td>
         <td style={{ color: "var(--text-muted)" }}>{index}</td>
-        <td title={artist}>{artist}</td>
-        <td title={album}>
-          {album}
+        <td><span className="media-type-label">{mediaLabel}</span></td>
+        <td title={primaryName}>{primaryName}</td>
+        <td title={secondaryName}>
+          {secondaryName}
           {quarantineReview && (
             <small className="row-artwork">
               {batch.file_count} file(s) · {batch.folder_count} folder(s)
@@ -110,7 +102,7 @@ export default function BatchRow({
           )}
         </td>
         <td>{year}</td>
-        <td style={{ textAlign: "center" }}>{tracks}</td>
+        <td>{itemText}</td>
         <td><span className={pillClass(batch.status)}>{statusLabel(batch.status)}</span></td>
         <td>
           <div className="conf-bar">
@@ -154,7 +146,7 @@ export default function BatchRow({
             disabled={
               batch.status === "moved"
               || quarantineReview
-              || batch.detected_type === "video_movie"
+              || !editKind
             }
             style={{ color: "var(--accent-blue)" }}
             onClick={(event) => { event.stopPropagation(); onEdit(batch); }}
@@ -182,7 +174,7 @@ export default function BatchRow({
       </tr>
       {expanded && (
         <tr>
-          <td colSpan={9} style={{ padding: 0 }}>
+          <td colSpan={10} style={{ padding: 0 }}>
             {detailLoading && (
               <div className="detail-state"><i className="ti ti-loader-2 spinner" /> Loading details...</div>
             )}

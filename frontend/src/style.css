@@ -123,6 +123,7 @@ button:focus-visible, input:focus-visible {
 .btn-sm:hover { background: var(--bg-hover); }
 .btn-sm:disabled { cursor: not-allowed; opacity: 0.3; }
 .row-artwork { display: block; margin-top: 3px; color: var(--text-muted); }
+.media-type-label { color: var(--text-secondary); font-size: 12px; font-weight: 600; }
 .quarantine-action { color: var(--accent-amber); white-space: nowrap; }
 
 /* Library summary */
@@ -799,6 +800,7 @@ button:focus-visible, input:focus-visible {
   font-size: 11px;
 }
 .metadata-editor__error { margin-top: 0.5rem; color: var(--accent-red); font-size: 12px; }
+.metadata-editor__warning { margin-top: 0.5rem; color: var(--accent-amber); font-size: 12px; }
 .metadata-editor__actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
 
 /* Empty / loading / error states */

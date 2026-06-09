@@ -107,10 +107,11 @@ export default function BatchTable({
           <colgroup>
             <col style={{ width: 36 }} />
             <col style={{ width: 48 }} />
-            <col style={{ width: "17%" }} />
-            <col style={{ width: "22%" }} />
+            <col style={{ width: "10%" }} />
+            <col style={{ width: "16%" }} />
+            <col style={{ width: "20%" }} />
             <col style={{ width: "7%" }} />
-            <col style={{ width: "7%" }} />
+            <col style={{ width: "9%" }} />
             <col style={{ width: "10%" }} />
             <col style={{ width: "12%" }} />
             <col style={{ width: "16%" }} />
@@ -126,10 +127,11 @@ export default function BatchTable({
                 />
               </th>
               <th>#</th>
-              <th>Artist</th>
-              <th>Album</th>
+              <th>Type</th>
+              <th>Name</th>
+              <th>Details</th>
               <th>Year</th>
-              <th style={{ textAlign: "center" }}>Tracks</th>
+              <th>Items</th>
               <th>Status</th>
               <th>Confidence</th>
               <th>Actions</th>
@@ -137,10 +139,10 @@ export default function BatchTable({
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={9}><div className="state-msg"><i className="ti ti-loader-2 spinner" />Loading batches...</div></td></tr>
+              <tr><td colSpan={10}><div className="state-msg"><i className="ti ti-loader-2 spinner" />Loading batches...</div></td></tr>
             )}
             {!loading && error && (
-              <tr><td colSpan={9}><div className="state-msg state-msg--error"><i className="ti ti-wifi-off" />{error}</div></td></tr>
+              <tr><td colSpan={10}><div className="state-msg state-msg--error"><i className="ti ti-wifi-off" />{error}</div></td></tr>
             )}
             {!loading && !error && batches.map((batch, index) => (
               <BatchRow

@@ -17,10 +17,16 @@ function metadataValue(batch: IngestBatch, key: string): string {
 function readableLibraryPath(value?: string | null): string {
   if (!value) return "-";
   const normalized = value.replace(/\\/g, "/");
-  const libraryIndex = normalized.toLowerCase().indexOf("music/library/");
-  if (libraryIndex >= 0) return normalized.slice(libraryIndex);
-  const movieIndex = normalized.toLowerCase().indexOf("media/movies/");
-  return movieIndex >= 0 ? normalized.slice(movieIndex) : normalized;
+  const lower = normalized.toLowerCase();
+  for (const marker of [
+    "movies/library/",
+    "music/discographies/",
+    "music/library/",
+  ]) {
+    const index = lower.indexOf(marker);
+    if (index >= 0) return normalized.slice(index);
+  }
+  return normalized;
 }
 
 function formatBytes(value: unknown): string {

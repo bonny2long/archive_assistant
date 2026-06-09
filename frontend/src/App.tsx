@@ -7,6 +7,7 @@ import type {
   DiscographyMetadataUpdate,
   IngestBatch,
   LibrarySummary as LibrarySummaryData,
+  MovieMetadataUpdate,
   SystemTimeResponse,
   TabKey,
 } from "./types/archive";
@@ -19,6 +20,7 @@ import MetadataEditor from "./components/MetadataEditor";
 import LibrarySummary from "./components/LibrarySummary";
 import BulkApproveModal from "./components/BulkApproveModal";
 import DiscographyEditor from "./components/DiscographyEditor";
+import MovieMetadataEditor from "./components/MovieMetadataEditor";
 import {
   archiveTimezone,
   configureArchiveTimezone,
@@ -36,6 +38,8 @@ type QaSummary = {
 const EMPTY_LIBRARY_SUMMARY: LibrarySummaryData = {
   moved_albums: 0,
   moved_tracks: 0,
+  moved_batches: 0,
+  moved_files: 0,
   failed_moves: 0,
   approved_waiting: 0,
   needs_metadata: 0,
@@ -280,6 +284,24 @@ export default function App() {
     }
   };
 
+  const handleMovieSave = async (update: MovieMetadataUpdate) => {
+    if (!editingBatch) return;
+    setSavingMetadata(true);
+    try {
+      const result = await api.updateMovieMetadata(editingBatch.id, update);
+      showToast(result.action_message ?? "Movie metadata updated");
+      setEditingBatch(null);
+      await loadBatches();
+    } catch (saveError: unknown) {
+      showToast(
+        saveError instanceof Error ? saveError.message : "Movie metadata update failed",
+        "error",
+      );
+    } finally {
+      setSavingMetadata(false);
+    }
+  };
+
   const runBulkApprove = async () => {
     const ids = [...selected];
     if (ids.length === 0) return;
@@ -399,7 +421,7 @@ export default function App() {
       setLibrarySummary(summary);
       setQaSummary({
         title: "Move summary",
-        text: `${summary.moved_albums} albums moved · ${summary.moved_tracks} tracks · ${summary.failed_moves} failed moves`,
+        text: `${summary.moved_batches} batches moved · ${summary.moved_files} files · ${summary.failed_moves} failed moves`,
       });
     } catch {
       showToast("Move failed", "error");
@@ -492,6 +514,16 @@ export default function App() {
           batch={editingBatch}
           saving={savingMetadata}
           onSave={handleDiscographySave}
+          onClose={() => {
+            if (!savingMetadata) setEditingBatch(null);
+          }}
+        />
+      )}
+      {editingBatch?.detected_type === "video_movie" && (
+        <MovieMetadataEditor
+          batch={editingBatch}
+          saving={savingMetadata}
+          onSave={handleMovieSave}
           onClose={() => {
             if (!savingMetadata) setEditingBatch(null);
           }}

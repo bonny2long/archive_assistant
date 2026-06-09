@@ -17,7 +17,12 @@ class Settings(BaseSettings):
     music_flac_dir: Path = data_root / "Music" / "Library" / "FLAC"
     music_mp3_dir: Path = data_root / "Music" / "Library" / "MP3"
     music_discographies_dir: Path = data_root / "Music" / "Discographies"
-    movies_dir: Path = data_root / "Media" / "Movies"
+    movies_dir: Path = data_root / "Movies" / "Library"
+    movies_metadata_dir: Path = data_root / "Movies" / "Metadata"
+    tv_dir: Path = data_root / "TV" / "Library"
+    tv_metadata_dir: Path = data_root / "TV" / "Metadata"
+    books_dir: Path = data_root / "Books"
+    audiobooks_dir: Path = data_root / "Audiobooks" / "Library"
     quarantine_discography_dir: Path = (
         data_root / "_QUARANTINE" / "music" / "discography-excluded"
     )

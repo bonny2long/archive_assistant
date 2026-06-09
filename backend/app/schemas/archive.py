@@ -48,6 +48,13 @@ class BatchSummary(BaseModel):
     suggested_metadata: dict | None = None
     metadata_confirmed: bool = False
     action_message: str | None = None
+    media_category: str | None = None
+    media_label: str | None = None
+    primary_name: str | None = None
+    secondary_name: str | None = None
+    item_label: str | None = None
+    item_count: int = 0
+    edit_kind: str | None = None
     created_at: datetime
 
     @field_serializer("created_at")
@@ -84,6 +91,13 @@ class BatchMetadataUpdate(BaseModel):
     album: str = Field(min_length=1)
     year: str = Field(pattern=r"^(19|20)\d{2}$")
     primary_genre: str | None = None
+    format: str | None = None
+
+
+class MovieMetadataUpdate(BaseModel):
+    title: str = Field(min_length=1)
+    year: str | None = Field(default=None, pattern=r"^(19|20)\d{2}$")
+    edition: str | None = None
     format: str | None = None
 
 
@@ -169,6 +183,8 @@ class DevResetResponse(BaseModel):
 class LibrarySummary(BaseModel):
     moved_albums: int
     moved_tracks: int
+    moved_batches: int
+    moved_files: int
     failed_moves: int
     approved_waiting: int
     needs_metadata: int

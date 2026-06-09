@@ -55,6 +55,13 @@ export type BatchSummary = {
   suggested_metadata?: SuggestedMetadata | null;
   metadata_confirmed: boolean;
   action_message?: string | null;
+  media_category?: string | null;
+  media_label?: string | null;
+  primary_name?: string | null;
+  secondary_name?: string | null;
+  item_label?: string | null;
+  item_count: number;
+  edit_kind?: string | null;
   created_at: string;
 };
 
@@ -63,7 +70,13 @@ export type SuggestedMetadata = {
   album?: string | null;
   year?: string | null;
   genre?: string | null;
-  sources?: Partial<Record<"artist" | "album" | "year" | "genre", string>>;
+  title?: string | null;
+  edition?: string | null;
+  format?: string | null;
+  sources?: Partial<Record<
+    "artist" | "album" | "year" | "genre" | "title" | "edition" | "format",
+    string
+  >>;
   compilation?: boolean;
 };
 
@@ -112,6 +125,13 @@ export type DiscographyMetadataUpdate = {
   albums?: DiscographyAlbumUpdate[];
 };
 
+export type MovieMetadataUpdate = {
+  title: string;
+  year: string | null;
+  edition?: string | null;
+  format?: string | null;
+};
+
 export type PaginatedResponse<T> = {
   items: T[];
   page: number;
@@ -152,6 +172,8 @@ export type DevResetResponse = {
 export type LibrarySummary = {
   moved_albums: number;
   moved_tracks: number;
+  moved_batches: number;
+  moved_files: number;
   failed_moves: number;
   approved_waiting: number;
   needs_metadata: number;

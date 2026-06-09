@@ -1,0 +1,106 @@
+import { useMemo, useState } from "react";
+import type { BatchSummary, MovieMetadataUpdate } from "../types/archive";
+
+type Props = {
+  batch: BatchSummary;
+  saving: boolean;
+  onSave: (update: MovieMetadataUpdate) => Promise<void>;
+  onClose: () => void;
+};
+
+function sanitizePathPart(value: string): string {
+  return value.replace(/[<>:"/\\|?*]/g, "_").trim();
+}
+
+export default function MovieMetadataEditor({
+  batch,
+  saving,
+  onSave,
+  onClose,
+}: Props) {
+  const [title, setTitle] = useState(
+    () => batch.suggested_metadata?.title ?? batch.title ?? "",
+  );
+  const [year, setYear] = useState(
+    () => batch.suggested_metadata?.year ?? batch.year ?? "",
+  );
+  const [edition, setEdition] = useState(
+    () => batch.suggested_metadata?.edition ?? "",
+  );
+  const [format, setFormat] = useState(
+    () => batch.suggested_metadata?.format ?? batch.format ?? "",
+  );
+
+  const yearValid = year.trim() === "" || /^(19|20)\d{2}$/.test(year.trim());
+  const valid = title.trim() !== "" && yearValid;
+  const preview = useMemo(
+    () => `Movies/Library/${sanitizePathPart(`${year.trim() || "Unknown Year"} - ${title}`)}`,
+    [title, year],
+  );
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <form
+        className="metadata-editor"
+        onMouseDown={(event) => event.stopPropagation()}
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!valid) return;
+          void onSave({
+            title: title.trim(),
+            year: year.trim() || null,
+            edition: edition.trim() || null,
+            format: format.trim() || null,
+          });
+        }}
+      >
+        <div className="metadata-editor__header">
+          <div>
+            <h2>Correct movie metadata</h2>
+            <p>Batch {batch.id}. Saving updates the movie destination plan.</p>
+          </div>
+          <button type="button" className="btn-sm" title="Close" onClick={onClose}>
+            <i className="ti ti-x" />
+          </button>
+        </div>
+        <label>
+          <span>Title</span>
+          <input value={title} onChange={(event) => setTitle(event.target.value)} autoFocus />
+        </label>
+        <div className="metadata-editor__row">
+          <label>
+            <span>Year</span>
+            <input value={year} maxLength={4} onChange={(event) => setYear(event.target.value)} />
+          </label>
+          <label>
+            <span>Edition / Version optional</span>
+            <input value={edition} onChange={(event) => setEdition(event.target.value)} />
+          </label>
+        </div>
+        <label>
+          <span>Format</span>
+          <input value={format} onChange={(event) => setFormat(event.target.value)} />
+        </label>
+        <div className="metadata-editor__preview">
+          <span>Destination preview</span>
+          <div><code>{preview}</code></div>
+        </div>
+        {!year.trim() && (
+          <p className="metadata-editor__warning">
+            Movie year missing. Review before approval.
+          </p>
+        )}
+        {!yearValid && (
+          <p className="metadata-editor__error">Year must be a four-digit year.</p>
+        )}
+        <div className="metadata-editor__actions">
+          <button type="button" className="btn" disabled={saving} onClick={onClose}>Cancel</button>
+          <button type="submit" className="btn btn--green" disabled={saving || !valid}>
+            <i className={`ti ti-${saving ? "loader-2 spinner" : "device-floppy"}`} />
+            Save movie
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}

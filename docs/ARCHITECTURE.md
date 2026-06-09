@@ -35,8 +35,10 @@ Allow access only to:
 - `_QUARANTINE`
 - `_REPORTS`
 - `_METADATA_RECOVERY`
-- `Media`
 - `Music`
+- `Movies`
+- `TV`
 - `Books`
+- `Audiobooks`
 
 Do not allow access to legal documents, financial documents, secrets, or TrueNAS system paths.

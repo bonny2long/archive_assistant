@@ -63,11 +63,14 @@ def _move_movie_batch(
     db: Session,
     batch: IngestBatch,
 ) -> tuple[list[str], list[str]]:
-    if not batch.suggested_destination:
-        return [], ["Missing suggested movie destination"]
-    destination = Path(batch.suggested_destination)
+    metadata = dict(batch.metadata_json or {})
+    title = str(metadata.get("title") or "Unknown Movie")
+    year = str(metadata.get("year") or "")[:4]
+    destination = settings.movies_dir / _safe_path_part(
+        f"{year or 'Unknown Year'} - {title}"
+    )
+    batch.suggested_destination = str(destination)
     if destination.exists() and not _same_batch_retry(db, batch.id, destination):
-        metadata = dict(batch.metadata_json or {})
         warnings = list(metadata.get("metadata_warnings", []))
         warnings.append("movie_destination_exists")
         metadata["metadata_warnings"] = list(dict.fromkeys(warnings))
