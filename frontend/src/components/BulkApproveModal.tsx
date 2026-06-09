@@ -20,6 +20,7 @@ const BLOCKING_WARNINGS = new Set([
   "child_album_metadata_missing",
   "discography_destination_exists",
   "movie_destination_exists",
+  "tv_destination_exists",
 ]);
 
 function isApprovable(batch: BatchSummary): boolean {

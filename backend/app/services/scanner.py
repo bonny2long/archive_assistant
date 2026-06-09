@@ -39,8 +39,11 @@ from app.services.video_metadata import (
     is_subtitle_file,
     is_video_file,
     looks_like_tv,
+    looks_like_tv_episode,
     parse_movie_name,
+    parse_tv_episode_name,
     safe_movie_path_part,
+    safe_tv_path_part,
     useful_movie_name,
 )
 
@@ -57,6 +60,8 @@ class ScanMusicResult:
     ignored_system_files: int = 0
     artwork_files_found: int = 0
     movie_batches_found: int = 0
+    tv_shows_found: int = 0
+    tv_episodes_found: int = 0
     subtitle_files_found: int = 0
 
 
@@ -104,10 +109,15 @@ def classify_ingest_item(path: Path) -> str:
         if candidate.is_file() and is_video_file(candidate)
     ]
     if video_files and not audio_files:
+        tv_names = [
+            path.name
+            for path in [path, *path.rglob("*")]
+            if path.is_dir() or path in video_files
+        ]
+        if any(looks_like_tv(name) for name in tv_names):
+            return "video_tv_show"
         if (
             len(video_files) == 1
-            and not looks_like_tv(path.name)
-            and not looks_like_tv(video_files[0].name)
         ):
             return "video_movie"
         return "unknown_type"
@@ -194,6 +204,194 @@ def _movie_files(root: Path) -> dict[str, list[Path]]:
             if path.resolve() not in recognized
         ),
     }
+
+
+def _tv_files(root: Path) -> dict[str, list[Path]]:
+    candidates = [
+        path for path in root.rglob("*")
+        if path.is_file()
+    ]
+    video = sorted(path for path in candidates if is_video_file(path))
+    artwork = sorted(path for path in candidates if is_movie_artwork(path))
+    subtitles = sorted(path for path in candidates if is_subtitle_file(path))
+    ignored = sorted(path for path in candidates if is_ignored_video_sidecar(path))
+    recognized = {
+        path.resolve()
+        for path in [*video, *artwork, *subtitles, *ignored]
+    }
+    return {
+        "video": video,
+        "artwork": artwork,
+        "subtitles": subtitles,
+        "ignored": ignored,
+        "other": sorted(
+            path for path in candidates
+            if path.resolve() not in recognized
+        ),
+    }
+
+
+def _season_number_from_path(path: Path, root: Path) -> int | None:
+    for parent in [path.parent, *path.parents]:
+        if parent == root.parent:
+            break
+        parsed = parse_tv_episode_name(parent.name)
+        if parsed["season_number"] is not None:
+            return int(parsed["season_number"])
+        if parent == root:
+            break
+    return None
+
+
+def _clean_tv_show_folder_name(value: str) -> str:
+    cleaned = re.sub(
+        r"(?i)\s*[-_. ]*season[ ._-]*\d{1,2}\s*$",
+        "",
+        value,
+    )
+    cleaned = re.sub(r"[._]+", " ", cleaned)
+    return re.sub(r"\s+", " ", cleaned).strip(" -._()[]")
+
+
+def _tv_episode_metadata(path: Path, root: Path) -> dict:
+    parsed = parse_tv_episode_name(path.name)
+    if parsed["season_number"] is None:
+        parsed["season_number"] = _season_number_from_path(path, root)
+    if (
+        parsed["season_number"] is not None
+        and parsed["episode_number"] is not None
+    ):
+        parsed["episode_code"] = (
+            f"S{int(parsed['season_number']):02d}"
+            f"E{int(parsed['episode_number']):02d}"
+        )
+    parsed["source_file"] = path.name
+    parsed["relative_source"] = str(path.relative_to(root))
+    return parsed
+
+
+def _create_tv_batch(db: Session, source: Path) -> IngestBatch | None:
+    existing = (
+        db.query(IngestBatch)
+        .filter(
+            IngestBatch.source_path == str(source),
+            IngestBatch.detected_type == "video_tv_show",
+            IngestBatch.status != "merged",
+        )
+        .first()
+    )
+    if existing:
+        return None
+
+    files = _tv_files(source)
+    if not files["video"]:
+        return None
+    episodes = [_tv_episode_metadata(path, source) for path in files["video"]]
+    parsed_titles = [
+        str(episode["show_title"]).strip()
+        for episode in episodes
+        if episode.get("show_title")
+    ]
+    folder_title = _clean_tv_show_folder_name(source.name)
+    show_title = Counter(parsed_titles).most_common(1)[0][0] if parsed_titles else folder_title
+    warnings = []
+    if not parsed_titles:
+        warnings.append("tv_show_title_from_folder")
+    if not show_title:
+        show_title = "Unknown TV Show"
+        warnings.append("tv_show_title_missing")
+
+    parse_failed = any(
+        episode.get("season_number") is None
+        or episode.get("episode_number") is None
+        or not episode.get("episode_code")
+        for episode in episodes
+    )
+    if parse_failed:
+        warnings.append("tv_episode_parse_failed")
+
+    seasons_by_number: dict[int, list[dict]] = defaultdict(list)
+    for episode in episodes:
+        if episode.get("season_number") is not None:
+            seasons_by_number[int(episode["season_number"])].append(episode)
+    seasons = [
+        {
+            "season_number": season_number,
+            "episode_count": len(season_episodes),
+            "episodes": sorted(
+                season_episodes,
+                key=lambda item: int(item.get("episode_number") or 0),
+            ),
+        }
+        for season_number, season_episodes in sorted(seasons_by_number.items())
+    ]
+    year_values = [episode.get("year") for episode in episodes if episode.get("year")]
+    year = Counter(year_values).most_common(1)[0][0] if year_values else None
+    metadata = {
+        "media_kind": "tv_show",
+        "show_title": show_title,
+        "year": year,
+        "season_count": len(seasons),
+        "episode_count": len(episodes),
+        "video_file_count": len(files["video"]),
+        "subtitle_count": len(files["subtitles"]),
+        "artwork_count": len(files["artwork"]),
+        "ignored_sidecar_count": len(files["ignored"]),
+        "artwork_files": [str(path.relative_to(source)) for path in files["artwork"]],
+        "subtitle_files": [str(path.relative_to(source)) for path in files["subtitles"]],
+        "ignored_sidecar_files": [
+            str(path.relative_to(source)) for path in files["ignored"]
+        ],
+        "seasons": seasons,
+        "metadata_quality": "weak" if parse_failed or not show_title else "good",
+        "metadata_warnings": list(dict.fromkeys(warnings)),
+        "confidence": 0.6 if parse_failed else 0.85,
+    }
+    destination = settings.tv_dir / safe_tv_path_part(show_title)
+    batch = IngestBatch(
+        source_kind="manual-drop",
+        source_path=str(source),
+        detected_type="video_tv_show",
+        status="needs_metadata_review" if parse_failed else "pending_review",
+        confidence=metadata["confidence"],
+        suggested_destination=str(destination),
+        suggested_metadata={
+            "show_title": show_title,
+            "year": year,
+            "sources": {
+                "show_title": "episode filenames" if parsed_titles else "folder name",
+                "year": "episode filenames",
+            },
+        },
+        metadata_json=metadata,
+    )
+    db.add(batch)
+    db.flush()
+
+    for path, role in (
+        [(path, "tv_episode") for path in files["video"]]
+        + [(path, "tv_subtitle") for path in files["subtitles"]]
+        + [(path, "tv_artwork") for path in files["artwork"]]
+    ):
+        file_metadata = _tv_episode_metadata(path, source) if role != "tv_artwork" else {
+            "relative_source": str(path.relative_to(source)),
+        }
+        db.add(
+            IngestFile(
+                batch_id=batch.id,
+                file_path=str(path),
+                file_name=path.name,
+                extension=path.suffix.lower(),
+                size_bytes=path.stat().st_size,
+                checksum=file_sha256(path),
+                detected_role=role,
+                metadata_json=file_metadata,
+            )
+        )
+    db.commit()
+    db.refresh(batch)
+    write_json_report(settings.reports_dir, batch.id, metadata)
+    return batch
 
 
 def _create_movie_batch(db: Session, source: Path) -> IngestBatch | None:
@@ -826,6 +1024,14 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
         for item in sorted(settings.ingest_root.iterdir())
     }
     batches: list[IngestBatch] = []
+    tv_batches = []
+    for item, classification in classifications.items():
+        if classification != "video_tv_show":
+            continue
+        batch = _create_tv_batch(db, item)
+        if batch:
+            tv_batches.append(batch)
+            batches.append(batch)
     movie_batches = []
     for item, classification in classifications.items():
         if classification != "video_movie":
@@ -878,15 +1084,32 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
                 classification == "video_movie"
                 for classification in classifications.values()
             ),
+            tv_shows_found=sum(
+                classification == "video_tv_show"
+                for classification in classifications.values()
+            ),
+            tv_episodes_found=sum(
+                len(_tv_files(item)["video"])
+                for item, classification in classifications.items()
+                if classification == "video_tv_show"
+            ),
             subtitle_files_found=sum(
                 len(_movie_files(item)["subtitles"])
                 for item, classification in classifications.items()
                 if classification == "video_movie"
+            ) + sum(
+                len(_tv_files(item)["subtitles"])
+                for item, classification in classifications.items()
+                if classification == "video_tv_show"
             ),
             artwork_files_found=sum(
                 len(_movie_files(item)["artwork"])
                 for item, classification in classifications.items()
                 if classification == "video_movie"
+            ) + sum(
+                len(_tv_files(item)["artwork"])
+                for item, classification in classifications.items()
+                if classification == "video_tv_show"
             ),
         )
 
@@ -1165,14 +1388,31 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
             len(_movie_files(item)["artwork"])
             for item, classification in classifications.items()
             if classification == "video_movie"
+        ) + sum(
+            len(_tv_files(item)["artwork"])
+            for item, classification in classifications.items()
+            if classification == "video_tv_show"
         ),
         movie_batches_found=sum(
             classification == "video_movie"
             for classification in classifications.values()
         ),
+        tv_shows_found=sum(
+            classification == "video_tv_show"
+            for classification in classifications.values()
+        ),
+        tv_episodes_found=sum(
+            len(_tv_files(item)["video"])
+            for item, classification in classifications.items()
+            if classification == "video_tv_show"
+        ),
         subtitle_files_found=sum(
             len(_movie_files(item)["subtitles"])
             for item, classification in classifications.items()
             if classification == "video_movie"
+        ) + sum(
+            len(_tv_files(item)["subtitles"])
+            for item, classification in classifications.items()
+            if classification == "video_tv_show"
         ),
     )

@@ -45,6 +45,10 @@ export type BatchSummary = {
   subtitle_files: string[];
   ignored_sidecar_files: string[];
   release_tags_removed: string[];
+  show_title?: string | null;
+  season_count: number;
+  episode_count: number;
+  seasons: TvSeason[];
   name?: string | null;
   reason?: string | null;
   file_count: number;
@@ -80,8 +84,9 @@ export type SuggestedMetadata = {
   title?: string | null;
   edition?: string | null;
   format?: string | null;
+  show_title?: string | null;
   sources?: Partial<Record<
-    "artist" | "album" | "year" | "genre" | "title" | "edition" | "format",
+    "artist" | "album" | "year" | "genre" | "title" | "edition" | "format" | "show_title",
     string
   >>;
   compilation?: boolean;
@@ -139,6 +144,27 @@ export type MovieMetadataUpdate = {
   format?: string | null;
 };
 
+export type TvMetadataUpdate = {
+  show_title: string;
+  year?: string | null;
+};
+
+export type TvEpisode = {
+  show_title?: string | null;
+  season_number?: number | null;
+  episode_number?: number | null;
+  episode_code?: string | null;
+  episode_title?: string | null;
+  source_file: string;
+  relative_source?: string;
+};
+
+export type TvSeason = {
+  season_number: number;
+  episode_count: number;
+  episodes: TvEpisode[];
+};
+
 export type PaginatedResponse<T> = {
   items: T[];
   page: number;
@@ -163,6 +189,8 @@ export type ScanMusicResponse = {
   ignored_system_files: number;
   artwork_files_found: number;
   movie_batches_found: number;
+  tv_shows_found: number;
+  tv_episodes_found: number;
   subtitle_files_found: number;
 };
 

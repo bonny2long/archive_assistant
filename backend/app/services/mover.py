@@ -13,6 +13,7 @@ from app.services.music_metadata import (
     music_track_filename,
     sort_music_tracks,
 )
+from app.services.video_metadata import parse_tv_episode_name, safe_tv_path_part
 
 
 def _safe_path_part(value: str) -> str:
@@ -189,6 +190,207 @@ def _move_movie_batch(
                         role == "subtitle" for role in completed_roles
                     ),
                     "ignored_sidecars": metadata.get("ignored_sidecar_count", 0),
+                    "failed": len(failed_files),
+                },
+                "destination_path": str(destination),
+                "moved_files": moved_files,
+                "failed_files": failed_files,
+                "moved_at": serialize_utc(now_utc()),
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return moved_files, failed_files
+
+
+def _tv_season_destination(root: Path, season_number: int) -> Path:
+    return root / f"Season {season_number:02d}"
+
+
+def _tv_episode_destination(
+    destination: Path,
+    ingest_file,
+) -> Path | None:
+    metadata = ingest_file.metadata_json or {}
+    season_number = metadata.get("season_number")
+    episode_code = metadata.get("episode_code")
+    if season_number is None or not episode_code:
+        return None
+    return (
+        _tv_season_destination(destination, int(season_number))
+        / f"{episode_code} - {ingest_file.file_name}"
+    )
+
+
+def _tv_artwork_destination(
+    batch: IngestBatch,
+    destination: Path,
+    ingest_file,
+) -> Path:
+    source = Path(ingest_file.file_path)
+    source_root = Path(batch.source_path)
+    relative_parent = source.parent.relative_to(source_root)
+    season_number = None
+    for part in reversed(relative_parent.parts):
+        parsed = parse_tv_episode_name(part)
+        if parsed.get("season_number") is not None:
+            season_number = int(parsed["season_number"])
+            break
+    parent = (
+        _tv_season_destination(destination, season_number)
+        if season_number is not None
+        else destination
+    )
+    return parent / ingest_file.file_name
+
+
+def _move_tv_batch(
+    db: Session,
+    batch: IngestBatch,
+) -> tuple[list[str], list[str]]:
+    metadata = dict(batch.metadata_json or {})
+    show_title = str(metadata.get("show_title") or "Unknown TV Show")
+    destination = settings.tv_dir / safe_tv_path_part(show_title)
+    batch.suggested_destination = str(destination)
+    if destination.exists() and not _same_batch_retry(db, batch.id, destination):
+        warnings = list(metadata.get("metadata_warnings", []))
+        warnings.append("tv_destination_exists")
+        metadata["metadata_warnings"] = list(dict.fromkeys(warnings))
+        metadata["metadata_alerts"] = [
+            *[
+                alert
+                for alert in (metadata.get("metadata_alerts") or [])
+                if not (
+                    isinstance(alert, dict)
+                    and alert.get("type") == "tv_destination_exists"
+                )
+            ],
+            {
+                "type": "tv_destination_exists",
+                "message": (
+                    "TV show folder already exists. No files were moved or overwritten."
+                ),
+                "existing_path": str(destination),
+            },
+        ]
+        batch.metadata_json = metadata
+        batch.status = "needs_metadata_review"
+        batch.updated_at = now_utc()
+        db.commit()
+        return [], [f"TV destination already exists: {destination}"]
+
+    planned = []
+    moved_files = []
+    failed_files = []
+    reserved: set[str] = set()
+    for ingest_file in batch.files:
+        source = Path(ingest_file.file_path)
+        completed = _completed_move_destination(db, batch.id, source)
+        if not source.exists() and completed:
+            moved_files.append(str(completed))
+            reserved.add(_path_key(completed))
+            continue
+
+        if ingest_file.detected_role in {"tv_episode", "tv_subtitle"}:
+            destination_file = _tv_episode_destination(
+                destination,
+                ingest_file,
+            )
+            if destination_file is None:
+                return [], [
+                    f"TV episode metadata missing for {ingest_file.file_name}"
+                ]
+        elif ingest_file.detected_role == "tv_artwork":
+            destination_file = _tv_artwork_destination(
+                batch,
+                destination,
+                ingest_file,
+            )
+            destination_file = _unique_artwork_destination(
+                destination_file,
+                reserved,
+            )
+        else:
+            continue
+
+        destination_key = _path_key(destination_file)
+        if destination_key in reserved or destination_file.exists():
+            metadata = dict(batch.metadata_json or {})
+            warnings = list(metadata.get("metadata_warnings", []))
+            warnings.append("destination_file_conflict")
+            metadata["metadata_warnings"] = list(dict.fromkeys(warnings))
+            batch.metadata_json = metadata
+            batch.status = "needs_metadata_review"
+            batch.updated_at = now_utc()
+            db.commit()
+            return [], [f"Destination file conflict: {destination_file}"]
+        reserved.add(destination_key)
+        planned.append((ingest_file, destination_file))
+
+    for ingest_file, destination_file in planned:
+        source = Path(ingest_file.file_path)
+        if not source.exists():
+            failed_files.append(f"Source not found: {source}")
+            continue
+        destination_file.parent.mkdir(parents=True, exist_ok=True)
+        action = MoveAction(
+            batch_id=batch.id,
+            source_path=str(source),
+            destination_path=str(destination_file),
+            status="running",
+        )
+        db.add(action)
+        db.flush()
+        try:
+            shutil.move(str(source), str(destination_file))
+            action.status = "completed"
+            action.completed_at = now_utc()
+            moved_files.append(str(destination_file))
+        except Exception as exc:
+            action.status = "failed"
+            action.error_message = str(exc)
+            failed_files.append(f"Failed to move {source}: {exc}")
+            db.flush()
+
+    metadata_dir = destination / "metadata"
+    metadata_dir.mkdir(parents=True, exist_ok=True)
+    role_by_source = {
+        ingest_file.file_path: ingest_file.detected_role
+        for ingest_file in batch.files
+    }
+    completed_actions = (
+        db.query(MoveAction)
+        .filter(
+            MoveAction.batch_id == batch.id,
+            MoveAction.status == "completed",
+        )
+        .all()
+    )
+    completed_roles = [
+        role_by_source.get(action.source_path)
+        for action in completed_actions
+    ]
+    (metadata_dir / f"batch-{batch.id}-tv-move-log.json").write_text(
+        json.dumps(
+            {
+                "batch_id": batch.id,
+                "media_type": "video_tv_show",
+                "show_title": show_title,
+                "summary": {
+                    "episodes_moved": sum(
+                        role == "tv_episode" for role in completed_roles
+                    ),
+                    "subtitles_moved": sum(
+                        role == "tv_subtitle" for role in completed_roles
+                    ),
+                    "artwork_moved": sum(
+                        role == "tv_artwork" for role in completed_roles
+                    ),
+                    "ignored_sidecars": metadata.get(
+                        "ignored_sidecar_count",
+                        0,
+                    ),
                     "failed": len(failed_files),
                 },
                 "destination_path": str(destination),
@@ -786,6 +988,47 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                         ArchiveItem(
                             media_type="video",
                             title=metadata.get("title") or "Unknown Movie",
+                            year=metadata.get("year"),
+                            source_kind=batch.source_kind,
+                            final_path=batch.suggested_destination or "",
+                            metadata_status="basic",
+                        )
+                    )
+                db.commit()
+                moved += 1
+                if failed_files:
+                    errors.extend(
+                        f"Batch {batch.id}: {error}" for error in failed_files
+                    )
+                continue
+
+            if batch.detected_type == "video_tv_show":
+                moved_files, failed_files = _move_tv_batch(db, batch)
+                if not moved_files:
+                    if batch.status != "needs_metadata_review":
+                        batch.status = "move_failed"
+                    batch.updated_at = now_utc()
+                    db.commit()
+                    errors.extend(
+                        f"Batch {batch.id}: {error}" for error in failed_files
+                    )
+                    continue
+                batch.status = "move_failed" if failed_files else "moved"
+                batch.updated_at = now_utc()
+                metadata = batch.metadata_json or {}
+                if not (
+                    db.query(ArchiveItem)
+                    .filter(
+                        ArchiveItem.final_path == str(
+                            Path(batch.suggested_destination or "")
+                        )
+                    )
+                    .first()
+                ):
+                    db.add(
+                        ArchiveItem(
+                            media_type="tv",
+                            title=metadata.get("show_title") or "Unknown TV Show",
                             year=metadata.get("year"),
                             source_kind=batch.source_kind,
                             final_path=batch.suggested_destination or "",

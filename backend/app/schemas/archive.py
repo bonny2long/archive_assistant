@@ -38,6 +38,10 @@ class BatchSummary(BaseModel):
     subtitle_files: list[str] = Field(default_factory=list)
     ignored_sidecar_files: list[str] = Field(default_factory=list)
     release_tags_removed: list[str] = Field(default_factory=list)
+    show_title: str | None = None
+    season_count: int = 0
+    episode_count: int = 0
+    seasons: list[dict] = Field(default_factory=list)
     name: str | None = None
     reason: str | None = None
     file_count: int = 0
@@ -108,6 +112,11 @@ class MovieMetadataUpdate(BaseModel):
     format: str | None = None
 
 
+class TvMetadataUpdate(BaseModel):
+    show_title: str = Field(min_length=1)
+    year: str | None = Field(default=None, pattern=r"^(19|20)\d{2}$")
+
+
 class DiscographyAlbumUpdate(BaseModel):
     source_folder: str = Field(min_length=1)
     album: str = Field(min_length=1)
@@ -174,6 +183,8 @@ class ScanMusicResponse(BaseModel):
     ignored_system_files: int = 0
     artwork_files_found: int = 0
     movie_batches_found: int = 0
+    tv_shows_found: int = 0
+    tv_episodes_found: int = 0
     subtitle_files_found: int = 0
 
 

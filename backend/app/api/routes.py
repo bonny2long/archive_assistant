@@ -24,6 +24,7 @@ from app.schemas.archive import (
     MoveResponse,
     PaginatedResponse,
     ScanMusicResponse,
+    TvMetadataUpdate,
 )
 from app.services.dev_reset import DevResetBlockedError, reset_music_test_data
 from app.services.batch_display import build_batch_display_fields
@@ -46,7 +47,7 @@ from app.services.music_metadata import (
 from app.services.scanner import scan_music_ingest
 from app.services.mover import move_approved_batches
 from app.services.quarantine import quarantine_batch
-from app.services.video_metadata import safe_movie_path_part
+from app.services.video_metadata import safe_movie_path_part, safe_tv_path_part
 from app.core.config import settings
 from app.core.time import configured_timezone, now_local, now_utc, serialize_utc
 
@@ -60,6 +61,7 @@ BLOCKING_APPROVAL_WARNINGS = {
     "child_album_metadata_missing",
     "discography_destination_exists",
     "movie_destination_exists",
+    "tv_destination_exists",
 }
 
 
@@ -98,6 +100,8 @@ def scan_music(db: Session = Depends(get_db)):
         ignored_system_files=result.ignored_system_files,
         artwork_files_found=result.artwork_files_found,
         movie_batches_found=result.movie_batches_found,
+        tv_shows_found=result.tv_shows_found,
+        tv_episodes_found=result.tv_episodes_found,
         subtitle_files_found=result.subtitle_files_found,
     )
 
@@ -649,6 +653,72 @@ def update_discography_metadata(
     return _batch_to_summary(batch, action_message="Discography metadata saved.")
 
 
+@router.patch("/batches/{batch_id}/tv-metadata", response_model=BatchSummary)
+def update_tv_metadata(
+    batch_id: int,
+    update: TvMetadataUpdate,
+    db: Session = Depends(get_db),
+):
+    batch = db.get(IngestBatch, batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    if batch.detected_type != "video_tv_show":
+        raise HTTPException(status_code=400, detail="Batch is not a TV show")
+    if batch.status in {"moved", "merged"}:
+        raise HTTPException(status_code=400, detail="Moved batches cannot be edited")
+
+    show_title = update.show_title.strip()
+    if not show_title:
+        raise HTTPException(status_code=422, detail="TV show title is required")
+    year = update.year.strip() if update.year else None
+    metadata = dict(batch.metadata_json or {})
+    warnings = [
+        warning
+        for warning in metadata.get("metadata_warnings", [])
+        if warning not in {
+            "tv_show_title_missing",
+            "tv_show_title_from_folder",
+            "tv_destination_exists",
+        }
+    ]
+    metadata["metadata_alerts"] = [
+        alert
+        for alert in (metadata.get("metadata_alerts") or [])
+        if not (
+            isinstance(alert, dict)
+            and alert.get("type") == "tv_destination_exists"
+        )
+    ]
+    parse_failed = "tv_episode_parse_failed" in warnings
+    metadata.update(
+        {
+            "show_title": show_title,
+            "year": year,
+            "metadata_quality": "weak" if parse_failed else "good",
+            "metadata_warnings": warnings,
+            "confidence": 0.65 if parse_failed else 1.0,
+        }
+    )
+    batch.metadata_json = metadata
+    batch.suggested_metadata = {
+        "show_title": show_title,
+        "year": year,
+        "sources": {
+            "show_title": "manual correction",
+            "year": "manual correction",
+        },
+    }
+    batch.suggested_destination = str(
+        settings.tv_dir / safe_tv_path_part(show_title)
+    )
+    batch.metadata_confirmed = True
+    batch.confidence = metadata["confidence"]
+    batch.status = "needs_metadata_review" if parse_failed else "pending_review"
+    batch.updated_at = now_utc()
+    db.commit()
+    return _batch_to_summary(batch, action_message="TV metadata saved.")
+
+
 @router.post("/batches/{batch_id}/approve", response_model=ApproveResponse)
 def approve_batch(batch_id: int, db: Session = Depends(get_db)):
     batch = db.get(IngestBatch, batch_id)
@@ -853,6 +923,10 @@ def _batch_to_summary(
         subtitle_files=meta.get("subtitle_files", []),
         ignored_sidecar_files=meta.get("ignored_sidecar_files", []),
         release_tags_removed=meta.get("release_tags_removed", []),
+        show_title=meta.get("show_title"),
+        season_count=meta.get("season_count", 0),
+        episode_count=meta.get("episode_count", 0),
+        seasons=meta.get("seasons", []),
         name=meta.get("name"),
         reason=meta.get("reason"),
         file_count=meta.get("file_count", 0),

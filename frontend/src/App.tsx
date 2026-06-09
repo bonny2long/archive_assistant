@@ -10,6 +10,7 @@ import type {
   MovieMetadataUpdate,
   SystemTimeResponse,
   TabKey,
+  TvMetadataUpdate,
 } from "./types/archive";
 import { api } from "./api/client";
 import ActionBar from "./components/ActionBar";
@@ -21,6 +22,7 @@ import LibrarySummary from "./components/LibrarySummary";
 import BulkApproveModal from "./components/BulkApproveModal";
 import DiscographyEditor from "./components/DiscographyEditor";
 import MovieMetadataEditor from "./components/MovieMetadataEditor";
+import TvMetadataEditor from "./components/TvMetadataEditor";
 import {
   archiveTimezone,
   configureArchiveTimezone,
@@ -177,7 +179,7 @@ export default function App() {
       ]);
       setDetails((previous) => ({ ...previous, [id]: detail }));
       setMoveSummaries((previous) => ({ ...previous, [id]: moves }));
-      if (detail.detected_type !== "video_movie") {
+      if (!["video_movie", "video_tv_show"].includes(detail.detected_type)) {
         const review = await api.getBatchReview(id);
         setReviews((previous) => ({ ...previous, [id]: review }));
       }
@@ -302,6 +304,24 @@ export default function App() {
     }
   };
 
+  const handleTvSave = async (update: TvMetadataUpdate) => {
+    if (!editingBatch) return;
+    setSavingMetadata(true);
+    try {
+      const result = await api.updateTvMetadata(editingBatch.id, update);
+      showToast(result.action_message ?? "TV metadata updated");
+      setEditingBatch(null);
+      await loadBatches();
+    } catch (saveError: unknown) {
+      showToast(
+        saveError instanceof Error ? saveError.message : "TV metadata update failed",
+        "error",
+      );
+    } finally {
+      setSavingMetadata(false);
+    }
+  };
+
   const runBulkApprove = async () => {
     const ids = [...selected];
     if (ids.length === 0) return;
@@ -368,9 +388,12 @@ export default function App() {
       const result = await api.scanMusic();
       const items = await loadBatches();
       const warnings = items.flatMap((batch) => batch.metadata_warnings);
+      const tvCounts = result.tv_shows_found > 0
+        ? ` | TV shows found: ${result.tv_shows_found} | TV episodes found: ${result.tv_episodes_found}`
+        : "";
       setQaSummary({
         title: "Scan summary",
-        text: `Movies found: ${result.movie_batches_found} | Music albums found: ${result.music_albums_found} | Discographies found: ${result.discographies_found} | Unknown items: ${result.unknown_items} | Unsupported files: ${result.unsupported_files}`,
+        text: `Movies found: ${result.movie_batches_found}${tvCounts} | Music albums found: ${result.music_albums_found} | Discographies found: ${result.discographies_found} | Unknown items: ${result.unknown_items} | Unsupported files: ${result.unsupported_files}`,
         warnings: `Ignored system files: ${result.ignored_system_files} | Artwork files found: ${result.artwork_files_found} | Subtitle files found: ${result.subtitle_files_found} | ${warnings.filter((warning) => warning === "release_folder_grouping_used").length} release-folder grouping used`,
       });
       showToast(`Scan complete - ${result.created} new, ${result.skipped_duplicates} skipped duplicate(s)`);
@@ -499,6 +522,7 @@ export default function App() {
       {editingBatch
         && editingBatch.detected_type !== "music_discography"
         && editingBatch.detected_type !== "video_movie"
+        && editingBatch.detected_type !== "video_tv_show"
         && (
         <MetadataEditor
           batch={editingBatch}
@@ -524,6 +548,16 @@ export default function App() {
           batch={editingBatch}
           saving={savingMetadata}
           onSave={handleMovieSave}
+          onClose={() => {
+            if (!savingMetadata) setEditingBatch(null);
+          }}
+        />
+      )}
+      {editingBatch?.detected_type === "video_tv_show" && (
+        <TvMetadataEditor
+          batch={editingBatch}
+          saving={savingMetadata}
+          onSave={handleTvSave}
           onClose={() => {
             if (!savingMetadata) setEditingBatch(null);
           }}

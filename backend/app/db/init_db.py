@@ -8,7 +8,7 @@ from app.db.session import Base, SessionLocal, engine
 from app.models import archive  # noqa: F401
 from app.models.archive import IngestBatch
 from app.services.music_metadata import build_suggested_metadata, suggest_music_destination
-from app.services.video_metadata import safe_movie_path_part
+from app.services.video_metadata import safe_movie_path_part, safe_tv_path_part
 
 
 def _backfill_suggested_metadata() -> None:
@@ -70,6 +70,27 @@ def _backfill_movie_destinations() -> None:
         db.commit()
 
 
+def _backfill_tv_destinations() -> None:
+    with SessionLocal() as db:
+        batches = (
+            db.query(IngestBatch)
+            .filter(
+                IngestBatch.detected_type == "video_tv_show",
+                IngestBatch.status.notin_(["moved", "merged"]),
+            )
+            .all()
+        )
+        for batch in batches:
+            metadata = batch.metadata_json or {}
+            show_title = str(
+                metadata.get("show_title") or "Unknown TV Show"
+            )
+            batch.suggested_destination = str(
+                settings.tv_dir / safe_tv_path_part(show_title)
+            )
+        db.commit()
+
+
 def init_db():
     for directory in (
         settings.movies_dir,
@@ -95,6 +116,7 @@ def init_db():
             )
     _backfill_suggested_metadata()
     _backfill_movie_destinations()
+    _backfill_tv_destinations()
     print("Database initialized.")
 
 

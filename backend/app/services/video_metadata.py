@@ -17,7 +17,24 @@ MOVIE_ARTWORK_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 VIDEO_SIDECAR_EXTENSIONS = {".nfo", ".txt", ".log", ".sfv", ".md5", ".url"}
 YEAR_PATTERN = re.compile(r"(?<!\d)(19\d{2}|20\d{2})(?!\d)")
 EPISODE_PATTERN = re.compile(
-    r"\b(?:s\d{1,2}e\d{1,3}|season[ ._-]*\d+|episode[ ._-]*\d+)\b",
+    r"(?<![a-z0-9])(?:s\d{1,2}[ ._-]*e\d{1,3}|"
+    r"\d{1,2}x\d{1,3}|season[ ._-]*\d+|episode[ ._-]*\d+)(?![a-z0-9])",
+    re.IGNORECASE,
+)
+TV_CODE_PATTERN = re.compile(
+    r"(?<![a-z0-9])s(?P<season>\d{1,2})[ ._-]*e(?P<episode>\d{1,3})(?![a-z0-9])",
+    re.IGNORECASE,
+)
+TV_X_PATTERN = re.compile(
+    r"(?<![a-z0-9])(?P<season>\d{1,2})x(?P<episode>\d{1,3})(?![a-z0-9])",
+    re.IGNORECASE,
+)
+SEASON_PATTERN = re.compile(
+    r"(?<![a-z0-9])season[ ._-]*(?P<season>\d{1,2})(?![a-z0-9])",
+    re.IGNORECASE,
+)
+EPISODE_ONLY_PATTERN = re.compile(
+    r"(?<![a-z0-9])episode[ ._-]*(?P<episode>\d{1,3})(?![a-z0-9])",
     re.IGNORECASE,
 )
 RELEASE_TAG_PATTERN = re.compile(
@@ -57,12 +74,28 @@ def looks_like_tv(value: str) -> bool:
     return bool(EPISODE_PATTERN.search(value))
 
 
+def looks_like_tv_episode(value: str) -> bool:
+    return bool(
+        TV_CODE_PATTERN.search(value)
+        or TV_X_PATTERN.search(value)
+        or EPISODE_ONLY_PATTERN.search(value)
+    )
+
+
 def safe_movie_path_part(value: str) -> str:
     safe = "".join(
         character if character not in '<>:"/\\|?*' else "_"
         for character in value
     ).strip(" .")
     return safe or "Unknown Movie"
+
+
+def safe_tv_path_part(value: str) -> str:
+    safe = "".join(
+        character if character not in '<>:"/\\|?*' else "_"
+        for character in value
+    ).strip(" .")
+    return safe or "Unknown TV Show"
 
 
 def _release_tags(value: str) -> list[str]:
@@ -102,3 +135,46 @@ def useful_movie_name(parsed: dict) -> bool:
         and title.casefold() not in GENERIC_MOVIE_NAMES
         and title.casefold() != "unknown movie"
     )
+
+
+def parse_tv_episode_name(value: str) -> dict:
+    name = Path(value).name
+    raw = Path(name).stem if Path(name).suffix.lower() in (
+        VIDEO_EXTENSIONS | SUBTITLE_EXTENSIONS
+    ) else name
+    match = TV_CODE_PATTERN.search(raw) or TV_X_PATTERN.search(raw)
+    season_match = SEASON_PATTERN.search(raw)
+    episode_match = EPISODE_ONLY_PATTERN.search(raw)
+    season_number = int(match.group("season")) if match else (
+        int(season_match.group("season")) if season_match else None
+    )
+    episode_number = int(match.group("episode")) if match else (
+        int(episode_match.group("episode")) if episode_match else None
+    )
+    token_match = match or episode_match
+    show_source = raw[:token_match.start()] if token_match else raw
+    title_source = raw[token_match.end():] if token_match else ""
+    show_title = re.sub(r"[._]+", " ", show_source)
+    show_title = re.sub(r"\s*[-]+\s*$", "", show_title)
+    show_title = re.sub(r"\s+", " ", show_title).strip(" -._()[]")
+    episode_title = RELEASE_TAG_PATTERN.sub(" ", title_source)
+    episode_title = re.sub(r"^[ ._-]+", "", episode_title)
+    episode_title = re.sub(r"[._]+", " ", episode_title)
+    episode_title = re.sub(r"\s+", " ", episode_title).strip(" -._()[]")
+    year_matches = list(YEAR_PATTERN.finditer(raw))
+    year = year_matches[-1].group(1) if year_matches else None
+    episode_code = (
+        f"S{season_number:02d}E{episode_number:02d}"
+        if season_number is not None and episode_number is not None
+        else None
+    )
+    return {
+        "show_title": show_title or None,
+        "season_number": season_number,
+        "episode_number": episode_number,
+        "episode_code": episode_code,
+        "episode_title": episode_title or None,
+        "raw_name": raw,
+        "year": year,
+        "confidence": 0.8 if episode_code else 0.4,
+    }

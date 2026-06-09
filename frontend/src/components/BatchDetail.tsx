@@ -19,6 +19,7 @@ function readableLibraryPath(value?: string | null): string {
   const normalized = value.replace(/\\/g, "/");
   const lower = normalized.toLowerCase();
   for (const marker of [
+    "tv/library/",
     "movies/library/",
     "music/discographies/",
     "music/library/",
@@ -86,6 +87,10 @@ const WARNING_LABELS: Record<string, string> = {
   release_tag_removed: "Release tag removed",
   movie_year_missing: "Movie year missing",
   movie_destination_exists: "Movie destination already exists",
+  tv_show_title_from_folder: "TV show title taken from folder",
+  tv_show_title_missing: "TV show title missing",
+  tv_episode_parse_failed: "Some TV episodes could not be parsed",
+  tv_destination_exists: "TV show destination already exists",
 };
 
 function metadataWarnings(batch: IngestBatch): string[] {
@@ -258,6 +263,149 @@ function MovieBatchDetail({ batch, moveSummary }: Props) {
           {alerts.map((message) => (
             <div key={message}><i className="ti ti-info-circle" />{message}</div>
           ))}
+        </section>
+      )}
+
+      {moved && moveSummary && (
+        <div className="move-log__empty">
+          {moveSummary.completed} files completed, {moveSummary.failed} failed.
+        </div>
+      )}
+      <DebugDetails batch={batch} moveSummary={moveSummary} />
+    </div>
+  );
+}
+
+type TvEpisodeDetail = {
+  season_number?: number | null;
+  episode_number?: number | null;
+  episode_code?: string | null;
+  episode_title?: string | null;
+  source_file?: string;
+};
+
+type TvSeasonDetail = {
+  season_number?: number;
+  episode_count?: number;
+  episodes?: TvEpisodeDetail[];
+};
+
+function TvBatchDetail({ batch, moveSummary }: Props) {
+  const metadata = batch.metadata_json ?? {};
+  const seasons = Array.isArray(metadata.seasons)
+    ? metadata.seasons.filter(
+      (season): season is TvSeasonDetail => Boolean(season) && typeof season === "object",
+    )
+    : [];
+  const episodes = seasons.flatMap((season) => season.episodes ?? []);
+  const warnings = metadataWarnings(batch);
+  const alerts = metadataAlertMessages(batch);
+  const moved = batch.status === "moved";
+
+  return (
+    <div className={`batch-detail ${moved ? "batch-detail--moved" : "batch-detail--review"}`}>
+      <div className="library-status">
+        <div className="library-status__icon"><i className="ti ti-device-tv" /></div>
+        <div>
+          <div className="library-status__eyebrow">TV show detected</div>
+          <h2>{metadataValue(batch, "show_title")}</h2>
+          <p>
+            {metadataValue(batch, "season_count")} season(s) ·{" "}
+            {metadataValue(batch, "episode_count")} episode(s)
+          </p>
+        </div>
+        <div className="library-status__facts">
+          <span>{Math.round(batch.confidence * 100)}% confidence</span>
+          <span>{batch.status.replace(/_/g, " ")}</span>
+        </div>
+      </div>
+
+      <div className="library-detail__grid movie-detail__cards">
+        <section className="library-card">
+          <h3>TV Show</h3>
+          <dl className="library-fields">
+            <div><dt>Show</dt><dd>{metadataValue(batch, "show_title")}</dd></div>
+            <div><dt>Seasons</dt><dd>{metadataValue(batch, "season_count")}</dd></div>
+            <div><dt>Episodes</dt><dd>{metadataValue(batch, "episode_count")}</dd></div>
+            <div><dt>Video files</dt><dd>{metadataValue(batch, "video_file_count")}</dd></div>
+            <div><dt>Subtitles</dt><dd>{metadataValue(batch, "subtitle_count")}</dd></div>
+            <div><dt>Artwork</dt><dd>{metadataValue(batch, "artwork_count")}</dd></div>
+            <div><dt>Ignored sidecars</dt><dd>{metadataValue(batch, "ignored_sidecar_count")}</dd></div>
+          </dl>
+        </section>
+        <section className="library-card">
+          <h3>Source</h3>
+          <dl className="library-fields library-fields--single">
+            <div>
+              <dt>Path</dt>
+              <dd className="library-fields__path">{readableSourcePath(batch.source_path)}</dd>
+            </div>
+            <div><dt>Status</dt><dd>{batch.status.replace(/_/g, " ")}</dd></div>
+          </dl>
+        </section>
+      </div>
+
+      <section className="library-destination">
+        <span>{moved ? "Final destination" : "Destination preview"}</span>
+        <strong>{readableLibraryPath(batch.suggested_destination)}</strong>
+      </section>
+
+      {warnings.length > 0 && (
+        <section className="metadata-warnings">
+          <div className="metadata-warnings__list">
+            {warnings.map((warning) => (
+              <span key={warning}><i className="ti ti-alert-triangle" />{warningLabel(warning)}</span>
+            ))}
+          </div>
+        </section>
+      )}
+      {alerts.length > 0 && (
+        <section className="metadata-alerts" aria-label="TV metadata alerts">
+          {alerts.map((message) => (
+            <div key={message}><i className="ti ti-info-circle" />{message}</div>
+          ))}
+        </section>
+      )}
+
+      {episodes.length > 0 && (
+        <section className="track-preview">
+          <div className="track-preview__header">
+            <h3>Episode preview</h3>
+            <span>{episodes.length} episode(s)</span>
+          </div>
+          <div className="track-preview__table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Season</th>
+                  <th>Episode</th>
+                  <th>Source file</th>
+                  <th>Destination preview</th>
+                </tr>
+              </thead>
+              <tbody>
+                {episodes.map((episode, index) => {
+                  const seasonNumber = Number(episode.season_number ?? 0);
+                  const season = seasonNumber
+                    ? String(seasonNumber).padStart(2, "0")
+                    : "-";
+                  const code = episode.episode_code ?? "-";
+                  const source = episode.source_file ?? "Unknown file";
+                  const preview = seasonNumber && episode.episode_code
+                    ? `Season ${season}/${episode.episode_code} - ${source}`
+                    : "Metadata review required";
+                  return (
+                    <tr key={`${code}-${source}-${index}`}>
+                      <td>{season}</td>
+                      <td>{code}</td>
+                      <td>{source}</td>
+                      <td>{preview}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </section>
       )}
 
@@ -635,6 +783,9 @@ export default function BatchDetail({ batch, moveSummary, review }: Props) {
   }
   if (batch.detected_type === "video_movie") {
     return <MovieBatchDetail batch={batch} moveSummary={moveSummary} />;
+  }
+  if (batch.detected_type === "video_tv_show") {
+    return <TvBatchDetail batch={batch} moveSummary={moveSummary} />;
   }
   if (batch.status === "moved") {
     return <MovedBatchDetail batch={batch} moveSummary={moveSummary} />;

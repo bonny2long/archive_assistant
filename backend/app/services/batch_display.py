@@ -64,6 +64,24 @@ def build_batch_display_fields(batch: IngestBatch) -> dict:
             "edit_kind": "movie",
         }
 
+    if detected_type in TV_TYPES:
+        season_count = int(metadata.get("season_count") or 0)
+        episode_count = int(metadata.get("episode_count") or 0)
+        season_label = "season" if season_count == 1 else "seasons"
+        episode_label = "episode" if episode_count == 1 else "episodes"
+        return {
+            "media_category": "tv",
+            "media_label": "TV Show",
+            "primary_name": metadata.get("show_title") or "Unknown TV Show",
+            "secondary_name": (
+                f"{season_count} {season_label} · "
+                f"{episode_count} {episode_label}"
+            ),
+            "item_label": "episodes",
+            "item_count": episode_count,
+            "edit_kind": "tv_show",
+        }
+
     if detected_type in QUARANTINE_TYPES:
         file_count = int(metadata.get("file_count") or 0)
         return {
