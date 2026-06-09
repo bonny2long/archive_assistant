@@ -1,4 +1,3 @@
-import { useState } from "react";
 import type {
   BatchSummary,
   TvEpisode,
@@ -138,126 +137,37 @@ function EpisodeCard({ episode, blocker, patch, showTitle, onChange }: EpisodeCa
     <div className="tv-repair-card">
       <div className="tv-repair-card__header">
         <i className="ti ti-alert-triangle" />
-        <span className="tv-repair-card__type">{blocker.message}</span>
-      </div>
-      <div className="tv-repair-card__source">
-        <span>Source</span>
-        <code>{episode.source_file}</code>
-      </div>
-      <div className="tv-repair-card__detected">
-        <span>Detected</span>
-        <code>
-          {episode.season_number != null
-            ? `Season ${episode.season_number}`
-            : "unknown season"}{" "}
-          ·{" "}
-          {episode.episode_number != null
-            ? `Episode ${episode.episode_number}`
-            : "no episode number"}
-        </code>
+        <span>{blocker.message}</span>
       </div>
 
-      <div className="tv-repair-card__fix">
-        <fieldset>
-          <legend>Fix</legend>
+      <div className="tv-repair-card__body">
+        <div className="tv-repair-card__meta">
+          <span className="tv-repair-card__meta-label">Source</span>
+          <code className="tv-repair-card__meta-value">{episode.source_file}</code>
+          <span className="tv-repair-card__meta-label">Detected</span>
+          <code className="tv-repair-card__meta-value">
+            {episode.season_number != null ? `Season ${episode.season_number}` : "unknown season"}
+            {" · "}
+            {episode.episode_number != null ? `Episode ${episode.episode_number}` : "no episode number"}
+          </code>
+        </div>
 
-          {/* Normal episode */}
-          <label className="tv-repair-card__radio">
-            <input
-              type="radio"
-              checked={!patch.is_special && patch.include && !patch.preserve_source_filename}
-              onChange={() =>
-                onChange({
-                  ...patch,
-                  include: true,
-                  is_special: false,
-                  preserve_source_filename: false,
-                })
-              }
-            />
-            Normal episode
-          </label>
-          {!patch.is_special && patch.include && !patch.preserve_source_filename && (
-            <div className="tv-repair-card__fields">
-              <label>
-                Season
-                <input
-                  type="number"
-                  min="1"
-                  max="99"
-                  value={patch.season_number ?? ""}
-                  onChange={(e) =>
-                    onChange({
-                      ...patch,
-                      season_number: e.target.value ? Number(e.target.value) : null,
-                    })
-                  }
-                />
-              </label>
-              <label>
-                Episode
-                <input
-                  type="number"
-                  min="1"
-                  max="9999"
-                  value={patch.episode_number ?? ""}
-                  onChange={(e) =>
-                    onChange({
-                      ...patch,
-                      episode_number: e.target.value ? Number(e.target.value) : null,
-                    })
-                  }
-                />
-              </label>
-              <label>
-                Title
-                <input
-                  value={patch.episode_title ?? ""}
-                  onChange={(e) =>
-                    onChange({ ...patch, episode_title: e.target.value || null })
-                  }
-                />
-              </label>
-            </div>
-          )}
+        <div className="tv-repair-card__fix">
+          <fieldset>
+            <legend>Fix</legend>
 
-          {/* Special / OAD */}
-          <label className="tv-repair-card__radio">
-            <input
-              type="radio"
-              checked={patch.is_special && patch.include}
-              onChange={() =>
-                onChange({
-                  ...patch,
-                  include: true,
-                  is_special: true,
-                  preserve_source_filename: false,
-                })
-              }
-            />
-            Special / OAD / Extra
-          </label>
-          {patch.is_special && patch.include && (
-            <div className="tv-repair-card__fields">
-              <label>
-                Group
-                <select
-                  value={patch.destination_group ?? "season"}
-                  onChange={(e) =>
-                    onChange({
-                      ...patch,
-                      destination_group: e.target.value as TvEpisodeReviewPatch["destination_group"],
-                    })
-                  }
-                >
-                  <option value="season">Season folder</option>
-                  <option value="specials">Specials folder</option>
-                  <option value="oad">OAD folder (→ Specials)</option>
-                  <option value="extras">Extras folder</option>
-                </select>
-              </label>
-              {(patch.destination_group === "season" ||
-                patch.destination_group == null) && (
+            <label className="tv-repair-card__radio">
+              <input
+                type="radio"
+                checked={!patch.is_special && patch.include && !patch.preserve_source_filename}
+                onChange={() =>
+                  onChange({ ...patch, include: true, is_special: false, preserve_source_filename: false })
+                }
+              />
+              Normal episode
+            </label>
+            {!patch.is_special && patch.include && !patch.preserve_source_filename && (
+              <div className="tv-repair-card__fields">
                 <label>
                   Season
                   <input
@@ -266,84 +176,136 @@ function EpisodeCard({ episode, blocker, patch, showTitle, onChange }: EpisodeCa
                     max="99"
                     value={patch.season_number ?? ""}
                     onChange={(e) =>
-                      onChange({
-                        ...patch,
-                        season_number: e.target.value ? Number(e.target.value) : null,
-                      })
+                      onChange({ ...patch, season_number: e.target.value ? Number(e.target.value) : null })
                     }
                   />
                 </label>
-              )}
-              <label>
-                Label
-                <input
-                  placeholder="e.g. S01E13.5 or S04SP01"
-                  value={patch.special_label ?? ""}
-                  onChange={(e) =>
-                    onChange({ ...patch, special_label: e.target.value || null })
-                  }
-                />
-              </label>
-              <label>
-                Title
-                <input
-                  value={patch.episode_title ?? ""}
-                  onChange={(e) =>
-                    onChange({ ...patch, episode_title: e.target.value || null })
-                  }
-                />
-              </label>
-            </div>
-          )}
+                <label>
+                  Episode
+                  <input
+                    type="number"
+                    min="1"
+                    max="9999"
+                    value={patch.episode_number ?? ""}
+                    onChange={(e) =>
+                      onChange({ ...patch, episode_number: e.target.value ? Number(e.target.value) : null })
+                    }
+                  />
+                </label>
+                <label>
+                  Title
+                  <input
+                    value={patch.episode_title ?? ""}
+                    onChange={(e) =>
+                      onChange({ ...patch, episode_title: e.target.value || null })
+                    }
+                  />
+                </label>
+              </div>
+            )}
 
-          {/* Preserve source filename */}
-          <label className="tv-repair-card__radio">
-            <input
-              type="radio"
-              checked={patch.preserve_source_filename && patch.include}
-              onChange={() =>
-                onChange({
-                  ...patch,
-                  include: true,
-                  is_special: false,
-                  preserve_source_filename: true,
-                })
-              }
-            />
-            Preserve original filename
-          </label>
-          {patch.preserve_source_filename && patch.include && (
-            <div className="tv-repair-card__fields">
-              <label>
-                Season
-                <input
-                  type="number"
-                  min="1"
-                  max="99"
-                  value={patch.season_number ?? ""}
-                  onChange={(e) =>
-                    onChange({
-                      ...patch,
-                      season_number: e.target.value ? Number(e.target.value) : null,
-                    })
-                  }
-                />
-              </label>
-            </div>
-          )}
+            <label className="tv-repair-card__radio">
+              <input
+                type="radio"
+                checked={patch.is_special && patch.include}
+                onChange={() =>
+                  onChange({ ...patch, include: true, is_special: true, preserve_source_filename: false })
+                }
+              />
+              Special / OAD / Extra
+            </label>
+            {patch.is_special && patch.include && (
+              <div className="tv-repair-card__fields">
+                <label>
+                  Group
+                  <select
+                    value={patch.destination_group ?? "season"}
+                    onChange={(e) =>
+                      onChange({
+                        ...patch,
+                        destination_group: e.target.value as TvEpisodeReviewPatch["destination_group"],
+                      })
+                    }
+                  >
+                    <option value="season">Season folder</option>
+                    <option value="specials">Specials folder</option>
+                    <option value="oad">OAD (→ Specials)</option>
+                    <option value="extras">Extras folder</option>
+                  </select>
+                </label>
+                {(patch.destination_group === "season" || patch.destination_group == null) && (
+                  <label>
+                    Season
+                    <input
+                      type="number"
+                      min="1"
+                      max="99"
+                      value={patch.season_number ?? ""}
+                      onChange={(e) =>
+                        onChange({ ...patch, season_number: e.target.value ? Number(e.target.value) : null })
+                      }
+                    />
+                  </label>
+                )}
+                <label>
+                  Label
+                  <input
+                    placeholder="e.g. S04SP01"
+                    value={patch.special_label ?? ""}
+                    onChange={(e) =>
+                      onChange({ ...patch, special_label: e.target.value || null })
+                    }
+                  />
+                </label>
+                <label>
+                  Title
+                  <input
+                    value={patch.episode_title ?? ""}
+                    onChange={(e) =>
+                      onChange({ ...patch, episode_title: e.target.value || null })
+                    }
+                  />
+                </label>
+              </div>
+            )}
 
-          {/* Exclude */}
-          <label className="tv-repair-card__radio">
-            <input
-              type="radio"
-              checked={!patch.include}
-              onChange={() =>
-                onChange({ ...patch, include: false })
-              }
-            />
-            Exclude from move
-          </label>
-        </fieldset>
+            <label className="tv-repair-card__radio">
+              <input
+                type="radio"
+                checked={patch.preserve_source_filename && patch.include}
+                onChange={() =>
+                  onChange({ ...patch, include: true, is_special: false, preserve_source_filename: true })
+                }
+              />
+              Preserve original filename
+            </label>
+            {patch.preserve_source_filename && patch.include && (
+              <div className="tv-repair-card__fields">
+                <label>
+                  Season
+                  <input
+                    type="number"
+                    min="1"
+                    max="99"
+                    value={patch.season_number ?? ""}
+                    onChange={(e) =>
+                      onChange({ ...patch, season_number: e.target.value ? Number(e.target.value) : null })
+                    }
+                  />
+                </label>
+              </div>
+            )}
+
+            <label className="tv-repair-card__radio">
+              <input
+                type="radio"
+                checked={!patch.include}
+                onChange={() => onChange({ ...patch, include: false })}
+              />
+              Exclude from move
+            </label>
+          </fieldset>
+        </div>
       </div>
 
       <div className="tv-repair-card__preview">
@@ -400,80 +362,6 @@ function DuplicateGroupCard({
           />
         );
       })}
-    </div>
-  );
-}
-
-// ── Season preview ───────────────────────────────────────────────────────────
-
-type SeasonPreviewProps = {
-  batch: BatchSummary;
-};
-
-function SeasonPreview({ batch }: SeasonPreviewProps) {
-  const [expanded, setExpanded] = useState(false);
-
-  const issuesByCode = new Set(
-    (batch.blocking_review_items ?? [])
-      .filter((i) => i.episode_code)
-      .map((i) => i.episode_code),
-  );
-  const issuesByFile = new Set(
-    (batch.blocking_review_items ?? [])
-      .filter((i) => i.file_name)
-      .map((i) => i.file_name),
-  );
-
-  return (
-    <div className="tv-season-preview">
-      <span className="tv-season-preview__label">Season preview</span>
-      <div className="tv-season-preview__list">
-        {batch.seasons.map((season) => {
-          const issueCount = season.episodes.filter(
-            (ep) =>
-              issuesByFile.has(ep.source_file) ||
-              (ep.episode_code != null && issuesByCode.has(ep.episode_code)),
-          ).length;
-          return (
-            <div key={season.season_number ?? "specials"} className="tv-season-preview__row">
-              <code>
-                Season {season.season_number != null
-                  ? String(season.season_number).padStart(2, "0")
-                  : "??"}
-              </code>
-              <span>· {season.episode_count} episodes</span>
-              {issueCount > 0 ? (
-                <span className="tv-season-preview__issue">· {issueCount} issue{issueCount !== 1 ? "s" : ""}</span>
-              ) : (
-                <span className="tv-season-preview__clean">· clean</span>
-              )}
-            </div>
-          );
-        })}
-      </div>
-      {batch.episode_count > 0 && (
-        <button
-          type="button"
-          className="btn-sm"
-          onClick={() => setExpanded((v) => !v)}
-        >
-          {expanded ? "Hide episodes" : "View all episodes"}
-        </button>
-      )}
-      {expanded && (
-        <div className="tv-episode-readonly-list">
-          {batch.seasons.map((season) =>
-            season.episodes.map((ep) => (
-              <code
-                key={`${ep.source_file}||${ep.relative_source ?? ""}`}
-                className="tv-episode-readonly-list__row"
-              >
-                {ep.episode_code ?? "—"} · {ep.episode_title ?? ep.source_file}
-              </code>
-            )),
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -580,8 +468,6 @@ export default function TvEpisodeReviewPanel({
         </div>
       )}
 
-      {/* Season preview */}
-      <SeasonPreview batch={batch} />
     </section>
   );
 }

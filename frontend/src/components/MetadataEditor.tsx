@@ -92,7 +92,7 @@ export default function MusicAlbumReviewEditor({
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <form
-        className="metadata-editor"
+        className="metadata-editor metadata-editor--wide"
         onMouseDown={(event) => event.stopPropagation()}
         onSubmit={(event) => {
           event.preventDefault();
@@ -107,7 +107,8 @@ export default function MusicAlbumReviewEditor({
           });
         }}
       >
-        <div className="metadata-editor__header">
+        {/* ── Header ── */}
+        <div className="editor-shell__header">
           <div>
             <h2>Review music album</h2>
             <p>Batch {batch.id}. Saving confirms these values for review.</p>
@@ -116,53 +117,64 @@ export default function MusicAlbumReviewEditor({
             <i className="ti ti-x" />
           </button>
         </div>
-        {batch.metadata_warnings.length > 0 && (
-          <div className="metadata-editor__warnings">
-            {batch.metadata_warnings.map((warning) => (
-              <span key={warning}><i className="ti ti-alert-triangle" />{readableWarning(warning)}</span>
-            ))}
+
+        {/* ── Body ── */}
+        <div className="editor-shell__body">
+          {batch.metadata_warnings.length > 0 && (
+            <div className="metadata-editor__warnings">
+              {batch.metadata_warnings.map((warning) => (
+                <span key={warning}><i className="ti ti-alert-triangle" />{readableWarning(warning)}</span>
+              ))}
+            </div>
+          )}
+          <ReviewIssuesPanel
+            batch={batch}
+            saving={saving}
+            confirmLabel="Confirm music metadata"
+            onConfirm={onConfirm}
+          />
+
+          <div className="editor-grid">
+            <label>
+              <span>Artist</span>
+              <input value={artist} onChange={(event) => setArtist(event.target.value)} autoFocus />
+              {suggestionSource(batch, "artist") && <small>{suggestionSource(batch, "artist")}</small>}
+            </label>
+            <label>
+              <span>Album</span>
+              <input value={album} onChange={(event) => setAlbum(event.target.value)} />
+              {suggestionSource(batch, "album") && <small>{suggestionSource(batch, "album")}</small>}
+            </label>
+            <label>
+              <span>Year</span>
+              <input value={year} maxLength={4} onChange={(event) => setYear(event.target.value)} />
+              {suggestionSource(batch, "year") && <small>{suggestionSource(batch, "year")}</small>}
+            </label>
+            <label>
+              <span>Genre</span>
+              <input value={genre} onChange={(event) => setGenre(event.target.value)} />
+              {suggestionSource(batch, "genre") && <small>{suggestionSource(batch, "genre")}</small>}
+            </label>
           </div>
-        )}
-        <ReviewIssuesPanel
-          batch={batch}
-          saving={saving}
-          confirmLabel="Confirm music metadata"
-          onConfirm={onConfirm}
-        />
-        <label>
-          <span>Artist</span>
-          <input value={artist} onChange={(event) => setArtist(event.target.value)} autoFocus />
-          {suggestionSource(batch, "artist") && <small>{suggestionSource(batch, "artist")}</small>}
-        </label>
-        <label>
-          <span>Album</span>
-          <input value={album} onChange={(event) => setAlbum(event.target.value)} />
-          {suggestionSource(batch, "album") && <small>{suggestionSource(batch, "album")}</small>}
-        </label>
-        <div className="metadata-editor__row">
-          <label>
-            <span>Year</span>
-            <input value={year} maxLength={4} onChange={(event) => setYear(event.target.value)} />
-            {suggestionSource(batch, "year") && <small>{suggestionSource(batch, "year")}</small>}
-          </label>
-          <label>
-            <span>Genre</span>
-            <input value={genre} onChange={(event) => setGenre(event.target.value)} />
-            {suggestionSource(batch, "genre") && <small>{suggestionSource(batch, "genre")}</small>}
-          </label>
+
+          <div className="editor-grid editor-grid--full">
+            <label>
+              <span>Review note optional</span>
+              <input value={note} onChange={(event) => setNote(event.target.value)} />
+            </label>
+          </div>
+
+          <div className="metadata-editor__preview">
+            <span>Destination preview</span>
+            <div><small>Artist folder</small><strong>{preview.artistFolder || "-"}</strong></div>
+            <div><small>Album folder</small><strong>{preview.albumFolder || "-"}</strong></div>
+            <div><small>Full path</small><code>{preview.fullPath}</code></div>
+          </div>
+          {!valid && <p className="metadata-editor__error">Artist, album, and a four-digit year are required.</p>}
         </div>
-        <label>
-          <span>Review note optional</span>
-          <input value={note} onChange={(event) => setNote(event.target.value)} />
-        </label>
-        <div className="metadata-editor__preview">
-          <span>Destination preview</span>
-          <div><small>Artist folder</small><strong>{preview.artistFolder || "-"}</strong></div>
-          <div><small>Album folder</small><strong>{preview.albumFolder || "-"}</strong></div>
-          <div><small>Full path</small><code>{preview.fullPath}</code></div>
-        </div>
-        {!valid && <p className="metadata-editor__error">Artist, album, and a four-digit year are required.</p>}
-        <div className="metadata-editor__actions">
+
+        {/* ── Footer ── */}
+        <div className="editor-shell__footer">
           <button type="button" className="btn" disabled={saving} onClick={onClose}>Cancel</button>
           <button type="submit" className="btn btn--green" disabled={saving || !valid}>
             <i className={`ti ti-${saving ? "loader-2 spinner" : "device-floppy"}`} />

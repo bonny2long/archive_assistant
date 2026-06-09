@@ -51,6 +51,7 @@ export default function TvMetadataEditor({
   const [patches, setPatches] = useState<TvEpisodeReviewPatch[]>([]);
 
   const hasBlockingItems = (batch.blocking_review_items ?? []).length > 0;
+  const hasNonBlocking = (batch.non_blocking_review_items ?? []).length > 0;
   const hasPatches = patches.length > 0;
 
   const yearValid = year.trim() === "" || /^(19|20)\d{2}$/.test(year.trim());
@@ -94,11 +95,11 @@ export default function TvMetadataEditor({
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <div
-        className="metadata-editor"
-        onMouseDown={(event) => event.stopPropagation()}
+        className="metadata-editor metadata-editor--tv"
+        onMouseDown={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="metadata-editor__header">
+        {/* ── Header ── */}
+        <div className="tv-editor__header">
           <div>
             <h2>Review TV show</h2>
             <p>
@@ -117,95 +118,99 @@ export default function TvMetadataEditor({
           </button>
         </div>
 
-        {/* Show-level fields */}
-        <label>
-          <span>Show title</span>
-          <input
-            value={showTitle}
-            onChange={(event) => setShowTitle(event.target.value)}
-            autoFocus
-          />
-        </label>
-        {!multiSeason && (
-          <label>
-            <span>Season number</span>
-            <input
-              type="number"
-              min="0"
-              max="99"
-              value={seasonNumber}
-              onChange={(event) => setSeasonNumber(event.target.value)}
-            />
-          </label>
-        )}
-        <label>
-          <span>Year (optional)</span>
-          <input
-            value={year}
-            maxLength={4}
-            onChange={(event) => setYear(event.target.value)}
-          />
-        </label>
-        {!multiSeason && (
-          <label>
-            <span>Season title (optional)</span>
-            <input
-              value={seasonTitle}
-              onChange={(event) => setSeasonTitle(event.target.value)}
-            />
-          </label>
-        )}
+        {/* ── Body: left + right ── */}
+        <div className="tv-editor__body">
 
-        {/* Validation errors */}
-        {!yearValid && (
-          <p className="metadata-editor__error">
-            Year must be a four-digit year.
-          </p>
-        )}
-        {!multiSeason && !seasonValid && (
-          <p className="metadata-editor__error">
-            Season must be between 0 and 99.
-          </p>
-        )}
+          {/* LEFT: show-level fields + season overview */}
+          <div className="tv-editor__left">
+            <label>
+              <span>Show title</span>
+              <input
+                value={showTitle}
+                onChange={(e) => setShowTitle(e.target.value)}
+                autoFocus
+              />
+            </label>
 
-        {/* Destination preview */}
-        <div className="metadata-editor__preview">
-          <span>Destination preview</span>
-          <div>
-            {preview.map((path) => (
-              <code key={path}>{path}</code>
-            ))}
+            {!multiSeason && (
+              <label>
+                <span>Season number</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="99"
+                  value={seasonNumber}
+                  onChange={(e) => setSeasonNumber(e.target.value)}
+                />
+              </label>
+            )}
+
+            <label>
+              <span>Year (optional)</span>
+              <input
+                value={year}
+                maxLength={4}
+                onChange={(e) => setYear(e.target.value)}
+              />
+            </label>
+
+            {!multiSeason && (
+              <label>
+                <span>Season title (optional)</span>
+                <input
+                  value={seasonTitle}
+                  onChange={(e) => setSeasonTitle(e.target.value)}
+                />
+              </label>
+            )}
+
+            {!yearValid && (
+              <p className="tv-editor__error">Year must be a four-digit year.</p>
+            )}
+            {!multiSeason && !seasonValid && (
+              <p className="tv-editor__error">Season must be between 0 and 99.</p>
+            )}
+
+            {/* Destination preview */}
+            <div className="tv-editor__dest-preview">
+              <span>Destination</span>
+              {preview.map((path) => (
+                <code key={path}>{path}</code>
+              ))}
+            </div>
+
+            {/* Season summary + expand */}
+            <TvSeasonSidebar batch={batch} />
+          </div>
+
+          {/* RIGHT: repair cards */}
+          <div className="tv-editor__right">
+            {(hasBlockingItems || hasNonBlocking) ? (
+              <TvEpisodeReviewPanel
+                batch={batch}
+                patches={patches}
+                onPatchChange={setPatches}
+              />
+            ) : (
+              <div className="tv-editor__confirm-area">
+                {!batch.review_confirmed && (
+                  <button
+                    type="button"
+                    className="btn btn--green"
+                    disabled={saving}
+                    onClick={() => void onConfirm()}
+                  >
+                    <i className={`ti ti-${saving ? "loader-2 spinner" : "checks"}`} />
+                    Confirm parsed episodes
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Episode repair panel — only shown when there are blocking or warning items */}
-        {(hasBlockingItems || (batch.non_blocking_review_items ?? []).length > 0) && (
-          <TvEpisodeReviewPanel
-            batch={batch}
-            patches={patches}
-            onPatchChange={setPatches}
-          />
-        )}
-
-        {/* Clean path — no blocking items, no patches needed */}
-        {!hasBlockingItems && !hasPatches && !batch.review_confirmed && (
-          <div className="tv-editor__confirm-area">
-            <button
-              type="button"
-              className="btn btn--green"
-              disabled={saving}
-              onClick={() => void onConfirm()}
-            >
-              <i
-                className={`ti ti-${saving ? "loader-2 spinner" : "checks"}`}
-              />
-              Confirm parsed episodes
-            </button>
-          </div>
-        )}
-
-        {/* Action bar */}
-        <div className="metadata-editor__actions">
+        {/* ── Footer ── */}
+        <div className="tv-editor__footer">
           <button
             type="button"
             className="btn"
@@ -215,7 +220,6 @@ export default function TvMetadataEditor({
             Cancel
           </button>
 
-          {/* Show-level save — only useful when there are no blocking items or the show title needs fixing */}
           {!hasPatches && (
             <button
               type="button"
@@ -223,14 +227,11 @@ export default function TvMetadataEditor({
               disabled={saving || !showLevelValid}
               onClick={handleShowLevelSave}
             >
-              <i
-                className={`ti ti-${saving ? "loader-2 spinner" : "device-floppy"}`}
-              />
+              <i className={`ti ti-${saving ? "loader-2 spinner" : "device-floppy"}`} />
               Save show info
             </button>
           )}
 
-          {/* Episode review save — primary action when patches exist */}
           {hasPatches && (
             <button
               type="button"
@@ -238,14 +239,91 @@ export default function TvMetadataEditor({
               disabled={saving || !showLevelValid}
               onClick={handleEpisodeReviewSave}
             >
-              <i
-                className={`ti ti-${saving ? "loader-2 spinner" : "device-floppy"}`}
-              />
+              <i className={`ti ti-${saving ? "loader-2 spinner" : "device-floppy"}`} />
               Save episode review
             </button>
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Season sidebar (left panel, below fields) ────────────────────────────────
+
+type SeasonSidebarProps = { batch: BatchSummary };
+
+function TvSeasonSidebar({ batch }: SeasonSidebarProps) {
+  const [expanded, setExpanded] = useState(false);
+
+  const issuesByCode = new Set(
+    (batch.blocking_review_items ?? [])
+      .filter((i) => i.episode_code)
+      .map((i) => i.episode_code),
+  );
+  const issuesByFile = new Set(
+    (batch.blocking_review_items ?? [])
+      .filter((i) => i.file_name)
+      .map((i) => i.file_name),
+  );
+
+  return (
+    <div className="tv-season-preview">
+      <span className="tv-season-preview__label">Season overview</span>
+      <div className="tv-season-preview__list">
+        {batch.seasons.map((season) => {
+          const issueCount = season.episodes.filter(
+            (ep) =>
+              issuesByFile.has(ep.source_file) ||
+              (ep.episode_code != null && issuesByCode.has(ep.episode_code)),
+          ).length;
+          return (
+            <div
+              key={season.season_number ?? "specials"}
+              className="tv-season-preview__row"
+            >
+              <code>
+                S{season.season_number != null
+                  ? String(season.season_number).padStart(2, "0")
+                  : "??"}
+              </code>
+              <span>{season.episode_count} ep</span>
+              {issueCount > 0 ? (
+                <span className="tv-season-preview__issue">
+                  · {issueCount} issue{issueCount !== 1 ? "s" : ""}
+                </span>
+              ) : (
+                <span className="tv-season-preview__clean">· clean</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {batch.episode_count > 0 && (
+        <button
+          type="button"
+          className="btn-sm"
+          onClick={() => setExpanded((v) => !v)}
+        >
+          {expanded ? "Hide episodes" : "View all episodes"}
+        </button>
+      )}
+
+      {expanded && (
+        <div className="tv-episode-readonly-list">
+          {batch.seasons.map((season) =>
+            season.episodes.map((ep) => (
+              <code
+                key={`${ep.source_file}||${ep.relative_source ?? ""}`}
+                className="tv-episode-readonly-list__row"
+              >
+                {ep.episode_code ?? "—"} · {ep.episode_title ?? ep.source_file}
+              </code>
+            )),
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -44,7 +44,7 @@ export default function MovieMetadataEditor({
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <form
-        className="metadata-editor"
+        className="metadata-editor metadata-editor--wide"
         onMouseDown={(event) => event.stopPropagation()}
         onSubmit={(event) => {
           event.preventDefault();
@@ -57,7 +57,8 @@ export default function MovieMetadataEditor({
           });
         }}
       >
-        <div className="metadata-editor__header">
+        {/* ── Header ── */}
+        <div className="editor-shell__header">
           <div>
             <h2>Correct movie metadata</h2>
             <p>Batch {batch.id}. Saving updates the movie destination plan.</p>
@@ -66,54 +67,66 @@ export default function MovieMetadataEditor({
             <i className="ti ti-x" />
           </button>
         </div>
-        <div className="movie-editor__context">
-          <div>
-            <span>Detected video file</span>
-            <strong>{batch.primary_video_file ?? "Unknown video file"}</strong>
+
+        {/* ── Body ── */}
+        <div className="editor-shell__body">
+          <div className="movie-editor__context">
+            <div>
+              <span>Detected video file</span>
+              <strong>{batch.primary_video_file ?? "Unknown video file"}</strong>
+            </div>
+            <div className="movie-editor__counts">
+              <span>Artwork: {batch.artwork_count}</span>
+              <span>Subtitles: {batch.subtitle_count}</span>
+              <span>Ignored sidecars: {batch.ignored_sidecar_count}</span>
+            </div>
           </div>
-          <div className="movie-editor__counts">
-            <span>Artwork: {batch.artwork_count}</span>
-            <span>Subtitles: {batch.subtitle_count}</span>
-            <span>Ignored sidecars: {batch.ignored_sidecar_count}</span>
+          <ReviewIssuesPanel
+            batch={batch}
+            saving={saving}
+            confirmLabel="Confirm movie metadata"
+            onConfirm={onConfirm}
+          />
+
+          <div className="editor-grid editor-grid--full">
+            <label>
+              <span>Title</span>
+              <input value={title} onChange={(event) => setTitle(event.target.value)} autoFocus />
+            </label>
           </div>
+          <div className="editor-grid">
+            <label>
+              <span>Year</span>
+              <input value={year} maxLength={4} onChange={(event) => setYear(event.target.value)} />
+            </label>
+            <label>
+              <span>Edition / Version optional</span>
+              <input value={edition} onChange={(event) => setEdition(event.target.value)} />
+            </label>
+          </div>
+          <div className="editor-grid editor-grid--full">
+            <label>
+              <span>Format</span>
+              <input value={format} onChange={(event) => setFormat(event.target.value)} />
+            </label>
+          </div>
+
+          <div className="metadata-editor__preview">
+            <span>Destination preview</span>
+            <div><code>{preview}</code></div>
+          </div>
+          {!year.trim() && (
+            <p className="metadata-editor__warning">
+              Movie year missing. Review before approval.
+            </p>
+          )}
+          {!yearValid && (
+            <p className="metadata-editor__error">Year must be a four-digit year.</p>
+          )}
         </div>
-        <ReviewIssuesPanel
-          batch={batch}
-          saving={saving}
-          confirmLabel="Confirm movie metadata"
-          onConfirm={onConfirm}
-        />
-        <label>
-          <span>Title</span>
-          <input value={title} onChange={(event) => setTitle(event.target.value)} autoFocus />
-        </label>
-        <div className="metadata-editor__row">
-          <label>
-            <span>Year</span>
-            <input value={year} maxLength={4} onChange={(event) => setYear(event.target.value)} />
-          </label>
-          <label>
-            <span>Edition / Version optional</span>
-            <input value={edition} onChange={(event) => setEdition(event.target.value)} />
-          </label>
-        </div>
-        <label>
-          <span>Format</span>
-          <input value={format} onChange={(event) => setFormat(event.target.value)} />
-        </label>
-        <div className="metadata-editor__preview">
-          <span>Destination preview</span>
-          <div><code>{preview}</code></div>
-        </div>
-        {!year.trim() && (
-          <p className="metadata-editor__warning">
-            Movie year missing. Review before approval.
-          </p>
-        )}
-        {!yearValid && (
-          <p className="metadata-editor__error">Year must be a four-digit year.</p>
-        )}
-        <div className="metadata-editor__actions">
+
+        {/* ── Footer ── */}
+        <div className="editor-shell__footer">
           <button type="button" className="btn" disabled={saving} onClick={onClose}>Cancel</button>
           <button type="submit" className="btn btn--green" disabled={saving || !valid}>
             <i className={`ti ti-${saving ? "loader-2 spinner" : "device-floppy"}`} />
