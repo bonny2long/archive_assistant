@@ -55,6 +55,10 @@ class BatchSummary(BaseModel):
     confidence: float
     metadata_quality: str
     metadata_warnings: list[str]
+    blocking_review_items: list[dict] = Field(default_factory=list)
+    non_blocking_review_items: list[dict] = Field(default_factory=list)
+    review_confirmed: bool = False
+    review_type: str | None = None
     suggested_destination: str | None = None
     suggested_metadata: dict | None = None
     metadata_confirmed: bool = False
@@ -103,6 +107,7 @@ class BatchMetadataUpdate(BaseModel):
     year: str = Field(pattern=r"^(19|20)\d{2}$")
     primary_genre: str | None = None
     format: str | None = None
+    note: str | None = None
 
 
 class MovieMetadataUpdate(BaseModel):
@@ -117,6 +122,12 @@ class TvMetadataUpdate(BaseModel):
     season_number: int | None = Field(default=None, ge=0, le=99)
     year: str | None = Field(default=None, pattern=r"^(19|20)\d{2}$")
     season_title: str | None = None
+
+
+class ReviewConfirmationUpdate(BaseModel):
+    confirmed: bool
+    accept_non_blocking_warnings: bool = False
+    note: str | None = None
 
 
 class DiscographyAlbumUpdate(BaseModel):

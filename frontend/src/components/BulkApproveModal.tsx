@@ -12,20 +12,9 @@ type Props = {
   onClose: () => void;
 };
 
-const BLOCKING_WARNINGS = new Set([
-  "possible_duplicate_destination",
-  "possible_artist_alias",
-  "possible_archived_duplicate_candidate",
-  "destination_file_conflict",
-  "child_album_metadata_missing",
-  "discography_destination_exists",
-  "movie_destination_exists",
-  "tv_destination_exists",
-]);
-
 function isApprovable(batch: BatchSummary): boolean {
   return batch.status === "pending_review"
-    && !batch.metadata_warnings.some((warning) => BLOCKING_WARNINGS.has(warning));
+    && batch.blocking_review_items.length === 0;
 }
 
 function approvalTitle(batch: BatchSummary): string {
@@ -72,8 +61,8 @@ export default function BulkApproveModal({
                 <small>
                   {isApprovable(batch)
                     ? "ready to approve"
-                    : batch.status === "pending_review"
-                      ? "blocked by warning"
+                    : batch.blocking_review_items.length > 0
+                      ? `${batch.blocking_review_items.length} blocking review item(s)`
                       : batch.status.replace(/_/g, " ")}
                 </small>
               </span>

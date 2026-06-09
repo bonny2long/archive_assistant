@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
 import type { BatchMetadataUpdate, BatchSummary } from "../types/archive";
+import ReviewIssuesPanel from "./ReviewIssuesPanel";
 
 type Props = {
   batch: BatchSummary;
   saving: boolean;
   onSave: (update: BatchMetadataUpdate) => Promise<void>;
+  onConfirm: () => Promise<void>;
   onClose: () => void;
 };
 
@@ -55,11 +57,20 @@ function readableWarning(value: string): string {
     ?? value.replace(/_/g, " ").replace(/^\w/, (letter: string) => letter.toUpperCase());
 }
 
-export default function MetadataEditor({ batch, saving, onSave, onClose }: Props) {
+export default function MusicAlbumReviewEditor({
+  batch,
+  saving,
+  onSave,
+  onConfirm,
+  onClose,
+}: Props) {
   const [artist, setArtist] = useState(() => metadataValue(batch, "artist"));
   const [album, setAlbum] = useState(() => metadataValue(batch, "album"));
   const [year, setYear] = useState(() => metadataValue(batch, "year"));
   const [genre, setGenre] = useState(() => metadataValue(batch, "genre"));
+  const [note, setNote] = useState(
+    () => String(batch.suggested_metadata?.note ?? ""),
+  );
 
   const preview = useMemo(() => {
     const root = destinationRoot(batch.suggested_destination);
@@ -92,12 +103,13 @@ export default function MetadataEditor({ batch, saving, onSave, onClose }: Props
             year: year.trim(),
             primary_genre: genre.trim() || null,
             format: batch.format ?? "MP3",
+            note: note.trim() || null,
           });
         }}
       >
         <div className="metadata-editor__header">
           <div>
-            <h2>Correct metadata</h2>
+            <h2>Review music album</h2>
             <p>Batch {batch.id}. Saving confirms these values for review.</p>
           </div>
           <button type="button" className="btn-sm" title="Close" onClick={onClose}>
@@ -111,6 +123,12 @@ export default function MetadataEditor({ batch, saving, onSave, onClose }: Props
             ))}
           </div>
         )}
+        <ReviewIssuesPanel
+          batch={batch}
+          saving={saving}
+          confirmLabel="Confirm music metadata"
+          onConfirm={onConfirm}
+        />
         <label>
           <span>Artist</span>
           <input value={artist} onChange={(event) => setArtist(event.target.value)} autoFocus />
@@ -133,6 +151,10 @@ export default function MetadataEditor({ batch, saving, onSave, onClose }: Props
             {suggestionSource(batch, "genre") && <small>{suggestionSource(batch, "genre")}</small>}
           </label>
         </div>
+        <label>
+          <span>Review note optional</span>
+          <input value={note} onChange={(event) => setNote(event.target.value)} />
+        </label>
         <div className="metadata-editor__preview">
           <span>Destination preview</span>
           <div><small>Artist folder</small><strong>{preview.artistFolder || "-"}</strong></div>

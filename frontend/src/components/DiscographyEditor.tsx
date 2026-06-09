@@ -5,11 +5,13 @@ import type {
   DiscographyMetadataUpdate,
   DiscographyReleaseType,
 } from "../types/archive";
+import ReviewIssuesPanel from "./ReviewIssuesPanel";
 
 type Props = {
   batch: BatchSummary;
   saving: boolean;
   onSave: (update: DiscographyMetadataUpdate) => Promise<void>;
+  onConfirm: () => Promise<void>;
   onClose: () => void;
 };
 
@@ -70,6 +72,7 @@ export default function DiscographyEditor({
   batch,
   saving,
   onSave,
+  onConfirm,
   onClose,
 }: Props) {
   const [artist, setArtist] = useState(
@@ -126,6 +129,12 @@ export default function DiscographyEditor({
         </div>
 
         <div className="discography-editor__body">
+          <ReviewIssuesPanel
+            batch={batch}
+            saving={saving}
+            confirmLabel="Confirm release list"
+            onConfirm={onConfirm}
+          />
           <div className="discography-editor__collection">
             <label>
               <span>Artist</span>

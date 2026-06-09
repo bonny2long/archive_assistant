@@ -126,6 +126,45 @@ function warningLabel(warning: string): string {
     ?? warning.replace(/_/g, " ").replace(/^\w/, (value: string) => value.toUpperCase());
 }
 
+function ReviewStateCard({ batch }: { batch: IngestBatch }) {
+  const metadata = batch.metadata_json ?? {};
+  const blockers = Array.isArray(metadata.blocking_review_items)
+    ? metadata.blocking_review_items as Array<{ type?: string; message?: string }>
+    : [];
+  const warnings = Array.isArray(metadata.non_blocking_review_items)
+    ? metadata.non_blocking_review_items as Array<{ type?: string; message?: string }>
+    : [];
+  if (blockers.length === 0 && warnings.length === 0) return null;
+  const action = {
+    music_album: "Edit music metadata",
+    music_discography: "Edit discography releases",
+    video_movie: "Edit movie metadata",
+    video_tv_show: "Review TV episodes",
+  }[batch.detected_type] ?? "Review metadata";
+
+  return (
+    <section className="review-state-card">
+      <div>
+        <strong>Review required</strong>
+        <span>{blockers.length} blocking item(s) · {warnings.length} warning(s)</span>
+      </div>
+      {blockers.map((item, index) => (
+        <p key={`${item.type ?? "blocker"}-${index}`}>
+          <i className="ti ti-alert-triangle" />
+          {item.message ?? item.type ?? "Metadata correction required"}
+        </p>
+      ))}
+      {warnings.map((item, index) => (
+        <p key={`${item.type ?? "warning"}-${index}`}>
+          <i className="ti ti-info-circle" />
+          {item.message ?? item.type ?? "Review warning"}
+        </p>
+      ))}
+      <small>Available action: {action}</small>
+    </section>
+  );
+}
+
 function DebugDetails({ batch, moveSummary, review }: Props) {
   const [showJson, setShowJson] = useState(false);
   const [copyLabel, setCopyLabel] = useState("Copy debug JSON");
@@ -211,6 +250,7 @@ function MovieBatchDetail({ batch, moveSummary }: Props) {
   const moved = batch.status === "moved";
   return (
     <div className={`batch-detail ${moved ? "batch-detail--moved" : "batch-detail--review"}`}>
+      <ReviewStateCard batch={batch} />
       <div className="library-status">
         <div className="library-status__icon"><i className="ti ti-movie" /></div>
         <div>
@@ -330,6 +370,7 @@ function TvBatchDetail({ batch, moveSummary }: Props) {
 
   return (
     <div className={`batch-detail ${moved ? "batch-detail--moved" : "batch-detail--review"}`}>
+      <ReviewStateCard batch={batch} />
       <div className="library-status">
         <div className="library-status__icon"><i className="ti ti-device-tv" /></div>
         <div>
@@ -464,6 +505,7 @@ function ReviewBatchDetail({ batch, moveSummary, review }: Props) {
 
   return (
     <div className="batch-detail batch-detail--review">
+      <ReviewStateCard batch={batch} />
       <div className="library-status">
         <div className="library-status__icon"><i className="ti ti-clipboard-check" /></div>
         <div>
@@ -612,6 +654,7 @@ function DiscographyBatchDetail({ batch, moveSummary }: Props) {
 
   return (
     <div className={`batch-detail ${moved ? "batch-detail--moved" : "batch-detail--review"}`}>
+      <ReviewStateCard batch={batch} />
       <div className="library-status">
         <div className="library-status__icon"><i className="ti ti-folders" /></div>
         <div>

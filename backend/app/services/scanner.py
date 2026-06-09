@@ -50,6 +50,7 @@ from app.services.video_metadata import (
     tv_subtitle_language_suffix,
     useful_movie_name,
 )
+from app.services.review_state import build_review_state
 
 
 @dataclass(frozen=True)
@@ -437,6 +438,7 @@ def _tv_batch_data(source: Path) -> dict | None:
             else 0.85
         ),
     }
+    metadata = build_review_state("video_tv_show", metadata)
     return {
         "files": files,
         "metadata": metadata,
@@ -662,6 +664,7 @@ def _create_movie_batch(db: Session, source: Path) -> IngestBatch | None:
         "metadata_warnings": warnings,
         "confidence": 0.8 if year else 0.7,
     }
+    metadata = build_review_state("video_movie", metadata)
     batch = IngestBatch(
         source_kind="manual-drop",
         source_path=str(source),
@@ -1251,6 +1254,7 @@ def _create_discography_batch(
         "metadata_warnings": list(dict.fromkeys(warnings)),
         "confidence": 0.6 if blocking else 1.0,
     }
+    metadata = build_review_state("music_discography", metadata)
     batch = IngestBatch(
         source_kind="manual-drop",
         source_path=str(parent),
@@ -1569,6 +1573,7 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
             album_meta["confidence"] = min(float(album_meta["confidence"]), 0.5)
             status = "needs_metadata_review"
 
+        album_meta = build_review_state("music_album", album_meta)
         batch = IngestBatch(
             source_kind="manual-drop",
             source_path=str(source_path),

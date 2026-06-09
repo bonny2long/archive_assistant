@@ -558,6 +558,62 @@ button:focus-visible, input:focus-visible {
   color: var(--text-secondary);
   font-size: 11px;
 }
+.review-issues {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-page);
+}
+.review-issues__summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.review-issues__summary span,
+.review-issues h3 {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.review-issues h3 { margin: 0 0 6px; }
+.review-issues p {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 5px;
+  margin: 4px 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.review-issues p small {
+  grid-column: 2;
+  overflow-wrap: anywhere;
+  color: var(--text-muted);
+}
+.review-state-card {
+  display: grid;
+  gap: 7px;
+  padding: 12px 14px;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: var(--radius-md);
+  background: rgba(245, 158, 11, 0.06);
+}
+.review-state-card > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.review-state-card span,
+.review-state-card p,
+.review-state-card > small {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.review-state-card p { margin: 0; }
+.review-state-card > small {
+  color: var(--accent-blue);
+  font-weight: 600;
+}
 
 /* Moved library detail */
 .batch-detail--moved {

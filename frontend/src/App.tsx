@@ -17,7 +17,7 @@ import ActionBar from "./components/ActionBar";
 import BatchTable from "./components/BatchTable";
 import StatusTabs from "./components/StatusTabs";
 import Toast from "./components/Toast";
-import MetadataEditor from "./components/MetadataEditor";
+import MusicAlbumReviewEditor from "./components/MetadataEditor";
 import LibrarySummary from "./components/LibrarySummary";
 import BulkApproveModal from "./components/BulkApproveModal";
 import DiscographyEditor from "./components/DiscographyEditor";
@@ -344,6 +344,27 @@ export default function App() {
     }
   };
 
+  const handleReviewConfirm = async () => {
+    if (!editingBatch) return;
+    setSavingMetadata(true);
+    try {
+      const result = await api.updateReviewConfirmation(editingBatch.id, {
+        confirmed: true,
+        accept_non_blocking_warnings: true,
+      });
+      showToast(result.action_message ?? "Review confirmed");
+      setEditingBatch(null);
+      await loadBatches();
+    } catch (confirmError: unknown) {
+      showToast(
+        confirmError instanceof Error ? confirmError.message : "Review confirmation failed",
+        "error",
+      );
+    } finally {
+      setSavingMetadata(false);
+    }
+  };
+
   const runBulkApprove = async () => {
     const ids = [...selected];
     if (ids.length === 0) return;
@@ -542,15 +563,12 @@ export default function App() {
           onHide={() => setToast(null)}
         />
       )}
-      {editingBatch
-        && editingBatch.detected_type !== "music_discography"
-        && editingBatch.detected_type !== "video_movie"
-        && editingBatch.detected_type !== "video_tv_show"
-        && (
-        <MetadataEditor
+      {editingBatch?.detected_type === "music_album" && (
+        <MusicAlbumReviewEditor
           batch={editingBatch}
           saving={savingMetadata}
           onSave={handleMetadataSave}
+          onConfirm={handleReviewConfirm}
           onClose={() => {
             if (!savingMetadata) setEditingBatch(null);
           }}
@@ -561,6 +579,7 @@ export default function App() {
           batch={editingBatch}
           saving={savingMetadata}
           onSave={handleDiscographySave}
+          onConfirm={handleReviewConfirm}
           onClose={() => {
             if (!savingMetadata) setEditingBatch(null);
           }}
@@ -571,6 +590,7 @@ export default function App() {
           batch={editingBatch}
           saving={savingMetadata}
           onSave={handleMovieSave}
+          onConfirm={handleReviewConfirm}
           onClose={() => {
             if (!savingMetadata) setEditingBatch(null);
           }}
@@ -581,6 +601,7 @@ export default function App() {
           batch={editingBatch}
           saving={savingMetadata}
           onSave={handleTvSave}
+          onConfirm={handleReviewConfirm}
           onClose={() => {
             if (!savingMetadata) setEditingBatch(null);
           }}

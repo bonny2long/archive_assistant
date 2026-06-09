@@ -25,6 +25,7 @@ from app.schemas.archive import (
     PaginatedResponse,
     ScanMusicResponse,
     TvMetadataUpdate,
+    ReviewConfirmationUpdate,
 )
 from app.services.dev_reset import (
     DevResetBlockedError,
@@ -52,22 +53,11 @@ from app.services.scanner import scan_music_ingest
 from app.services.mover import move_approved_batches
 from app.services.quarantine import quarantine_batch, restore_quarantined_batch
 from app.services.video_metadata import safe_movie_path_part, safe_tv_path_part
+from app.services.review_state import build_review_state
 from app.core.config import settings
 from app.core.time import configured_timezone, now_local, now_utc, serialize_utc
 
 router = APIRouter(prefix="/api")
-
-BLOCKING_APPROVAL_WARNINGS = {
-    "possible_duplicate_destination",
-    "possible_artist_alias",
-    "possible_archived_duplicate_candidate",
-    "destination_file_conflict",
-    "child_album_metadata_missing",
-    "discography_destination_exists",
-    "movie_destination_exists",
-    "tv_destination_exists",
-}
-
 
 @router.get("/health")
 def health():
@@ -195,6 +185,10 @@ def get_batch(batch_id: int, db: Session = Depends(get_db)):
     )
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
+    batch.metadata_json = build_review_state(
+        batch.detected_type,
+        batch.metadata_json,
+    )
     batch.files = sort_music_tracks(batch.files)
     return batch
 
@@ -371,7 +365,7 @@ def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Sessio
     if batch.status in {"moved", "move_failed", "merged"}:
         raise HTTPException(status_code=400, detail="Moved batches cannot be edited")
 
-    meta = dict(batch.metadata_json or {})
+    meta = build_review_state(batch.detected_type, batch.metadata_json)
     
     # Update core fields
     raw_artist = update.artist.strip()
@@ -391,6 +385,8 @@ def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Sessio
         meta["genre"] = update.primary_genre.strip() or "Unknown"
     if update.format is not None:
         meta["format"] = update.format.strip().upper()
+    if update.note is not None:
+        meta["review_note"] = update.note.strip() or None
     
     # Re-evaluate quality
     quality_res = evaluate_music_album_metadata(meta)
@@ -412,6 +408,8 @@ def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Sessio
         settings.music_mp3_dir
     )
     
+    meta["review_confirmed"] = True
+    meta = build_review_state(batch.detected_type, meta)
     batch.metadata_json = meta
     batch.suggested_destination = str(new_dest)
     batch.suggested_metadata = {
@@ -429,7 +427,7 @@ def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Sessio
     batch.confidence = quality_res["confidence"]
     batch.metadata_confirmed = True
 
-    if quality_res["metadata_quality"] in ("good", "fair"):
+    if not meta["blocking_review_items"]:
         batch.status = "pending_review"
     elif quality_res["metadata_quality"] == "broken":
         batch.status = "metadata_recovery"
@@ -524,6 +522,8 @@ def update_movie_metadata(
         metadata["format"] = movie_format
 
     folder = safe_movie_path_part(f"{year or 'Unknown Year'} - {title}")
+    metadata["review_confirmed"] = True
+    metadata = build_review_state(batch.detected_type, metadata)
     batch.metadata_json = metadata
     batch.suggested_metadata = {
         "title": title,
@@ -540,7 +540,11 @@ def update_movie_metadata(
     batch.suggested_destination = str(settings.movies_dir / folder)
     batch.metadata_confirmed = True
     batch.confidence = metadata["confidence"]
-    batch.status = "pending_review" if year else "needs_metadata_review"
+    batch.status = (
+        "needs_metadata_review"
+        if metadata["blocking_review_items"]
+        else "pending_review"
+    )
     batch.updated_at = now_utc()
     db.commit()
     return _batch_to_summary(batch, action_message="Movie metadata saved.")
@@ -654,6 +658,8 @@ def update_discography_metadata(
     metadata["metadata_warnings"] = warnings
     metadata["metadata_quality"] = "weak" if blocking else "good"
     metadata["confidence"] = 0.6 if blocking else 1.0
+    metadata["review_confirmed"] = True
+    metadata = build_review_state(batch.detected_type, metadata)
 
     batch.metadata_json = metadata
     batch.suggested_metadata = {
@@ -663,7 +669,11 @@ def update_discography_metadata(
     batch.suggested_destination = str(settings.music_discographies_dir / artist)
     batch.metadata_confirmed = True
     batch.confidence = metadata["confidence"]
-    batch.status = "needs_metadata_review" if blocking else "pending_review"
+    batch.status = (
+        "needs_metadata_review"
+        if metadata["blocking_review_items"]
+        else "pending_review"
+    )
     batch.updated_at = now_utc()
     db.commit()
     return _batch_to_summary(batch, action_message="Discography metadata saved.")
@@ -770,6 +780,8 @@ def update_tv_metadata(
             "confidence": 0.65 if parse_failed else 1.0,
         }
     )
+    metadata["review_confirmed"] = True
+    metadata = build_review_state(batch.detected_type, metadata)
     batch.metadata_json = metadata
     batch.suggested_metadata = {
         "show_title": show_title,
@@ -788,10 +800,63 @@ def update_tv_metadata(
     )
     batch.metadata_confirmed = True
     batch.confidence = metadata["confidence"]
-    batch.status = "needs_metadata_review" if parse_failed else "pending_review"
+    batch.status = (
+        "needs_metadata_review"
+        if metadata["blocking_review_items"]
+        else "pending_review"
+    )
     batch.updated_at = now_utc()
     db.commit()
     return _batch_to_summary(batch, action_message="TV metadata saved.")
+
+
+@router.patch(
+    "/batches/{batch_id}/review-confirmation",
+    response_model=BatchSummary,
+)
+def update_review_confirmation(
+    batch_id: int,
+    update: ReviewConfirmationUpdate,
+    db: Session = Depends(get_db),
+):
+    batch = db.get(IngestBatch, batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    if batch.detected_type in {"unknown_type", "unsupported_file"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Unknown items belong to quarantine review",
+        )
+    if batch.status in {"moved", "merged"}:
+        raise HTTPException(status_code=400, detail="Moved batches cannot be confirmed")
+
+    metadata = dict(batch.metadata_json or {})
+    metadata["review_confirmed"] = update.confirmed
+    metadata["review_note"] = update.note.strip() if update.note else None
+    metadata["non_blocking_warnings_accepted"] = bool(
+        update.confirmed and update.accept_non_blocking_warnings
+    )
+    metadata = build_review_state(batch.detected_type, metadata)
+    batch.metadata_json = metadata
+    batch.metadata_confirmed = update.confirmed
+    if metadata["blocking_review_items"]:
+        batch.status = "needs_metadata_review"
+    elif update.confirmed:
+        batch.status = "pending_review"
+        if metadata["metadata_quality"] in {"weak", "broken"}:
+            metadata["metadata_quality"] = "fair"
+    elif batch.status == "pending_review":
+        batch.status = "needs_metadata_review"
+    batch.updated_at = now_utc()
+    db.commit()
+    return _batch_to_summary(
+        batch,
+        action_message=(
+            "Review confirmed."
+            if update.confirmed
+            else "Review confirmation removed."
+        ),
+    )
 
 
 @router.post("/batches/{batch_id}/approve", response_model=ApproveResponse)
@@ -802,9 +867,8 @@ def approve_batch(batch_id: int, db: Session = Depends(get_db)):
     if batch.detected_type in {"unknown_type", "unsupported_file"}:
         raise HTTPException(status_code=400, detail="Unknown items cannot be approved")
     
-    meta = batch.metadata_json or {}
-    quality = meta.get("metadata_quality", "weak")
-    if batch.status in {"needs_metadata_review", "metadata_recovery"} or quality in {"weak", "broken"}:
+    meta = build_review_state(batch.detected_type, batch.metadata_json)
+    if meta["blocking_review_items"]:
         return ApproveResponse(
             batch_id=batch.id, 
             status=batch.status, 
@@ -812,14 +876,13 @@ def approve_batch(batch_id: int, db: Session = Depends(get_db)):
             metadata_quality=meta.get("metadata_quality"),
             metadata_warnings=meta.get("metadata_warnings", [])
         )
-    blocking_warnings = set(meta.get("metadata_warnings", [])) & BLOCKING_APPROVAL_WARNINGS
-    if blocking_warnings:
+    if batch.status in {"needs_metadata_review", "metadata_recovery"}:
         return ApproveResponse(
             batch_id=batch.id,
             status=batch.status,
-            message="Batch has a blocking warning that must be resolved before approval.",
+            message="Batch review must be confirmed before approval.",
             metadata_quality=meta.get("metadata_quality"),
-            metadata_warnings=sorted(blocking_warnings),
+            metadata_warnings=meta.get("metadata_warnings", []),
         )
 
     if batch.status != "pending_review":
@@ -855,18 +918,13 @@ def approve_selected_batches(
             errors.append(BulkApproveError(batch_id=batch_id, reason="not_found"))
             continue
 
-        metadata = batch.metadata_json or {}
-        quality = metadata.get("metadata_quality", "weak")
-        warnings = set(metadata.get("metadata_warnings", []))
+        metadata = build_review_state(batch.detected_type, batch.metadata_json)
         if batch.detected_type in {"unknown_type", "unsupported_file"}:
             reason = "quarantine_review_required"
-        elif batch.status in {"needs_metadata_review", "metadata_recovery"} or quality in {
-            "weak",
-            "broken",
-        }:
+        elif metadata["blocking_review_items"]:
+            reason = "blocking_review_items"
+        elif batch.status in {"needs_metadata_review", "metadata_recovery"}:
             reason = "metadata_not_confirmed"
-        elif warnings & BLOCKING_APPROVAL_WARNINGS:
-            reason = "blocking_warning"
         elif batch.status != "pending_review":
             reason = f"invalid_status:{batch.status}"
         else:
@@ -989,7 +1047,7 @@ def _batch_to_summary(
     *,
     action_message: str | None = None,
 ) -> BatchSummary:
-    meta = batch.metadata_json or {}
+    meta = build_review_state(batch.detected_type, batch.metadata_json)
     display = build_batch_display_fields(batch)
     return BatchSummary(
         id=batch.id,
@@ -1030,6 +1088,10 @@ def _batch_to_summary(
         confidence=batch.confidence,
         metadata_quality=meta.get("metadata_quality", "weak"),
         metadata_warnings=meta.get("metadata_warnings", []),
+        blocking_review_items=meta.get("blocking_review_items", []),
+        non_blocking_review_items=meta.get("non_blocking_review_items", []),
+        review_confirmed=meta.get("review_confirmed", False),
+        review_type=meta.get("review_type"),
         suggested_destination=batch.suggested_destination,
         suggested_metadata=batch.suggested_metadata,
         metadata_confirmed=batch.metadata_confirmed,

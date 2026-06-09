@@ -62,6 +62,10 @@ export type BatchSummary = {
   confidence: number;
   metadata_quality: string;
   metadata_warnings: string[];
+  blocking_review_items: ReviewItem[];
+  non_blocking_review_items: ReviewItem[];
+  review_confirmed: boolean;
+  review_type?: string | null;
   suggested_destination?: string | null;
   suggested_metadata?: SuggestedMetadata | null;
   metadata_confirmed: boolean;
@@ -87,6 +91,7 @@ export type SuggestedMetadata = {
   show_title?: string | null;
   season_number?: number | null;
   season_title?: string | null;
+  note?: string | null;
   sources?: Partial<Record<
     "artist" | "album" | "year" | "genre" | "title" | "edition" | "format" | "show_title" | "season_number" | "season_title",
     string
@@ -100,6 +105,21 @@ export type BatchMetadataUpdate = {
   year: string;
   primary_genre?: string | null;
   format?: string | null;
+  note?: string | null;
+};
+
+export type ReviewItem = {
+  type: string;
+  message: string;
+  file_name?: string | null;
+  source_folder?: string | null;
+  episode_code?: string | null;
+};
+
+export type ReviewConfirmationUpdate = {
+  confirmed: boolean;
+  accept_non_blocking_warnings: boolean;
+  note?: string | null;
 };
 
 export type DiscographyReleaseType =

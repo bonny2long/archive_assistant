@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
 import type { BatchSummary, MovieMetadataUpdate } from "../types/archive";
+import ReviewIssuesPanel from "./ReviewIssuesPanel";
 
 type Props = {
   batch: BatchSummary;
   saving: boolean;
   onSave: (update: MovieMetadataUpdate) => Promise<void>;
+  onConfirm: () => Promise<void>;
   onClose: () => void;
 };
 
@@ -16,6 +18,7 @@ export default function MovieMetadataEditor({
   batch,
   saving,
   onSave,
+  onConfirm,
   onClose,
 }: Props) {
   const [title, setTitle] = useState(
@@ -74,6 +77,12 @@ export default function MovieMetadataEditor({
             <span>Ignored sidecars: {batch.ignored_sidecar_count}</span>
           </div>
         </div>
+        <ReviewIssuesPanel
+          batch={batch}
+          saving={saving}
+          confirmLabel="Confirm movie metadata"
+          onConfirm={onConfirm}
+        />
         <label>
           <span>Title</span>
           <input value={title} onChange={(event) => setTitle(event.target.value)} autoFocus />

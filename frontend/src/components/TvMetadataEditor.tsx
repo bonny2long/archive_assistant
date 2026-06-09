@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
 import type { BatchSummary, TvMetadataUpdate } from "../types/archive";
+import ReviewIssuesPanel from "./ReviewIssuesPanel";
 
 type Props = {
   batch: BatchSummary;
   saving: boolean;
   onSave: (update: TvMetadataUpdate) => Promise<void>;
+  onConfirm: () => Promise<void>;
   onClose: () => void;
 };
 
@@ -16,6 +18,7 @@ export default function TvMetadataEditor({
   batch,
   saving,
   onSave,
+  onConfirm,
   onClose,
 }: Props) {
   const [showTitle, setShowTitle] = useState(
@@ -74,13 +77,19 @@ export default function TvMetadataEditor({
       >
         <div className="metadata-editor__header">
           <div>
-            <h2>Correct TV metadata</h2>
-            <p>Batch {batch.id}. Episode numbers remain read-only.</p>
+            <h2>Review TV show</h2>
+            <p>Batch {batch.id}. Review parsed episodes before approval.</p>
           </div>
           <button type="button" className="btn-sm" title="Close" onClick={onClose}>
             <i className="ti ti-x" />
           </button>
         </div>
+        <ReviewIssuesPanel
+          batch={batch}
+          saving={saving}
+          confirmLabel="Confirm parsed episodes"
+          onConfirm={onConfirm}
+        />
         <div className="movie-editor__context">
           <div className="movie-editor__counts">
             <span>Seasons: {batch.season_count}</span>
