@@ -29,6 +29,15 @@ function readableLibraryPath(value?: string | null): string {
   return normalized;
 }
 
+function readableSourcePath(value: string): string {
+  const normalized = value.replace(/\\/g, "/");
+  const dataMarker = "/data/";
+  const dataIndex = normalized.toLowerCase().indexOf(dataMarker);
+  return dataIndex >= 0
+    ? normalized.slice(dataIndex + dataMarker.length)
+    : normalized.split("/").slice(-2).join("/");
+}
+
 function formatBytes(value: unknown): string {
   const bytes = Number(value ?? 0);
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
@@ -194,7 +203,7 @@ function MovieBatchDetail({ batch, moveSummary }: Props) {
         </div>
       </div>
 
-      <div className="library-detail__grid">
+      <div className="library-detail__grid movie-detail__cards">
         <section className="library-card">
           <h3>Movie</h3>
           <dl className="library-fields">
@@ -210,7 +219,10 @@ function MovieBatchDetail({ batch, moveSummary }: Props) {
         <section className="library-card">
           <h3>Source</h3>
           <dl className="library-fields library-fields--single">
-            <div><dt>Path</dt><dd>{batch.source_path}</dd></div>
+            <div>
+              <dt>Path</dt>
+              <dd className="library-fields__path">{readableSourcePath(batch.source_path)}</dd>
+            </div>
             <div><dt>Status</dt><dd>{batch.status.replace(/_/g, " ")}</dd></div>
           </dl>
         </section>

@@ -561,6 +561,7 @@ button:focus-visible, input:focus-visible {
   font-size: 10px;
 }
 .library-detail__grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 0.75rem; }
+.movie-detail__cards { grid-template-columns: 1fr; }
 .library-card {
   padding: 0.9rem 1rem;
   border: 1px solid var(--border);
@@ -580,6 +581,11 @@ button:focus-visible, input:focus-visible {
   overflow-wrap: anywhere;
   color: var(--text-secondary);
   font-size: 12px;
+}
+.library-fields__path {
+  word-break: break-word;
+  font-family: var(--font-mono);
+  font-size: 11px !important;
 }
 .library-destination {
   display: grid;
