@@ -12,9 +12,18 @@ VIDEO_EXTENSIONS = {
     ".ts",
     ".m2ts",
 }
-SUBTITLE_EXTENSIONS = {".srt", ".ass", ".ssa", ".vtt", ".sub"}
+SUBTITLE_EXTENSIONS = {".srt", ".ass", ".ssa", ".vtt", ".sub", ".idx"}
 MOVIE_ARTWORK_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
-VIDEO_SIDECAR_EXTENSIONS = {".nfo", ".txt", ".log", ".sfv", ".md5", ".url"}
+VIDEO_SIDECAR_EXTENSIONS = {
+    ".nfo",
+    ".txt",
+    ".log",
+    ".sfv",
+    ".md5",
+    ".url",
+    ".m3u",
+    ".nzb",
+}
 YEAR_PATTERN = re.compile(r"(?<!\d)(19\d{2}|20\d{2})(?!\d)")
 EPISODE_PATTERN = re.compile(
     r"(?<![a-z0-9])(?:s\d{1,2}[ ._-]*e\d{1,3}|"
@@ -232,4 +241,47 @@ def parse_tv_episode_name(value: str) -> dict:
         "raw_name": raw,
         "year": year,
         "confidence": 0.8 if episode_code else 0.4,
+    }
+
+
+def tv_subtitle_language_suffix(
+    subtitle: Path,
+    episode: Path | None = None,
+) -> str:
+    subtitle_stem = subtitle.stem
+    if episode is not None:
+        episode_stem = episode.stem
+        if subtitle_stem.casefold().startswith(episode_stem.casefold()):
+            suffix = subtitle_stem[len(episode_stem):].strip(" ._-")
+            return f".{suffix}" if suffix else ""
+
+    parsed = parse_tv_episode_name(subtitle.name)
+    episode_title = str(parsed.get("episode_title") or "").strip(" ._-")
+    if re.fullmatch(r"[a-z]{2,3}(?:[._-][a-z]{2,3})?", episode_title, re.I):
+        return f".{episode_title.replace('_', '.').replace('-', '.')}"
+    return ""
+
+
+def tv_artwork_scope(path: Path, root: Path) -> dict:
+    relative = path.relative_to(root)
+    season_number = None
+    for part in reversed(relative.parent.parts):
+        folder = parse_tv_folder_name(part)
+        if folder.get("season_number") is not None:
+            season_number = int(folder["season_number"])
+            break
+
+    stem = path.stem.casefold()
+    season_match = TV_FOLDER_SEASON_PATTERN.search(path.stem)
+    if season_match:
+        season_number = int(season_match.group("season"))
+    is_season_artwork = (
+        season_number is not None
+        or stem == "season"
+        or stem.startswith("season")
+    )
+    return {
+        "relative_source": str(relative),
+        "artwork_scope": "season" if is_season_artwork else "show",
+        "season_number": season_number,
     }

@@ -13,7 +13,7 @@ from app.services.music_metadata import (
     music_track_filename,
     sort_music_tracks,
 )
-from app.services.video_metadata import parse_tv_episode_name, safe_tv_path_part
+from app.services.video_metadata import safe_tv_path_part
 
 
 def _safe_path_part(value: str) -> str:
@@ -230,23 +230,47 @@ def _tv_episode_destination(
     )
 
 
+def _tv_subtitle_destination(
+    destination: Path,
+    ingest_file,
+) -> Path | None:
+    metadata = ingest_file.metadata_json or {}
+    season_number = metadata.get("season_number")
+    if season_number is None:
+        return None
+
+    episode_code = metadata.get("episode_code")
+    episode_title = str(metadata.get("episode_title") or "").strip()
+    language_suffix = str(metadata.get("language_suffix") or "")
+    suffix = Path(ingest_file.file_name).suffix.lower()
+    if episode_code:
+        title_part = (
+            f" - {safe_tv_path_part(episode_title)}"
+            if episode_title
+            else ""
+        )
+        file_name = (
+            f"{episode_code}{title_part}{language_suffix}{suffix}"
+        )
+    else:
+        file_name = ingest_file.file_name
+    return _tv_season_destination(
+        destination,
+        int(season_number),
+    ) / file_name
+
+
 def _tv_artwork_destination(
     batch: IngestBatch,
     destination: Path,
     ingest_file,
 ) -> Path:
-    source = Path(ingest_file.file_path)
-    source_root = Path(batch.source_path)
-    relative_parent = source.parent.relative_to(source_root)
-    season_number = None
-    for part in reversed(relative_parent.parts):
-        parsed = parse_tv_episode_name(part)
-        if parsed.get("season_number") is not None:
-            season_number = int(parsed["season_number"])
-            break
+    file_metadata = ingest_file.metadata_json or {}
+    season_number = file_metadata.get("season_number")
+    artwork_scope = file_metadata.get("artwork_scope")
     parent = (
-        _tv_season_destination(destination, season_number)
-        if season_number is not None
+        _tv_season_destination(destination, int(season_number))
+        if artwork_scope == "season" and season_number is not None
         else destination
     )
     return parent / ingest_file.file_name
@@ -299,7 +323,7 @@ def _move_tv_batch(
             reserved.add(_path_key(completed))
             continue
 
-        if ingest_file.detected_role in {"tv_episode", "tv_subtitle"}:
+        if ingest_file.detected_role == "tv_episode":
             destination_file = _tv_episode_destination(
                 destination,
                 ingest_file,
@@ -307,6 +331,15 @@ def _move_tv_batch(
             if destination_file is None:
                 return [], [
                     f"TV episode metadata missing for {ingest_file.file_name}"
+                ]
+        elif ingest_file.detected_role == "tv_subtitle":
+            destination_file = _tv_subtitle_destination(
+                destination,
+                ingest_file,
+            )
+            if destination_file is None:
+                return [], [
+                    f"TV subtitle season missing for {ingest_file.file_name}"
                 ]
         elif ingest_file.detected_role == "tv_artwork":
             destination_file = _tv_artwork_destination(
@@ -378,12 +411,39 @@ def _move_tv_batch(
         role_by_source.get(action.source_path)
         for action in completed_actions
     ]
+    move_files = [
+        {
+            "source": action.source_path,
+            "destination": action.destination_path,
+            "role": role_by_source.get(action.source_path),
+            "status": action.status,
+        }
+        for action in completed_actions
+    ]
     (metadata_dir / f"batch-{batch.id}-tv-move-log.json").write_text(
         json.dumps(
             {
                 "batch_id": batch.id,
                 "media_type": "video_tv_show",
                 "show_title": show_title,
+                "season_count": metadata.get("season_count", 0),
+                "episode_count": metadata.get("episode_count", 0),
+                "subtitle_count": metadata.get("subtitle_count", 0),
+                "artwork_count": metadata.get("artwork_count", 0),
+                "ignored_sidecar_count": metadata.get(
+                    "ignored_sidecar_count",
+                    0,
+                ),
+                "destination": str(destination),
+                "seasons": [
+                    {
+                        "season_number": season.get("season_number"),
+                        "episode_count": season.get("episode_count", 0),
+                    }
+                    for season in metadata.get("seasons", [])
+                    if isinstance(season, dict)
+                ],
+                "files": move_files,
                 "summary": {
                     "episodes_moved": sum(
                         role == "tv_episode" for role in completed_roles

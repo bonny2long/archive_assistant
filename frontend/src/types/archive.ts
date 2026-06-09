@@ -159,6 +159,7 @@ export type TvEpisode = {
   episode_number?: number | null;
   episode_code?: string | null;
   episode_title?: string | null;
+  subtitle_count?: number;
   source_file: string;
   relative_source?: string;
 };

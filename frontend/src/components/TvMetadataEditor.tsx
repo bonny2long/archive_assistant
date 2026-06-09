@@ -25,6 +25,7 @@ export default function TvMetadataEditor({
     () => batch.suggested_metadata?.year ?? batch.year ?? "",
   );
   const initialSeason = batch.seasons[0];
+  const multiSeason = batch.seasons.length > 1;
   const [seasonNumber, setSeasonNumber] = useState(
     () => String(
       batch.suggested_metadata?.season_number
@@ -36,16 +37,24 @@ export default function TvMetadataEditor({
     () => batch.suggested_metadata?.season_title ?? initialSeason?.season_title ?? "",
   );
   const yearValid = year.trim() === "" || /^(19|20)\d{2}$/.test(year.trim());
-  const seasonValid = /^(?:0|[1-9]\d?)$/.test(seasonNumber.trim());
+  const seasonValid = multiSeason
+    || /^(?:0|[1-9]\d?)$/.test(seasonNumber.trim());
   const valid = showTitle.trim() !== "" && yearValid && seasonValid;
-  const preview = useMemo(
-    () => (
-      `TV/Library/${sanitizePathPart(showTitle) || "Unknown TV Show"}`
-      + `/Season ${seasonNumber.trim().padStart(2, "0")}`
-    ),
-    [showTitle, seasonNumber],
-  );
-  const episodes = initialSeason?.episodes ?? [];
+  const preview = useMemo(() => {
+    const root = `TV/Library/${sanitizePathPart(showTitle) || "Unknown TV Show"}`;
+    if (multiSeason) {
+      return [
+        root,
+        ...batch.seasons.map(
+          (season) => `${root}/Season ${String(season.season_number).padStart(2, "0")}`,
+        ),
+      ];
+    }
+    return [
+      `${root}/Season ${seasonNumber.trim().padStart(2, "0")}`,
+    ];
+  }, [batch.seasons, multiSeason, seasonNumber, showTitle]);
+  const episodes = batch.seasons.flatMap((season) => season.episodes);
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -57,9 +66,9 @@ export default function TvMetadataEditor({
           if (!valid) return;
           void onSave({
             show_title: showTitle.trim(),
-            season_number: Number(seasonNumber),
+            season_number: multiSeason ? null : Number(seasonNumber),
             year: year.trim() || null,
-            season_title: seasonTitle.trim() || null,
+            season_title: multiSeason ? null : seasonTitle.trim() || null,
           });
         }}
       >
@@ -89,16 +98,18 @@ export default function TvMetadataEditor({
             autoFocus
           />
         </label>
-        <label>
-          <span>Season number</span>
-          <input
-            type="number"
-            min="0"
-            max="99"
-            value={seasonNumber}
-            onChange={(event) => setSeasonNumber(event.target.value)}
-          />
-        </label>
+        {!multiSeason && (
+          <label>
+            <span>Season number</span>
+            <input
+              type="number"
+              min="0"
+              max="99"
+              value={seasonNumber}
+              onChange={(event) => setSeasonNumber(event.target.value)}
+            />
+          </label>
+        )}
         <label>
           <span>Year optional</span>
           <input
@@ -107,21 +118,35 @@ export default function TvMetadataEditor({
             onChange={(event) => setYear(event.target.value)}
           />
         </label>
-        <label>
-          <span>Season title optional</span>
-          <input
-            value={seasonTitle}
-            onChange={(event) => setSeasonTitle(event.target.value)}
-          />
-        </label>
+        {!multiSeason && (
+          <label>
+            <span>Season title optional</span>
+            <input
+              value={seasonTitle}
+              onChange={(event) => setSeasonTitle(event.target.value)}
+            />
+          </label>
+        )}
+        {multiSeason && (
+          <div className="tv-editor__seasons">
+            <span>Season summary</span>
+            {batch.seasons.map((season) => (
+              <code key={season.season_number}>
+                Season {String(season.season_number).padStart(2, "0")} · {season.episode_count} episodes
+              </code>
+            ))}
+          </div>
+        )}
         <div className="metadata-editor__preview">
           <span>Destination preview</span>
-          <div><code>{preview}</code></div>
+          <div>
+            {preview.map((path) => <code key={path}>{path}</code>)}
+          </div>
         </div>
         {!yearValid && (
           <p className="metadata-editor__error">Year must be a four-digit year.</p>
         )}
-        {!seasonValid && (
+        {!multiSeason && !seasonValid && (
           <p className="metadata-editor__error">Season must be between 0 and 99.</p>
         )}
         {episodes.length > 0 && (

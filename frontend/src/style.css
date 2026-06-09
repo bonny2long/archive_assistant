@@ -529,7 +529,14 @@ button:focus-visible, input:focus-visible {
   font-size: 10px;
 }
 .track-preview__warning { color: var(--accent-amber); }
-.tv-editor__episodes {
+.tv-season-heading td {
+  background: var(--bg-raised);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+}
+.tv-editor__episodes,
+.tv-editor__seasons {
   display: grid;
   gap: 5px;
   max-height: 180px;
@@ -539,13 +546,15 @@ button:focus-visible, input:focus-visible {
   border-radius: var(--radius-md);
   background: var(--bg-page);
 }
-.tv-editor__episodes > span {
+.tv-editor__episodes > span,
+.tv-editor__seasons > span {
   color: var(--text-muted);
   font-size: 10px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
-.tv-editor__episodes code {
+.tv-editor__episodes code,
+.tv-editor__seasons code {
   color: var(--text-secondary);
   font-size: 11px;
 }

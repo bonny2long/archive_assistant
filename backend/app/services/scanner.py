@@ -46,6 +46,8 @@ from app.services.video_metadata import (
     parse_tv_episode_name,
     safe_movie_path_part,
     safe_tv_path_part,
+    tv_artwork_scope,
+    tv_subtitle_language_suffix,
     useful_movie_name,
 )
 
@@ -261,12 +263,74 @@ def _tv_episode_metadata(path: Path, root: Path) -> dict:
     return parsed
 
 
+def _tv_subtitle_metadata(
+    path: Path,
+    root: Path,
+    episodes: list[tuple[Path, dict]],
+) -> dict:
+    parsed = _tv_episode_metadata(path, root)
+    matched_path = None
+    matched_episode = None
+    for episode_path, episode in episodes:
+        same_stem = path.stem.casefold() == episode_path.stem.casefold()
+        same_code = (
+            parsed.get("episode_code")
+            and parsed.get("episode_code") == episode.get("episode_code")
+        )
+        if same_stem or same_code:
+            matched_path = episode_path
+            matched_episode = episode
+            if same_stem:
+                break
+
+    if matched_episode:
+        parsed.update({
+            "show_title": matched_episode.get("show_title"),
+            "season_number": matched_episode.get("season_number"),
+            "episode_number": matched_episode.get("episode_number"),
+            "episode_code": matched_episode.get("episode_code"),
+            "episode_title": matched_episode.get("episode_title"),
+            "matched_episode_file": matched_path.name if matched_path else None,
+            "language_suffix": tv_subtitle_language_suffix(
+                path,
+                matched_path,
+            ),
+            "unmatched_subtitle": False,
+        })
+    else:
+        parsed["language_suffix"] = tv_subtitle_language_suffix(path)
+        parsed["unmatched_subtitle"] = True
+    return parsed
+
+
+def _tv_artwork_metadata(
+    path: Path,
+    root: Path,
+    only_season_number: int | None,
+) -> dict:
+    metadata = tv_artwork_scope(path, root)
+    if (
+        metadata.get("artwork_scope") == "season"
+        and metadata.get("season_number") is None
+    ):
+        metadata["season_number"] = only_season_number
+    return metadata
+
+
 def _tv_batch_data(source: Path) -> dict | None:
     files = _tv_files(source)
     if not files["video"]:
         return None
 
-    episodes = [_tv_episode_metadata(path, source) for path in files["video"]]
+    episode_rows = [
+        (path, _tv_episode_metadata(path, source))
+        for path in files["video"]
+    ]
+    episodes = [metadata for _, metadata in episode_rows]
+    subtitles = [
+        _tv_subtitle_metadata(path, source, episode_rows)
+        for path in files["subtitles"]
+    ]
     parsed_titles = [
         str(episode["show_title"]).strip()
         for episode in episodes
@@ -299,6 +363,19 @@ def _tv_batch_data(source: Path) -> dict | None:
         warnings.append("tv_metadata_review_required")
     if any(not episode.get("episode_title") for episode in episodes):
         warnings.append("tv_episode_titles_missing")
+    if any(subtitle.get("unmatched_subtitle") for subtitle in subtitles):
+        warnings.append("tv_unmatched_subtitle")
+
+    subtitle_counts = Counter(
+        subtitle.get("episode_code")
+        for subtitle in subtitles
+        if subtitle.get("episode_code")
+    )
+    for episode in episodes:
+        episode["subtitle_count"] = subtitle_counts.get(
+            episode.get("episode_code"),
+            0,
+        )
 
     seasons_by_number: dict[int, list[dict]] = defaultdict(list)
     for episode in episodes:
@@ -345,6 +422,7 @@ def _tv_batch_data(source: Path) -> dict | None:
         "subtitle_files": [
             str(path.relative_to(source)) for path in files["subtitles"]
         ],
+        "subtitles": subtitles,
         "ignored_sidecar_files": [
             str(path.relative_to(source)) for path in files["ignored"]
         ],
@@ -403,16 +481,34 @@ def _apply_tv_batch_data(
     db.flush()
 
     files = data["files"]
-    for path, role in (
-        [(path, "tv_episode") for path in files["video"]]
-        + [(path, "tv_subtitle") for path in files["subtitles"]]
-        + [(path, "tv_artwork") for path in files["artwork"]]
-    ):
-        file_metadata = (
-            _tv_episode_metadata(path, source)
-            if role != "tv_artwork"
-            else {"relative_source": str(path.relative_to(source))}
-        )
+    episode_rows = [
+        (path, _tv_episode_metadata(path, source))
+        for path in files["video"]
+    ]
+    role_rows = (
+        [(path, "tv_episode", metadata) for path, metadata in episode_rows]
+        + [
+            (
+                path,
+                "tv_subtitle",
+                _tv_subtitle_metadata(path, source, episode_rows),
+            )
+            for path in files["subtitles"]
+        ]
+        + [
+            (
+                path,
+                "tv_artwork",
+                _tv_artwork_metadata(
+                    path,
+                    source,
+                    data["metadata"].get("season_number"),
+                ),
+            )
+            for path in files["artwork"]
+        ]
+    )
+    for path, role, file_metadata in role_rows:
         db.add(
             IngestFile(
                 batch_id=batch.id,

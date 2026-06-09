@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import type { BatchMoveSummary, BatchReview, IngestBatch } from "../types/archive";
 import { formatArchiveTime } from "../utils/archiveTime";
 import { getBatchDisplayTitle, getReleaseCount } from "../utils/batchDisplay";
@@ -91,6 +91,7 @@ const WARNING_LABELS: Record<string, string> = {
   tv_show_title_missing: "TV show title missing",
   tv_episode_parse_failed: "Some TV episodes could not be parsed",
   tv_episode_titles_missing: "Some episode titles are missing",
+  tv_unmatched_subtitle: "Some subtitles could not be matched to an episode",
   tv_metadata_review_required: "TV metadata review required",
   tv_destination_exists: "TV show destination already exists",
 };
@@ -295,6 +296,7 @@ type TvEpisodeDetail = {
   episode_number?: number | null;
   episode_code?: string | null;
   episode_title?: string | null;
+  subtitle_count?: number;
   source_file?: string;
 };
 
@@ -409,20 +411,36 @@ function TvBatchDetail({ batch, moveSummary }: Props) {
                 <tr>
                   <th>Episode</th>
                   <th>Title</th>
+                  <th>Subtitles</th>
                 </tr>
               </thead>
               <tbody>
-                {episodes.slice(0, 10).map((episode, index) => {
-                  const code = episode.episode_code ?? "-";
-                  const source = episode.source_file ?? "Unknown file";
-                  const title = episode.episode_title ?? source;
-                  return (
-                    <tr key={`${code}-${source}-${index}`}>
-                      <td>{code}</td>
-                      <td>{title}</td>
-                    </tr>
-                  );
-                })}
+                {seasons.map((season) => (
+                  <Fragment key={season.season_number ?? "unknown"}>
+                    {seasons.length > 1 && (
+                      <tr className="tv-season-heading">
+                        <td colSpan={3}>
+                          Season {String(season.season_number ?? "-").padStart(2, "0")}
+                        </td>
+                      </tr>
+                    )}
+                    {(season.episodes ?? []).map((episode, index) => {
+                      const code = episode.episode_code ?? "-";
+                      const source = episode.source_file ?? "Unknown file";
+                      const title = episode.episode_title ?? source;
+                      return (
+                        <tr key={`${code}-${source}-${index}`}>
+                          <td>{code}</td>
+                          <td>
+                            {title}
+                            {!episode.episode_title && <small>{source}</small>}
+                          </td>
+                          <td>{episode.subtitle_count ?? 0}</td>
+                        </tr>
+                      );
+                    })}
+                  </Fragment>
+                ))}
               </tbody>
             </table>
           </div>
@@ -459,7 +477,7 @@ function ReviewBatchDetail({ batch, moveSummary, review }: Props) {
         </div>
       </div>
 
-      <div className="library-detail__grid">
+      <div className="library-detail__grid movie-detail__cards">
         <section className="library-card">
           <h3>Album</h3>
           <dl className="library-fields">
@@ -475,7 +493,12 @@ function ReviewBatchDetail({ batch, moveSummary, review }: Props) {
         <section className="library-card">
           <h3>Source</h3>
           <dl className="library-fields library-fields--single">
-            <div><dt>Folder</dt><dd>{review?.source_path ?? batch.source_path}</dd></div>
+            <div>
+              <dt>Folder</dt>
+              <dd className="library-fields__path">
+                {readableSourcePath(review?.source_path ?? batch.source_path)}
+              </dd>
+            </div>
             <div><dt>Discs</dt><dd>{review?.disc_count ?? metadataValue(batch, "disc_count")}</dd></div>
             <div><dt>Status</dt><dd>{review?.status ?? batch.status}</dd></div>
           </dl>
