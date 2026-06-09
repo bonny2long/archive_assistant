@@ -42,6 +42,8 @@ class BatchSummary(BaseModel):
     season_count: int = 0
     episode_count: int = 0
     seasons: list[dict] = Field(default_factory=list)
+    ignored_corrupt_video_count: int = 0
+    ignored_corrupt_video_files: list[str] = Field(default_factory=list)
     name: str | None = None
     reason: str | None = None
     file_count: int = 0

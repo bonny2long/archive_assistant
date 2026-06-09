@@ -49,6 +49,8 @@ export type BatchSummary = {
   season_count: number;
   episode_count: number;
   seasons: TvSeason[];
+  ignored_corrupt_video_count: number;
+  ignored_corrupt_video_files: string[];
   name?: string | null;
   reason?: string | null;
   file_count: number;

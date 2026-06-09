@@ -300,6 +300,16 @@ function TvSeasonSidebar({ batch }: SeasonSidebarProps) {
         })}
       </div>
 
+      {batch.ignored_corrupt_video_count > 0 && (
+        <div className="tv-season-preview__ignored">
+          <i className="ti ti-file-x" />
+          <span>
+            Ignored corrupt videos: {batch.ignored_corrupt_video_count}
+          </span>
+          <small>Preserved in _INGEST for cleanup review</small>
+        </div>
+      )}
+
       {batch.episode_count > 0 && (
         <button
           type="button"

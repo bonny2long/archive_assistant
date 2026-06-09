@@ -1331,6 +1331,23 @@ button:focus-visible, input:focus-visible {
 .tv-season-preview__issue { color: var(--accent-amber) !important; }
 .tv-season-preview__clean { color: var(--accent-green) !important; }
 .tv-season-preview > .btn-sm { align-self: flex-start; margin-top: 0.25rem; }
+.tv-season-preview__ignored {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  gap: 1px 0.4rem;
+  align-items: center;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(245,158,11,0.06);
+}
+.tv-season-preview__ignored i { color: var(--accent-amber); font-size: 13px; }
+.tv-season-preview__ignored span { color: var(--accent-amber); font-size: 12px; }
+.tv-season-preview__ignored small {
+  grid-column: 2;
+  color: var(--text-muted);
+  font-size: 10px;
+}
 
 .tv-episode-readonly-list {
   display: grid;

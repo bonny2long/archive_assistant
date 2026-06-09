@@ -211,16 +211,21 @@ def _tv_files(root: Path) -> dict[str, list[Path]]:
         path for path in root.rglob("*")
         if path.is_file()
     ]
-    video = sorted(path for path in candidates if is_video_file(path))
+    all_video = sorted(path for path in candidates if is_video_file(path))
+    # Zero-byte video files are test/stub/corrupt artifacts. They must not become
+    # TV episodes, must not inflate counts, and must not create duplicate blockers.
+    video = [path for path in all_video if path.stat().st_size > 0]
+    zero_byte_video = [path for path in all_video if path.stat().st_size == 0]
     artwork = sorted(path for path in candidates if is_movie_artwork(path))
     subtitles = sorted(path for path in candidates if is_subtitle_file(path))
     ignored = sorted(path for path in candidates if is_ignored_video_sidecar(path))
     recognized = {
         path.resolve()
-        for path in [*video, *artwork, *subtitles, *ignored]
+        for path in [*all_video, *artwork, *subtitles, *ignored]
     }
     return {
         "video": video,
+        "zero_byte_video": zero_byte_video,
         "artwork": artwork,
         "subtitles": subtitles,
         "ignored": ignored,
@@ -366,6 +371,9 @@ def _tv_batch_data(source: Path) -> dict | None:
         warnings.append("tv_episode_titles_missing")
     if any(subtitle.get("unmatched_subtitle") for subtitle in subtitles):
         warnings.append("tv_unmatched_subtitle")
+    zero_byte_videos = files.get("zero_byte_video", [])
+    if zero_byte_videos:
+        warnings.append("zero_byte_video_files_ignored")
 
     subtitle_counts = Counter(
         subtitle.get("episode_code")
@@ -417,6 +425,10 @@ def _tv_batch_data(source: Path) -> dict | None:
         "subtitle_count": len(files["subtitles"]),
         "artwork_count": len(files["artwork"]),
         "ignored_sidecar_count": len(files["ignored"]),
+        "ignored_corrupt_video_count": len(zero_byte_videos),
+        "ignored_corrupt_video_files": [
+            str(path.relative_to(source)) for path in zero_byte_videos
+        ],
         "artwork_files": [
             str(path.relative_to(source)) for path in files["artwork"]
         ],

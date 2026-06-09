@@ -477,6 +477,13 @@ def _move_tv_batch(
                     "ignored_sidecar_count",
                     0,
                 ),
+                "ignored_corrupt_video_count": metadata.get(
+                    "ignored_corrupt_video_count",
+                    0,
+                ),
+                "ignored_corrupt_video_files_preserved_in_ingest": bool(
+                    metadata.get("ignored_corrupt_video_count", 0)
+                ),
                 "destination": str(destination),
                 "seasons": [
                     {

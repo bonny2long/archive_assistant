@@ -1143,6 +1143,8 @@ def _batch_to_summary(
         season_count=meta.get("season_count", 0),
         episode_count=meta.get("episode_count", 0),
         seasons=meta.get("seasons", []),
+        ignored_corrupt_video_count=meta.get("ignored_corrupt_video_count", 0),
+        ignored_corrupt_video_files=meta.get("ignored_corrupt_video_files", []),
         name=meta.get("name"),
         reason=meta.get("reason"),
         file_count=meta.get("file_count", 0),
