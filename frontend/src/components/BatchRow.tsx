@@ -25,7 +25,6 @@ type Props = {
   onRecovery: (id: number) => void;
   onQuarantine: (id: number) => void;
   onRestoreQuarantine: (id: number) => void;
-  onConvertToTv: (id: number) => void;
   onEdit: (batch: BatchSummary) => void;
 };
 
@@ -60,7 +59,6 @@ export default function BatchRow({
   onRecovery,
   onQuarantine,
   onRestoreQuarantine,
-  onConvertToTv,
   onEdit,
 }: Props) {
   const awaitingQuarantine = batch.status === "needs_quarantine_review";
@@ -71,10 +69,6 @@ export default function BatchRow({
   const secondaryName = getBatchSecondaryName(batch);
   const itemText = getBatchItemText(batch);
   const editKind = getBatchEditKind(batch);
-  const possibleTv = (
-    batch.detected_type === "unknown_type"
-    && batch.reason?.includes("Possible TV or multi-video folder") === true
-  );
   const year = batch.year ?? "-";
   const percent = Math.round((batch.confidence ?? 0) * 100);
 
@@ -130,31 +124,17 @@ export default function BatchRow({
         </td>
         <td className="batch-table__actions" onClick={(event) => event.stopPropagation()}>
           {awaitingQuarantine ? (
-            <div className="batch-row-actions">
-              {possibleTv && (
-                <button
-                  className="btn btn--compact tv-convert-action"
-                  title="Treat as TV show"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onConvertToTv(batch.id);
-                  }}
-                >
-                  <i className="ti ti-device-tv" /> Treat as TV show
-                </button>
-              )}
-              <button
-                className="btn btn--compact quarantine-action"
-                title="Move to quarantine"
-                onClick={(event) => { event.stopPropagation(); onQuarantine(batch.id); }}
-              >
-                <i className="ti ti-archive" /> {
-                  batch.name === "Unsupported loose files"
-                    ? "Move group to quarantine"
-                    : "Move to quarantine"
-                }
-              </button>
-            </div>
+            <button
+              className="btn btn--compact quarantine-action"
+              title="Move to quarantine"
+              onClick={(event) => { event.stopPropagation(); onQuarantine(batch.id); }}
+            >
+              <i className="ti ti-archive" /> {
+                batch.name === "Unsupported loose files"
+                  ? "Move group to quarantine"
+                  : "Move to quarantine"
+              }
+            </button>
           ) : quarantined ? (
             <button
               className="btn btn--compact quarantine-restore-action"

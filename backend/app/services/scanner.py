@@ -294,6 +294,11 @@ def _tv_batch_data(source: Path) -> dict | None:
     )
     if parse_failed:
         warnings.append("tv_episode_parse_failed")
+    folder_only_title = not parsed_titles
+    if folder_only_title:
+        warnings.append("tv_metadata_review_required")
+    if any(not episode.get("episode_title") for episode in episodes):
+        warnings.append("tv_episode_titles_missing")
 
     seasons_by_number: dict[int, list[dict]] = defaultdict(list)
     for episode in episodes:
@@ -341,14 +346,24 @@ def _tv_batch_data(source: Path) -> dict | None:
             str(path.relative_to(source)) for path in files["ignored"]
         ],
         "seasons": seasons,
-        "metadata_quality": "weak" if parse_failed else "good",
+        "metadata_quality": (
+            "weak" if parse_failed or folder_only_title else "good"
+        ),
         "metadata_warnings": list(dict.fromkeys(warnings)),
-        "confidence": 0.6 if parse_failed else 0.85,
+        "confidence": (
+            0.6 if parse_failed
+            else 0.65 if folder_only_title
+            else 0.85
+        ),
     }
     return {
         "files": files,
         "metadata": metadata,
-        "status": "needs_metadata_review" if parse_failed else "pending_review",
+        "status": (
+            "needs_metadata_review"
+            if parse_failed or folder_only_title
+            else "pending_review"
+        ),
         "suggested_destination": str(
             settings.tv_dir / safe_tv_path_part(show_title)
         ),
@@ -410,6 +425,26 @@ def _apply_tv_batch_data(
 
 
 def _create_tv_batch(db: Session, source: Path) -> IngestBatch | None:
+    stale_batches = (
+        db.query(IngestBatch)
+        .filter(
+            IngestBatch.source_path == str(source),
+            IngestBatch.detected_type.in_(
+                ["unknown_type", "unsupported_file"]
+            ),
+            IngestBatch.status.in_(
+                [
+                    "needs_quarantine_review",
+                    "needs_metadata_review",
+                    "pending_review",
+                ]
+            ),
+        )
+        .all()
+    )
+    for stale_batch in stale_batches:
+        stale_batch.status = "merged"
+
     existing = (
         db.query(IngestBatch)
         .filter(
@@ -420,6 +455,8 @@ def _create_tv_batch(db: Session, source: Path) -> IngestBatch | None:
         .first()
     )
     if existing:
+        if stale_batches:
+            db.commit()
         return None
 
     data = _tv_batch_data(source)
@@ -598,7 +635,7 @@ def _unknown_metadata(
     video_extensions = {".mkv", ".mp4", ".avi", ".mov", ".wmv", ".m4v"}
     document_extensions = {".pdf", ".epub", ".mobi", ".azw", ".azw3"}
     if extensions & video_extensions:
-        reason = "Possible TV or multi-video folder needs review"
+        reason = "Unclassified video folder"
     elif extensions and extensions.issubset(document_extensions):
         reason = "Book/document support not implemented yet"
     elif len(extensions) > 1:

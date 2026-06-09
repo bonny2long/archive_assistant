@@ -90,6 +90,8 @@ const WARNING_LABELS: Record<string, string> = {
   tv_show_title_from_folder: "TV show title taken from folder",
   tv_show_title_missing: "TV show title missing",
   tv_episode_parse_failed: "Some TV episodes could not be parsed",
+  tv_episode_titles_missing: "Some episode titles are missing",
+  tv_metadata_review_required: "TV metadata review required",
   tv_destination_exists: "TV show destination already exists",
 };
 
@@ -169,10 +171,17 @@ function DebugDetails({ batch, moveSummary, review }: Props) {
 function QuarantineReviewDetail({ batch, moveSummary }: Props) {
   return (
     <div className="batch-detail">
+      <div className="library-status">
+        <div className="library-status__icon"><i className="ti ti-archive" /></div>
+        <div>
+          <div className="library-status__eyebrow">Cleanup review</div>
+          <h2>Unknown or unsupported ingest item</h2>
+          <p>{metadataValue(batch, "name")}</p>
+        </div>
+      </div>
       <div className="batch-detail__grid batch-detail__grid--stacked">
         <div><div className="batch-detail__label">Name</div><div className="batch-detail__value">{metadataValue(batch, "name")}</div></div>
         <div><div className="batch-detail__label">Detected type</div><div className="batch-detail__value">{batch.detected_type}</div></div>
-        <div><div className="batch-detail__label">Reason</div><div className="batch-detail__value">{metadataValue(batch, "reason")}</div></div>
         <div><div className="batch-detail__label">File count</div><div className="batch-detail__value">{metadataValue(batch, "file_count")}</div></div>
         <div><div className="batch-detail__label">Folder count</div><div className="batch-detail__value">{metadataValue(batch, "folder_count")}</div></div>
         <div><div className="batch-detail__label">Size</div><div className="batch-detail__value">{formatBytes(batch.metadata_json?.size_bytes)}</div></div>
@@ -306,14 +315,7 @@ function TvBatchDetail({ batch, moveSummary }: Props) {
   const warnings = metadataWarnings(batch);
   const alerts = metadataAlertMessages(batch);
   const moved = batch.status === "moved";
-  const onlySeasonNumber = (
-    seasons.length === 1
-    && seasons[0].season_number !== undefined
-  ) ? seasons[0].season_number : null;
   const destination = readableLibraryPath(batch.suggested_destination);
-  const destinationPreview = onlySeasonNumber === null
-    ? destination
-    : `${destination}/Season ${String(onlySeasonNumber).padStart(2, "0")}`;
 
   return (
     <div className={`batch-detail ${moved ? "batch-detail--moved" : "batch-detail--review"}`}>
@@ -341,6 +343,7 @@ function TvBatchDetail({ batch, moveSummary }: Props) {
             <div><dt>Year</dt><dd>{metadataValue(batch, "year")}</dd></div>
             <div><dt>Seasons</dt><dd>{metadataValue(batch, "season_count")}</dd></div>
             <div><dt>Episodes</dt><dd>{metadataValue(batch, "episode_count")}</dd></div>
+            <div><dt>Format</dt><dd>{metadataValue(batch, "format")}</dd></div>
             <div><dt>Video files</dt><dd>{metadataValue(batch, "video_file_count")}</dd></div>
             <div><dt>Subtitles</dt><dd>{metadataValue(batch, "subtitle_count")}</dd></div>
             <div><dt>Artwork</dt><dd>{metadataValue(batch, "artwork_count")}</dd></div>
@@ -361,7 +364,7 @@ function TvBatchDetail({ batch, moveSummary }: Props) {
 
       <section className="library-destination">
         <span>{moved ? "Final destination" : "Destination preview"}</span>
-        <strong>{destinationPreview}</strong>
+        <strong>{destination}</strong>
       </section>
 
       {warnings.length > 0 && (
@@ -391,29 +394,19 @@ function TvBatchDetail({ batch, moveSummary }: Props) {
             <table>
               <thead>
                 <tr>
-                  <th>Season</th>
                   <th>Episode</th>
-                  <th>Source file</th>
-                  <th>Destination preview</th>
+                  <th>Title</th>
                 </tr>
               </thead>
               <tbody>
-                {episodes.map((episode, index) => {
-                  const seasonNumber = Number(episode.season_number ?? 0);
-                  const season = seasonNumber
-                    ? String(seasonNumber).padStart(2, "0")
-                    : "-";
+                {episodes.slice(0, 10).map((episode, index) => {
                   const code = episode.episode_code ?? "-";
                   const source = episode.source_file ?? "Unknown file";
-                  const preview = seasonNumber && episode.episode_code
-                    ? `Season ${season}/${episode.episode_code} - ${source}`
-                    : "Metadata review required";
+                  const title = episode.episode_title ?? source;
                   return (
                     <tr key={`${code}-${source}-${index}`}>
-                      <td>{season}</td>
                       <td>{code}</td>
-                      <td>{source}</td>
-                      <td>{preview}</td>
+                      <td>{title}</td>
                     </tr>
                   );
                 })}

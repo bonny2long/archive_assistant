@@ -50,8 +50,6 @@ export const api = {
     request<BatchSummary>(`/batches/${id}/movie-metadata`, "PATCH", update),
   updateTvMetadata: (id: number, update: TvMetadataUpdate) =>
     request<BatchSummary>(`/batches/${id}/tv-metadata`, "PATCH", update),
-  convertToTv: (id: number) =>
-    request<BatchSummary>(`/batches/${id}/convert-to-tv`, "POST"),
   scanMusic: () => request<ScanMusicResponse>("/scan/music", "POST"),
   approveBatch: (id: number) => request<BatchActionResult>(`/batches/${id}/approve`, "POST"),
   approveSelected: (batchIds: number[]) =>

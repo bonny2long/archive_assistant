@@ -94,7 +94,12 @@ def build_batch_display_fields(batch: IngestBatch) -> dict:
             "item_count": episode_count,
             "edit_kind": "tv_show",
             "secondary_name": (
-                f"{season_text} - {episode_count} {episode_label}"
+                f"{season_text} \u00b7 {episode_count} {episode_label}"
+                + (
+                    " \u00b7 needs episode review"
+                    if metadata.get("metadata_quality") == "weak"
+                    else ""
+                )
             ),
         }
 

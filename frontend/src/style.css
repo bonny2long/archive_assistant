@@ -131,13 +131,6 @@ button:focus-visible, input:focus-visible {
 .media-type-label { color: var(--text-secondary); font-size: 12px; font-weight: 600; }
 .quarantine-action { color: var(--accent-amber); white-space: nowrap; }
 .quarantine-restore-action { color: var(--accent-blue); white-space: nowrap; }
-.tv-convert-action { color: var(--accent-blue); white-space: nowrap; }
-.batch-row-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-}
 
 /* Library summary */
 .library-summary {

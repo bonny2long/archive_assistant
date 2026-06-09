@@ -140,8 +140,13 @@ export function getBatchSecondaryName(batch: DisplayBatch): string {
       && seasonRows[0] !== null
       && "season_number" in seasonRows[0]
     ) ? Number(seasonRows[0].season_number) : null;
+    const reviewText = (
+      metadataValue(batch, "metadata_quality") === "weak"
+        ? " · needs episode review"
+        : ""
+    );
     if (seasonNumber !== null && Number.isFinite(seasonNumber)) {
-      return `Season ${String(seasonNumber).padStart(2, "0")} - ${episodes} ${episodes === 1 ? "episode" : "episodes"}`;
+      return `Season ${String(seasonNumber).padStart(2, "0")} · ${episodes} ${episodes === 1 ? "episode" : "episodes"}${reviewText}`;
     }
     return `${seasons} ${seasons === 1 ? "season" : "seasons"} · ${episodes} ${episodes === 1 ? "episode" : "episodes"}`;
   }
