@@ -114,3 +114,36 @@ def quarantine_batch(db: Session, batch: IngestBatch) -> Path:
         encoding="utf-8",
     )
     return destination
+
+
+def restore_quarantined_batch(db: Session, batch: IngestBatch) -> Path:
+    if batch.status != "quarantined":
+        raise ValueError("Batch is not quarantined")
+
+    metadata = dict(batch.metadata_json or {})
+    source = Path(
+        metadata.get("quarantine_destination")
+        or batch.suggested_destination
+        or ""
+    )
+    if not source.exists():
+        raise FileNotFoundError(f"Quarantine source not found: {source}")
+    quarantine_root = settings.data_root / "_QUARANTINE"
+    if not source.resolve().is_relative_to(quarantine_root.resolve()):
+        raise ValueError("Restore source must be inside quarantine")
+
+    original = Path(batch.source_path)
+    if not original.resolve().is_relative_to(settings.ingest_root.resolve()):
+        raise ValueError("Restore destination must be inside ingest")
+    if original.exists():
+        raise ValueError(f"Restore destination already exists: {original}")
+
+    original.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(source), str(original))
+    metadata["restored_from_quarantine_at"] = serialize_utc(now_utc())
+    metadata["restored_to_ingest"] = str(original)
+    batch.metadata_json = metadata
+    batch.status = "merged"
+    batch.updated_at = now_utc()
+    db.commit()
+    return original

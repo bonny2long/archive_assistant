@@ -125,6 +125,7 @@ button:focus-visible, input:focus-visible {
 .row-artwork { display: block; margin-top: 3px; color: var(--text-muted); }
 .media-type-label { color: var(--text-secondary); font-size: 12px; font-weight: 600; }
 .quarantine-action { color: var(--accent-amber); white-space: nowrap; }
+.quarantine-restore-action { color: var(--accent-blue); white-space: nowrap; }
 
 /* Library summary */
 .library-summary {

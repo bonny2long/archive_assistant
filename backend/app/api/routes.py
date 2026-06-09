@@ -46,7 +46,7 @@ from app.services.music_metadata import (
 )
 from app.services.scanner import scan_music_ingest
 from app.services.mover import move_approved_batches
-from app.services.quarantine import quarantine_batch
+from app.services.quarantine import quarantine_batch, restore_quarantined_batch
 from app.services.video_metadata import safe_movie_path_part, safe_tv_path_part
 from app.core.config import settings
 from app.core.time import configured_timezone, now_local, now_utc, serialize_utc
@@ -853,6 +853,21 @@ def list_quarantine_review(db: Session = Depends(get_db)):
         .all()
     )
     return [_batch_to_summary(batch) for batch in batches]
+
+
+@router.post("/batches/{batch_id}/restore-quarantine", response_model=BatchSummary)
+def restore_quarantine_batch(batch_id: int, db: Session = Depends(get_db)):
+    batch = db.get(IngestBatch, batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    try:
+        destination = restore_quarantined_batch(db, batch)
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _batch_to_summary(
+        batch,
+        action_message=f"Restored to ingest: {destination}",
+    )
 
 
 @router.get("/quarantine/reports")

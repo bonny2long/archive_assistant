@@ -131,7 +131,9 @@ export default function App() {
       return batch.status === "needs_metadata_review"
         || (batch.status === "pending_review" && batch.confidence < 0.6);
     }
-    if (tab === "quarantine") return batch.status === "needs_quarantine_review";
+    if (tab === "quarantine") {
+      return ["needs_quarantine_review", "quarantined"].includes(batch.status);
+    }
     return batch.status === tab;
   });
 
@@ -143,7 +145,7 @@ export default function App() {
       || (batch.status === "pending_review" && batch.confidence < 0.6)
     )).length,
     quarantine: batches.filter(
-      (batch) => batch.status === "needs_quarantine_review",
+      (batch) => ["needs_quarantine_review", "quarantined"].includes(batch.status),
     ).length,
     approved: batches.filter((batch) => batch.status === "approved").length,
     moved: batches.filter((batch) => batch.status === "moved").length,
@@ -245,6 +247,26 @@ export default function App() {
         quarantineError instanceof Error
           ? quarantineError.message
           : "Quarantine move failed",
+        "error",
+      );
+    }
+  };
+
+  const handleRestoreQuarantine = async (id: number) => {
+    const confirmed = window.confirm(
+      "Restore this quarantined item to _INGEST?\n\n"
+      + "The old quarantine batch will be retired so a new scan can classify it again.",
+    );
+    if (!confirmed) return;
+    try {
+      const result = await api.restoreQuarantinedBatch(id);
+      showToast(result.action_message ?? "Item restored to ingest");
+      await loadBatches();
+    } catch (restoreError: unknown) {
+      showToast(
+        restoreError instanceof Error
+          ? restoreError.message
+          : "Restore from quarantine failed",
         "error",
       );
     }
@@ -503,6 +525,7 @@ export default function App() {
           onReject={(id) => void handleReject(id)}
           onRecovery={(id) => void handleRecovery(id)}
           onQuarantine={(id) => void handleQuarantine(id)}
+          onRestoreQuarantine={(id) => void handleRestoreQuarantine(id)}
           onEdit={setEditingBatch}
           onBulkApprove={() => {
             setShowBulkApprove(true);

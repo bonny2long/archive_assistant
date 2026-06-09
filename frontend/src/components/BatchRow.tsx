@@ -24,6 +24,7 @@ type Props = {
   onReject: (id: number) => void;
   onRecovery: (id: number) => void;
   onQuarantine: (id: number) => void;
+  onRestoreQuarantine: (id: number) => void;
   onEdit: (batch: BatchSummary) => void;
 };
 
@@ -57,9 +58,12 @@ export default function BatchRow({
   onReject,
   onRecovery,
   onQuarantine,
+  onRestoreQuarantine,
   onEdit,
 }: Props) {
-  const quarantineReview = batch.status === "needs_quarantine_review";
+  const awaitingQuarantine = batch.status === "needs_quarantine_review";
+  const quarantined = batch.status === "quarantined";
+  const quarantineReview = awaitingQuarantine || quarantined;
   const mediaLabel = getBatchMediaLabel(batch);
   const primaryName = getBatchPrimaryName(batch);
   const secondaryName = getBatchSecondaryName(batch);
@@ -119,7 +123,7 @@ export default function BatchRow({
           </div>
         </td>
         <td onClick={(event) => event.stopPropagation()}>
-          {quarantineReview ? (
+          {awaitingQuarantine ? (
             <button
               className="btn btn--compact quarantine-action"
               title="Move to quarantine"
@@ -130,6 +134,17 @@ export default function BatchRow({
                   ? "Move group to quarantine"
                   : "Move to quarantine"
               }
+            </button>
+          ) : quarantined ? (
+            <button
+              className="btn btn--compact quarantine-restore-action"
+              title="Restore to ingest"
+              onClick={(event) => {
+                event.stopPropagation();
+                onRestoreQuarantine(batch.id);
+              }}
+            >
+              <i className="ti ti-restore" /> Restore to ingest
             </button>
           ) : <button
             className="btn-sm"

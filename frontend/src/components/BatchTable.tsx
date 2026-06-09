@@ -31,6 +31,7 @@ type Props = {
   onReject: (id: number) => void;
   onRecovery: (id: number) => void;
   onQuarantine: (id: number) => void;
+  onRestoreQuarantine: (id: number) => void;
   onEdit: (batch: BatchSummary) => void;
   onBulkApprove: () => Promise<void>;
   onBulkReject: () => Promise<void>;
@@ -54,6 +55,7 @@ export default function BatchTable({
   onReject,
   onRecovery,
   onQuarantine,
+  onRestoreQuarantine,
   onEdit,
   onBulkApprove,
   onBulkReject,
@@ -163,6 +165,7 @@ export default function BatchTable({
                 onReject={onReject}
                 onRecovery={onRecovery}
                 onQuarantine={onQuarantine}
+                onRestoreQuarantine={onRestoreQuarantine}
                 onEdit={onEdit}
               />
             ))}
