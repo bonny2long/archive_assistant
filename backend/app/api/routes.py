@@ -468,6 +468,8 @@ def update_movie_metadata(
         raise HTTPException(status_code=400, detail="Moved batches cannot be edited")
 
     title = update.title.strip()
+    if not title:
+        raise HTTPException(status_code=422, detail="Movie title is required")
     year = update.year.strip() if update.year else None
     edition = update.edition.strip() if update.edition else None
     movie_format = update.format.strip().upper() if update.format else None
@@ -479,6 +481,14 @@ def update_movie_metadata(
     ]
     if not year:
         warnings.append("movie_year_missing")
+    metadata["metadata_alerts"] = [
+        alert
+        for alert in (metadata.get("metadata_alerts") or [])
+        if not (
+            isinstance(alert, dict)
+            and alert.get("type") == "movie_destination_exists"
+        )
+    ]
 
     metadata.update(
         {
@@ -836,6 +846,13 @@ def _batch_to_summary(
         subtitle_count=meta.get("subtitle_count", 0),
         video_file_count=meta.get("video_file_count", 0),
         title=meta.get("title"),
+        edition=meta.get("edition"),
+        original_release_name=meta.get("original_release_name"),
+        primary_video_file=meta.get("primary_video_file"),
+        artwork_files=meta.get("artwork_files", []),
+        subtitle_files=meta.get("subtitle_files", []),
+        ignored_sidecar_files=meta.get("ignored_sidecar_files", []),
+        release_tags_removed=meta.get("release_tags_removed", []),
         name=meta.get("name"),
         reason=meta.get("reason"),
         file_count=meta.get("file_count", 0),

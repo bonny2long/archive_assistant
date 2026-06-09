@@ -187,6 +187,7 @@ function QuarantineReviewDetail({ batch, moveSummary }: Props) {
 
 function MovieBatchDetail({ batch, moveSummary }: Props) {
   const warnings = metadataWarnings(batch);
+  const alerts = metadataAlertMessages(batch);
   const moved = batch.status === "moved";
   return (
     <div className={`batch-detail ${moved ? "batch-detail--moved" : "batch-detail--review"}`}>
@@ -209,11 +210,21 @@ function MovieBatchDetail({ batch, moveSummary }: Props) {
           <dl className="library-fields">
             <div><dt>Title</dt><dd>{metadataValue(batch, "title")}</dd></div>
             <div><dt>Year</dt><dd>{metadataValue(batch, "year")}</dd></div>
+            {Boolean(batch.metadata_json?.edition) && (
+              <div><dt>Edition / Version</dt><dd>{metadataValue(batch, "edition")}</dd></div>
+            )}
             <div><dt>Format</dt><dd>{metadataValue(batch, "format")}</dd></div>
             <div><dt>Video files</dt><dd>{metadataValue(batch, "video_file_count")}</dd></div>
             <div><dt>Artwork</dt><dd>{metadataValue(batch, "artwork_count")}</dd></div>
             <div><dt>Subtitles</dt><dd>{metadataValue(batch, "subtitle_count")}</dd></div>
             <div><dt>Ignored sidecars</dt><dd>{metadataValue(batch, "ignored_sidecar_count")}</dd></div>
+            {Array.isArray(batch.metadata_json?.release_tags_removed)
+              && batch.metadata_json.release_tags_removed.length > 0 && (
+              <div>
+                <dt>Release tags removed</dt>
+                <dd>{batch.metadata_json.release_tags_removed.join(", ")}</dd>
+              </div>
+            )}
           </dl>
         </section>
         <section className="library-card">
@@ -240,6 +251,13 @@ function MovieBatchDetail({ batch, moveSummary }: Props) {
               <span key={warning}><i className="ti ti-alert-triangle" />{warningLabel(warning)}</span>
             ))}
           </div>
+        </section>
+      )}
+      {alerts.length > 0 && (
+        <section className="metadata-alerts" aria-label="Movie metadata alerts">
+          {alerts.map((message) => (
+            <div key={message}><i className="ti ti-info-circle" />{message}</div>
+          ))}
         </section>
       )}
 

@@ -34,12 +34,14 @@ from app.services.music_metadata import (
 )
 from app.services.report_writer import write_json_report
 from app.services.video_metadata import (
+    is_ignored_video_sidecar,
     is_movie_artwork,
     is_subtitle_file,
     is_video_file,
     looks_like_tv,
     parse_movie_name,
     safe_movie_path_part,
+    useful_movie_name,
 )
 
 
@@ -176,15 +178,17 @@ def _movie_files(root: Path) -> dict[str, list[Path]]:
     video = sorted(path for path in candidates if is_video_file(path))
     artwork = sorted(path for path in candidates if is_movie_artwork(path))
     subtitles = sorted(path for path in candidates if is_subtitle_file(path))
+    ignored = sorted(path for path in candidates if is_ignored_video_sidecar(path))
     recognized = {
         path.resolve()
-        for path in [*video, *artwork, *subtitles]
+        for path in [*video, *artwork, *subtitles, *ignored]
     }
     return {
         "video": video,
         "artwork": artwork,
         "subtitles": subtitles,
-        "ignored": sorted(
+        "ignored": ignored,
+        "other": sorted(
             path
             for path in candidates
             if path.resolve() not in recognized
@@ -208,10 +212,22 @@ def _create_movie_batch(db: Session, source: Path) -> IngestBatch | None:
     if len(files["video"]) != 1:
         return None
     main_video = files["video"][0]
-    parsed = parse_movie_name(source.name if source.is_dir() else main_video.name)
+    original_release_name = source.name if source.is_dir() else main_video.name
+    parsed = parse_movie_name(original_release_name)
     file_parsed = parse_movie_name(main_video.name)
-    if not parsed["year"] and file_parsed["year"]:
+    if (
+        not useful_movie_name(parsed)
+        or (not parsed["year"] and file_parsed["year"])
+    ):
         parsed = file_parsed
+    release_tags_removed = list(
+        dict.fromkeys(
+            [
+                *parsed["release_tags_removed"],
+                *file_parsed["release_tags_removed"],
+            ]
+        )
+    )
     title = parsed["title"]
     year = parsed["year"]
     folder = safe_movie_path_part(f"{year or 'Unknown Year'} - {title}")
@@ -226,11 +242,16 @@ def _create_movie_batch(db: Session, source: Path) -> IngestBatch | None:
         "artwork_count": len(files["artwork"]),
         "subtitle_count": len(files["subtitles"]),
         "ignored_sidecar_count": len(files["ignored"]),
+        "artwork_files": [path.name for path in files["artwork"]],
+        "subtitle_files": [path.name for path in files["subtitles"]],
         "ignored_sidecar_files": [
             str(path.relative_to(source)) if source.is_dir() else path.name
             for path in files["ignored"]
         ],
-        "metadata_quality": "good",
+        "original_release_name": original_release_name,
+        "primary_video_file": main_video.name,
+        "release_tags_removed": release_tags_removed,
+        "metadata_quality": "good" if year else "weak",
         "metadata_warnings": warnings,
         "confidence": 0.8 if year else 0.7,
     }
@@ -238,7 +259,7 @@ def _create_movie_batch(db: Session, source: Path) -> IngestBatch | None:
         source_kind="manual-drop",
         source_path=str(source),
         detected_type="video_movie",
-        status="pending_review",
+        status="pending_review" if year else "needs_metadata_review",
         confidence=metadata["confidence"],
         suggested_destination=str(destination),
         suggested_metadata={"title": title, "year": year},

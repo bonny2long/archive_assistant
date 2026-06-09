@@ -74,6 +74,23 @@ def _move_movie_batch(
         warnings = list(metadata.get("metadata_warnings", []))
         warnings.append("movie_destination_exists")
         metadata["metadata_warnings"] = list(dict.fromkeys(warnings))
+        metadata["metadata_alerts"] = [
+            *[
+                alert
+                for alert in (metadata.get("metadata_alerts") or [])
+                if not (
+                    isinstance(alert, dict)
+                    and alert.get("type") == "movie_destination_exists"
+                )
+            ],
+            {
+                "type": "movie_destination_exists",
+                "message": (
+                    "Movie folder already exists. No files were moved or overwritten."
+                ),
+                "existing_path": str(destination),
+            },
+        ]
         batch.metadata_json = metadata
         batch.status = "needs_metadata_review"
         batch.updated_at = now_utc()

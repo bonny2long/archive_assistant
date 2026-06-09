@@ -31,6 +31,13 @@ class BatchSummary(BaseModel):
     subtitle_count: int = 0
     video_file_count: int = 0
     title: str | None = None
+    edition: str | None = None
+    original_release_name: str | None = None
+    primary_video_file: str | None = None
+    artwork_files: list[str] = Field(default_factory=list)
+    subtitle_files: list[str] = Field(default_factory=list)
+    ignored_sidecar_files: list[str] = Field(default_factory=list)
+    release_tags_removed: list[str] = Field(default_factory=list)
     name: str | None = None
     reason: str | None = None
     file_count: int = 0

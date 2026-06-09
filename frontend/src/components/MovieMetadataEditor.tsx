@@ -25,7 +25,7 @@ export default function MovieMetadataEditor({
     () => batch.suggested_metadata?.year ?? batch.year ?? "",
   );
   const [edition, setEdition] = useState(
-    () => batch.suggested_metadata?.edition ?? "",
+    () => batch.suggested_metadata?.edition ?? batch.edition ?? "",
   );
   const [format, setFormat] = useState(
     () => batch.suggested_metadata?.format ?? batch.format ?? "",
@@ -62,6 +62,17 @@ export default function MovieMetadataEditor({
           <button type="button" className="btn-sm" title="Close" onClick={onClose}>
             <i className="ti ti-x" />
           </button>
+        </div>
+        <div className="movie-editor__context">
+          <div>
+            <span>Detected video file</span>
+            <strong>{batch.primary_video_file ?? "Unknown video file"}</strong>
+          </div>
+          <div className="movie-editor__counts">
+            <span>Artwork: {batch.artwork_count}</span>
+            <span>Subtitles: {batch.subtitle_count}</span>
+            <span>Ignored sidecars: {batch.ignored_sidecar_count}</span>
+          </div>
         </div>
         <label>
           <span>Title</span>

@@ -38,6 +38,13 @@ export type BatchSummary = {
   subtitle_count: number;
   video_file_count: number;
   title?: string | null;
+  edition?: string | null;
+  original_release_name?: string | null;
+  primary_video_file?: string | null;
+  artwork_files: string[];
+  subtitle_files: string[];
+  ignored_sidecar_files: string[];
+  release_tags_removed: string[];
   name?: string | null;
   reason?: string | null;
   file_count: number;

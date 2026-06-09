@@ -1,5 +1,9 @@
 import type { BatchSummary } from "../types/archive";
-import { getBatchDisplayTitle } from "../utils/batchDisplay";
+import {
+  getBatchDisplayTitle,
+  getBatchPrimaryName,
+  getBatchSecondaryName,
+} from "../utils/batchDisplay";
 
 type Props = {
   batches: BatchSummary[];
@@ -21,6 +25,13 @@ const BLOCKING_WARNINGS = new Set([
 function isApprovable(batch: BatchSummary): boolean {
   return batch.status === "pending_review"
     && !batch.metadata_warnings.some((warning) => BLOCKING_WARNINGS.has(warning));
+}
+
+function approvalTitle(batch: BatchSummary): string {
+  if (batch.detected_type === "video_movie") {
+    return `${getBatchPrimaryName(batch)} - ${getBatchSecondaryName(batch)}`;
+  }
+  return getBatchDisplayTitle(batch);
 }
 
 export default function BulkApproveModal({
@@ -56,7 +67,7 @@ export default function BulkApproveModal({
             <div key={batch.id}>
               <i className={`ti ti-${isApprovable(batch) ? "disc" : "alert-triangle"}`} />
               <span>
-                <strong>{getBatchDisplayTitle(batch)}</strong>
+                <strong>{approvalTitle(batch)}</strong>
                 <small>
                   {isApprovable(batch)
                     ? "ready to approve"

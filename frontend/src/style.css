@@ -757,6 +757,28 @@ button:focus-visible, input:focus-visible {
   color: var(--accent-amber);
   font-size: 10px;
 }
+.movie-editor__context {
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-page);
+}
+.movie-editor__context > div:first-child { display: grid; gap: 2px; }
+.movie-editor__context span {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+.movie-editor__context strong {
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+}
+.movie-editor__counts { display: flex; flex-wrap: wrap; gap: 0.75rem; }
 .metadata-editor label { display: grid; gap: 5px; margin-bottom: 0.85rem; }
 .metadata-editor label span,
 .metadata-editor__preview > span {
