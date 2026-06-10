@@ -64,6 +64,8 @@ class BatchSummary(BaseModel):
     non_blocking_review_items: list[dict] = Field(default_factory=list)
     review_confirmed: bool = False
     review_type: str | None = None
+    review_mode: str | None = None
+    movie_items: list[dict] = Field(default_factory=list)
     suggested_destination: str | None = None
     suggested_metadata: dict | None = None
     metadata_confirmed: bool = False
@@ -153,6 +155,21 @@ class TvEpisodeReviewUpdate(BaseModel):
     show_title: str | None = None
     year: str | None = None
     patches: list[TvEpisodeReviewPatch] = Field(default_factory=list)
+    confirm_non_blocking_warnings: bool = False
+
+
+class MovieCollectionItemUpdate(BaseModel):
+    source_file: str = Field(min_length=1)
+    include: bool = True
+    title: str = Field(min_length=1)
+    year: str = Field(pattern=r"^(19|20)\d{2}$")
+    edition: str | None = None
+    format: str | None = None
+
+
+class MovieCollectionReviewUpdate(BaseModel):
+    collection_title: str | None = None
+    movies: list[MovieCollectionItemUpdate] = Field(min_length=1)
     confirm_non_blocking_warnings: bool = False
 
 

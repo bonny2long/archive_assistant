@@ -7,6 +7,7 @@ import type {
   DiscographyMetadataUpdate,
   IngestBatch,
   LibrarySummary as LibrarySummaryData,
+  MovieCollectionReviewUpdate,
   MovieMetadataUpdate,
   SystemTimeResponse,
   TabKey,
@@ -18,12 +19,9 @@ import ActionBar from "./components/ActionBar";
 import BatchTable from "./components/BatchTable";
 import StatusTabs from "./components/StatusTabs";
 import Toast from "./components/Toast";
-import MusicAlbumReviewEditor from "./components/MetadataEditor";
 import LibrarySummary from "./components/LibrarySummary";
 import BulkApproveModal from "./components/BulkApproveModal";
-import DiscographyEditor from "./components/DiscographyEditor";
-import MovieMetadataEditor from "./components/MovieMetadataEditor";
-import TvMetadataEditor from "./components/TvMetadataEditor";
+import MediaReviewRouter from "./components/MediaReviewRouter";
 import {
   archiveTimezone,
   configureArchiveTimezone,
@@ -327,6 +325,24 @@ export default function App() {
     }
   };
 
+  const handleMovieCollectionSave = async (update: MovieCollectionReviewUpdate) => {
+    if (!editingBatch) return;
+    setSavingMetadata(true);
+    try {
+      const result = await api.updateMovieCollectionReview(editingBatch.id, update);
+      showToast(result.action_message ?? "Movie collection review saved");
+      setEditingBatch(null);
+      await loadBatches();
+    } catch (saveError: unknown) {
+      showToast(
+        saveError instanceof Error ? saveError.message : "Movie collection review save failed",
+        "error",
+      );
+    } finally {
+      setSavingMetadata(false);
+    }
+  };
+
   const handleTvSave = async (update: TvMetadataUpdate) => {
     if (!editingBatch) return;
     setSavingMetadata(true);
@@ -582,45 +598,16 @@ export default function App() {
           onHide={() => setToast(null)}
         />
       )}
-      {editingBatch?.detected_type === "music_album" && (
-        <MusicAlbumReviewEditor
+      {editingBatch && (
+        <MediaReviewRouter
           batch={editingBatch}
           saving={savingMetadata}
-          onSave={handleMetadataSave}
-          onConfirm={handleReviewConfirm}
-          onClose={() => {
-            if (!savingMetadata) setEditingBatch(null);
-          }}
-        />
-      )}
-      {editingBatch?.detected_type === "music_discography" && (
-        <DiscographyEditor
-          batch={editingBatch}
-          saving={savingMetadata}
-          onSave={handleDiscographySave}
-          onConfirm={handleReviewConfirm}
-          onClose={() => {
-            if (!savingMetadata) setEditingBatch(null);
-          }}
-        />
-      )}
-      {editingBatch?.detected_type === "video_movie" && (
-        <MovieMetadataEditor
-          batch={editingBatch}
-          saving={savingMetadata}
-          onSave={handleMovieSave}
-          onConfirm={handleReviewConfirm}
-          onClose={() => {
-            if (!savingMetadata) setEditingBatch(null);
-          }}
-        />
-      )}
-      {editingBatch?.detected_type === "video_tv_show" && (
-        <TvMetadataEditor
-          batch={editingBatch}
-          saving={savingMetadata}
-          onSave={handleTvSave}
-          onSaveEpisodeReview={handleTvEpisodeReviewSave}
+          onMetadataSave={handleMetadataSave}
+          onDiscographySave={handleDiscographySave}
+          onMovieSave={handleMovieSave}
+          onMovieCollectionSave={handleMovieCollectionSave}
+          onTvSave={handleTvSave}
+          onTvEpisodeReviewSave={handleTvEpisodeReviewSave}
           onConfirm={handleReviewConfirm}
           onClose={() => {
             if (!savingMetadata) setEditingBatch(null);

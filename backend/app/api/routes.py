@@ -19,6 +19,7 @@ from app.schemas.archive import (
     IngestBatchOut, 
     IngestFileOut,
     LibrarySummary,
+    MovieCollectionReviewUpdate,
     MovieMetadataUpdate,
     MoveActionOut,
     MoveResponse,
@@ -55,6 +56,9 @@ from app.services.mover import _lock_metadata_for_move, move_approved_batches
 from app.services.quarantine import quarantine_batch, restore_quarantined_batch
 from app.services.video_metadata import safe_movie_path_part, safe_tv_path_part
 from app.services.tv_review import apply_tv_episode_review_patches, sync_tv_episode_metadata_to_ingest_files
+from app.services.review_items import (
+    build_review_items_for_movie_collection,
+)
 from app.services.review_state import build_review_state
 from app.core.config import settings
 from app.core.time import configured_timezone, now_local, now_utc, serialize_utc
@@ -554,6 +558,98 @@ def update_movie_metadata(
     batch.updated_at = now_utc()
     db.commit()
     return _batch_to_summary(batch, action_message="Movie metadata saved.")
+
+
+@router.patch("/batches/{batch_id}/movie-collection-review", response_model=BatchSummary)
+def update_movie_collection_review(
+    batch_id: int,
+    update: MovieCollectionReviewUpdate,
+    db: Session = Depends(get_db),
+):
+    batch = (
+        db.query(IngestBatch)
+        .options(selectinload(IngestBatch.files))
+        .filter(IngestBatch.id == batch_id)
+        .first()
+    )
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    if batch.detected_type != "video_movie":
+        raise HTTPException(status_code=400, detail="Batch is not a movie")
+    if batch.status in {"moved", "merged"}:
+        raise HTTPException(status_code=400, detail="Moved batches cannot be edited")
+
+    metadata = dict(batch.metadata_json or {})
+
+    # Normalize movie_items from the submitted update
+    movie_items = []
+    destination_parts = []
+    for movie_update in update.movies:
+        title = movie_update.title.strip()
+        year = movie_update.year.strip()
+        edition = movie_update.edition.strip() if movie_update.edition else None
+        fmt = movie_update.format.strip().upper() if movie_update.format else None
+        include = bool(movie_update.include)
+
+        dest_label = (
+            f"{year} - {title}"
+            if not edition
+            else f"{year} - {title} [{edition}]"
+        )
+        dest = f"Movies/Library/{safe_movie_path_part(dest_label)}"
+        destination_parts.append(dest)
+
+        movie_items.append(
+            {
+                "item_kind": "movie",
+                "source_key": movie_update.source_file,
+                "source_file": movie_update.source_file,
+                "include": include,
+                "title": title,
+                "year": year,
+                "edition": edition,
+                "format": fmt,
+                "destination_preview": dest if include else None,
+            }
+        )
+
+    metadata["movie_items"] = movie_items
+    metadata["review_type"] = "movie_collection"
+    metadata["review_mode"] = "item_list"
+
+    if update.collection_title:
+        metadata["collection_title"] = update.collection_title.strip()
+
+    warnings = [
+        w for w in metadata.get("metadata_warnings", [])
+        if w != "multiple_movie_candidates"
+    ]
+    metadata["metadata_warnings"] = warnings
+
+    metadata["confidence"] = 0.8
+
+    if update.confirm_non_blocking_warnings:
+        metadata["review_confirmed"] = True
+
+    metadata = build_review_state(batch.detected_type, metadata)
+
+    if metadata.get("blocking_review_items"):
+        batch.status = "needs_metadata_review"
+        metadata["metadata_quality"] = "weak"
+        metadata["confidence"] = 0.7
+    else:
+        metadata["metadata_quality"] = "reviewed"
+        metadata["review_confirmed"] = True
+        metadata["confidence"] = 1.0
+        if batch.status in {"needs_metadata_review", "pending_review"}:
+            batch.status = "pending_review"
+
+    batch.metadata_json = metadata
+    batch.metadata_confirmed = not bool(metadata.get("blocking_review_items"))
+    batch.confidence = metadata["confidence"]
+    batch.updated_at = now_utc()
+    db.commit()
+    return _batch_to_summary(batch, action_message="Movie collection review saved.")
 
 
 @router.patch("/batches/{batch_id}/discography", response_model=BatchSummary)
@@ -1208,6 +1304,8 @@ def _batch_to_summary(
         non_blocking_review_items=meta.get("non_blocking_review_items", []),
         review_confirmed=meta.get("review_confirmed", False),
         review_type=meta.get("review_type"),
+        review_mode=meta.get("review_mode"),
+        movie_items=list(meta.get("movie_items") or []),
         suggested_destination=batch.suggested_destination,
         suggested_metadata=batch.suggested_metadata,
         metadata_confirmed=batch.metadata_confirmed,

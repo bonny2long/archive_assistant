@@ -20,6 +20,7 @@ REVIEW_TYPES = {
     "music_album": "music_album",
     "music_discography": "music_discography",
     "video_movie": "movie",
+    "video_movie_collection": "movie_collection",
     "video_tv_show": "tv_show",
     "unknown_type": "quarantine",
     "unsupported_file": "quarantine",
@@ -124,16 +125,43 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
             blocking.append(_item("movie_year_missing", "A four-digit movie year is required."))
         video_file_count = int(meta.get("video_file_count") or 0)
         if video_file_count > 1:
-            video_files = meta.get("video_files") or []
-            if _all_same_movie(video_files):
-                non_blocking.append(_item(
-                    "multiple_movie_editions",
-                    f"{video_file_count} video files detected — looks like multiple editions or versions of the same movie.",
-                ))
+            # If the user has already performed a collection review (movie_items populated),
+            # the ambiguity is resolved — skip the multiple_movie_candidates check.
+            if meta.get("review_type") == "movie_collection" and meta.get("movie_items"):
+                pass  # resolved via collection review
             else:
+                video_files = meta.get("video_files") or []
+                if _all_same_movie(video_files):
+                    non_blocking.append(_item(
+                        "multiple_movie_editions",
+                        f"{video_file_count} video files detected — looks like multiple editions or versions of the same movie.",
+                    ))
+                else:
+                    blocking.append(_item(
+                        "multiple_movie_candidates",
+                        f"{video_file_count} video files found. Could not determine if they are editions, duplicates, or unrelated files.",
+                    ))
+
+        # If movie_items have been set by a movie collection review,
+        # check each included item has title and year.
+        for movie_item in meta.get("movie_items", []):
+            if not isinstance(movie_item, dict):
+                continue
+            if not movie_item.get("include", True):
+                continue
+            source_file = str(movie_item.get("source_file") or "")
+            if not str(movie_item.get("title") or "").strip():
                 blocking.append(_item(
-                    "multiple_movie_candidates",
-                    f"{video_file_count} video files found. Could not determine if they are editions, duplicates, or unrelated files.",
+                    "movie_collection_item_missing_title",
+                    "Movie in collection is missing a title.",
+                    file_name=source_file,
+                ))
+            raw_year = str(movie_item.get("year") or "")
+            if len(raw_year) != 4 or not raw_year.isdigit():
+                blocking.append(_item(
+                    "movie_collection_item_missing_year",
+                    "Movie in collection is missing a valid year.",
+                    file_name=source_file,
                 ))
     elif detected_type == "video_tv_show":
         if not str(meta.get("show_title") or "").strip():
@@ -276,6 +304,24 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
     elif quality in {"weak", "broken", "unsupported"} and confirmed:
         quality = "fair"
 
+    # Cap confidence while blockers exist
+    if blocking:
+        existing_confidence = float(meta.get("confidence") or 0.5)
+        if existing_confidence > 0.8:
+            meta["confidence"] = 0.75
+
+    # Determine review_mode
+    if detected_type == "video_tv_show":
+        review_mode = "guided_episode_review"
+    elif detected_type in {"music_discography"}:
+        review_mode = "item_list"
+    elif detected_type == "video_movie" and meta.get("review_type") == "movie_collection":
+        review_mode = "item_list"
+    elif detected_type in {"unknown_type", "unsupported_file"}:
+        review_mode = "quarantine_review"
+    else:
+        review_mode = "single_item"
+
     meta.update({
         "metadata_quality": quality,
         "metadata_warnings": warnings,
@@ -283,6 +329,7 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
         "non_blocking_review_items": non_blocking,
         "review_confirmed": confirmed,
         "review_type": REVIEW_TYPES.get(detected_type, detected_type),
+        "review_mode": review_mode,
     })
     return meta
 

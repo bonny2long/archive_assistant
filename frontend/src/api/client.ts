@@ -10,6 +10,7 @@ import type {
   HealthResponse,
   IngestBatch,
   LibrarySummary,
+  MovieCollectionReviewUpdate,
   MovieMetadataUpdate,
   MoveResult,
   PaginatedResponse,
@@ -54,6 +55,8 @@ export const api = {
     request<BatchSummary>(`/batches/${id}/tv-metadata`, "PATCH", update),
   updateTvEpisodeReview: (id: number, update: TvEpisodeReviewUpdate) =>
     request<BatchSummary>(`/batches/${id}/tv-episode-review`, "PATCH", update),
+  updateMovieCollectionReview: (id: number, update: MovieCollectionReviewUpdate) =>
+    request<BatchSummary>(`/batches/${id}/movie-collection-review`, "PATCH", update),
   updateReviewConfirmation: (id: number, update: ReviewConfirmationUpdate) =>
     request<BatchSummary>(`/batches/${id}/review-confirmation`, "PATCH", update),
   scanMusic: () => request<ScanMusicResponse>("/scan/music", "POST"),

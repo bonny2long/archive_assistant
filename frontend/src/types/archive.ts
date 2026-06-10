@@ -92,6 +92,8 @@ export type BatchSummary = {
   non_blocking_review_items: ReviewItem[];
   review_confirmed: boolean;
   review_type?: string | null;
+  review_mode?: string | null;
+  movie_items?: MovieCollectionItem[];
   suggested_destination?: string | null;
   suggested_metadata?: SuggestedMetadata | null;
   metadata_confirmed: boolean;
@@ -190,6 +192,33 @@ export type MovieMetadataUpdate = {
   year: string | null;
   edition?: string | null;
   format?: string | null;
+};
+
+export type MovieCollectionItem = {
+  item_kind: "movie";
+  source_key: string;
+  source_file: string;
+  include: boolean;
+  title?: string | null;
+  year?: string | null;
+  edition?: string | null;
+  format?: string | null;
+  destination_preview?: string | null;
+};
+
+export type MovieCollectionItemUpdate = {
+  source_file: string;
+  include: boolean;
+  title: string;
+  year: string;
+  edition?: string | null;
+  format?: string | null;
+};
+
+export type MovieCollectionReviewUpdate = {
+  collection_title?: string | null;
+  movies: MovieCollectionItemUpdate[];
+  confirm_non_blocking_warnings?: boolean;
 };
 
 export type TvMetadataUpdate = {

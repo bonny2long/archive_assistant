@@ -216,6 +216,167 @@ def _move_movie_batch(
     return moved_files, failed_files
 
 
+def _move_movie_collection_batch(
+    db: Session,
+    batch: IngestBatch,
+) -> tuple[list[str], list[str]]:
+    """
+    Move a movie collection batch where each video file becomes its own
+    Movies/Library/<Year> - <Title>/ folder.
+
+    Rules:
+    - Each included movie_item maps to one video file.
+    - Artwork and subtitles that cannot be safely matched to a specific item
+      are placed in a _collection_sidecars/ folder under Movies/Library/.
+    - No overwrite. No deletion.
+    - A move log is written per movie item.
+    """
+    from app.services.video_metadata import safe_movie_path_part, VIDEO_EXTENSIONS
+
+    metadata = dict(batch.metadata_json or {})
+    movie_items = metadata.get("movie_items") or []
+
+    if not movie_items:
+        return [], ["Movie collection has no movie_items — cannot move"]
+
+    moved_files: list[str] = []
+    failed_files: list[str] = []
+    reserved: set[str] = set()
+
+    # Build source_file -> item map for included items
+    item_by_source: dict[str, dict] = {}
+    for item in movie_items:
+        if isinstance(item, dict) and item.get("include", True):
+            sf = str(item.get("source_file") or "").strip()
+            if sf:
+                item_by_source[sf.casefold()] = item
+
+    # Categorize all ingest files
+    video_ingest_files = []
+    sidecar_ingest_files = []
+    for ingest_file in batch.files:
+        if Path(ingest_file.file_name).suffix.lower() in VIDEO_EXTENSIONS:
+            video_ingest_files.append(ingest_file)
+        else:
+            sidecar_ingest_files.append(ingest_file)
+
+    # Move each matched video file
+    for ingest_file in video_ingest_files:
+        key = ingest_file.file_name.casefold()
+        item = item_by_source.get(key)
+
+        if not item:
+            continue
+
+        title = str(item.get("title") or "Unknown Movie").strip()
+        year = str(item.get("year") or "Unknown Year")[:4]
+        edition = str(item.get("edition") or "").strip()
+        dest_label = (
+            f"{year} - {title}"
+            if not edition
+            else f"{year} - {title} [{edition}]"
+        )
+        movie_folder = settings.movies_dir / _safe_path_part(dest_label)
+
+        source = Path(ingest_file.file_path)
+        completed = _completed_move_destination(db, batch.id, source)
+        if not source.exists() and completed:
+            moved_files.append(str(completed))
+            reserved.add(_path_key(completed))
+            continue
+
+        destination_file = movie_folder / ingest_file.file_name
+        if _path_key(destination_file) in reserved or destination_file.exists():
+            failed_files.append(
+                f"Destination conflict for {ingest_file.file_name}: {destination_file}"
+            )
+            continue
+
+        movie_folder.mkdir(parents=True, exist_ok=True)
+        reserved.add(_path_key(destination_file))
+
+        action = MoveAction(
+            batch_id=batch.id,
+            source_path=str(source),
+            destination_path=str(destination_file),
+            status="running",
+        )
+        db.add(action)
+        db.flush()
+        try:
+            shutil.move(str(source), str(destination_file))
+            action.status = "completed"
+            action.completed_at = now_utc()
+            moved_files.append(str(destination_file))
+
+            # Write per-movie move log
+            log_dir = movie_folder / "metadata"
+            log_dir.mkdir(parents=True, exist_ok=True)
+            (log_dir / f"batch-{batch.id}-movie-move-log.json").write_text(
+                json.dumps(
+                    {
+                        "batch_id": batch.id,
+                        "media_type": "video_movie_collection",
+                        "title": title,
+                        "year": year,
+                        "edition": edition or None,
+                        "format": item.get("format"),
+                        "source_file": str(source),
+                        "destination": str(destination_file),
+                        "moved_at": serialize_utc(now_utc()),
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+        except Exception as exc:
+            action.status = "failed"
+            action.error_message = str(exc)
+            failed_files.append(f"Failed to move {source}: {exc}")
+            db.flush()
+
+    # Move sidecars/artwork/subtitles to a shared _collection_sidecars folder
+    if sidecar_ingest_files:
+        collection_title = str(metadata.get("collection_title") or "collection").strip()
+        sidecar_folder = settings.movies_dir / "_collection_sidecars" / _safe_path_part(collection_title)
+        sidecar_folder.mkdir(parents=True, exist_ok=True)
+
+        for ingest_file in sidecar_ingest_files:
+            source = Path(ingest_file.file_path)
+            completed = _completed_move_destination(db, batch.id, source)
+            if not source.exists() and completed:
+                moved_files.append(str(completed))
+                continue
+            if not source.exists():
+                continue
+
+            dest_file = sidecar_folder / ingest_file.file_name
+            if dest_file.exists():
+                dest_file = _unique_artwork_destination(dest_file, reserved)
+
+            reserved.add(_path_key(dest_file))
+            action = MoveAction(
+                batch_id=batch.id,
+                source_path=str(source),
+                destination_path=str(dest_file),
+                status="running",
+            )
+            db.add(action)
+            db.flush()
+            try:
+                shutil.move(str(source), str(dest_file))
+                action.status = "completed"
+                action.completed_at = now_utc()
+                moved_files.append(str(dest_file))
+            except Exception as exc:
+                action.status = "failed"
+                action.error_message = str(exc)
+                failed_files.append(f"Failed to move sidecar {source}: {exc}")
+                db.flush()
+
+    return moved_files, failed_files
+
+
 def _tv_season_destination(root: Path, season_number: int) -> Path:
     return root / f"Season {season_number:02d}"
 
@@ -1193,7 +1354,11 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                 continue
 
             if batch.detected_type == "video_movie":
-                moved_files, failed_files = _move_movie_batch(db, batch)
+                metadata = dict(batch.metadata_json or {})
+                if metadata.get("review_type") == "movie_collection" and metadata.get("movie_items"):
+                    moved_files, failed_files = _move_movie_collection_batch(db, batch)
+                else:
+                    moved_files, failed_files = _move_movie_batch(db, batch)
                 if not moved_files:
                     if batch.status != "needs_metadata_review":
                         batch.status = "move_failed"
