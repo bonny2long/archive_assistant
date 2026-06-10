@@ -301,6 +301,20 @@ function MovieBatchDetail({ batch, moveSummary }: Props) {
               <dd>{metadataValue(batch, "video_file_count")}</dd>
             </div>
             {(() => {
+              const vf = batch.metadata_json?.video_files;
+              const count = Number(batch.metadata_json?.video_file_count ?? 0);
+              return (Array.isArray(vf) && count > 1) ? (
+                <div>
+                  <dt />
+                  <dd>
+                    <ul className="batch-detail__file-list">
+                      {vf.map((f: unknown) => <li key={String(f)}><code>{String(f)}</code></li>)}
+                    </ul>
+                  </dd>
+                </div>
+              ) : null;
+            })()}
+            {(() => {
               const pvf = batch.metadata_json?.primary_video_file;
               return pvf ? (
                 <div>
@@ -312,6 +326,15 @@ function MovieBatchDetail({ batch, moveSummary }: Props) {
             <div><dt>Artwork files</dt><dd>{metadataValue(batch, "artwork_count")}</dd></div>
             <div><dt>Subtitle files</dt><dd>{metadataValue(batch, "subtitle_count")}</dd></div>
             <div><dt>Ignored sidecars</dt><dd>{metadataValue(batch, "ignored_sidecar_count")}</dd></div>
+            {(() => {
+              const count = Number(batch.metadata_json?.ignored_sidecar_count ?? 0);
+              return count > 0 ? (
+                <div>
+                  <dt />
+                  <dd className="batch-detail__sidecar-note">Preserved in source location, not moved</dd>
+                </div>
+              ) : null;
+            })()}
             {(() => {
               const tags = batch.metadata_json?.release_tags_removed;
               return Array.isArray(tags) && tags.length > 0 ? (

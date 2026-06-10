@@ -711,15 +711,23 @@ def _create_movie_batch(db: Session, source: Path) -> IngestBatch | None:
     )
     title = parsed["title"]
     year = parsed["year"]
+    edition = parsed.get("edition")
+    if edition and re.search(r"\d", edition):
+        edition = None
     video_files = [path.name for path in files["video"]]
     video_file_count = len(files["video"])
-    folder = safe_movie_path_part(f"{year or 'Unknown Year'} - {title}")
+    folder = safe_movie_path_part(
+        f"{year or 'Unknown Year'} - {title}"
+        if not edition
+        else f"{year or 'Unknown Year'} - {title} [{edition}]"
+    )
     destination = settings.movies_dir / folder
     warnings = [] if year else ["movie_year_missing"]
     metadata = {
         "media_kind": "movie",
         "title": title,
         "year": year,
+        "edition": edition,
         "format": main_video.suffix.lstrip(".").upper(),
         "video_file_count": video_file_count,
         "video_files": video_files,
@@ -747,7 +755,7 @@ def _create_movie_batch(db: Session, source: Path) -> IngestBatch | None:
         status="pending_review" if year else "needs_metadata_review",
         confidence=metadata["confidence"],
         suggested_destination=str(destination),
-        suggested_metadata={"title": title, "year": year},
+        suggested_metadata={"title": title, "year": year, "edition": edition} if edition else {"title": title, "year": year},
         metadata_json=metadata,
     )
     db.add(batch)

@@ -201,9 +201,19 @@ def parse_movie_name(value: str) -> dict:
     title = re.sub(r"[._]+", " ", title_source)
     title = re.sub(r"\s*[-]+\s*", " ", title)
     title = re.sub(r"\s+", " ", title).strip(" -._()[]")
+    edition = None
+    if year_match:
+        after_year = raw[year_match.end():]
+        for tag_match in RELEASE_TAG_PATTERN.finditer(after_year):
+            after_year = after_year.replace(tag_match.group(0), "", 1)
+        cleaned = re.sub(r"[._]+", " ", after_year)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip(" -._()[]")
+        if cleaned:
+            edition = cleaned
     return {
         "title": title or "Unknown Movie",
         "year": year,
+        "edition": edition,
         "raw_name": raw,
         "release_tags_removed": release_tags,
     }
