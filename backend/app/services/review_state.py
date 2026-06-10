@@ -1,6 +1,20 @@
 from collections import Counter
 from typing import Any
 
+from app.services.video_metadata import parse_movie_name
+
+
+def _all_same_movie(video_files: list) -> bool:
+    titles: set[str] = set()
+    for filename in video_files:
+        if not isinstance(filename, str):
+            return False
+        parsed = parse_movie_name(filename)
+        title = str(parsed.get("title") or "").strip().casefold()
+        if title and title not in ("unknown movie",):
+            titles.add(title)
+    return len(titles) == 1
+
 
 REVIEW_TYPES = {
     "music_album": "music_album",
@@ -108,11 +122,19 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
         year = str(meta.get("year") or "")
         if len(year) != 4 or not year.isdigit():
             blocking.append(_item("movie_year_missing", "A four-digit movie year is required."))
-        if int(meta.get("video_file_count") or 0) > 1:
-            blocking.append(_item(
-                "multiple_movie_candidates",
-                "Multiple movie files need a clear primary video.",
-            ))
+        video_file_count = int(meta.get("video_file_count") or 0)
+        if video_file_count > 1:
+            video_files = meta.get("video_files") or []
+            if _all_same_movie(video_files):
+                non_blocking.append(_item(
+                    "multiple_movie_editions",
+                    f"{video_file_count} video files detected — looks like multiple editions or versions of the same movie.",
+                ))
+            else:
+                blocking.append(_item(
+                    "multiple_movie_candidates",
+                    f"{video_file_count} video files found. Could not determine if they are editions, duplicates, or unrelated files.",
+                ))
     elif detected_type == "video_tv_show":
         if not str(meta.get("show_title") or "").strip():
             blocking.append(_item("tv_show_title_missing", "TV show title is required."))

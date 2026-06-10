@@ -30,6 +30,7 @@ class BatchSummary(BaseModel):
     ignored_sidecar_count: int = 0
     subtitle_count: int = 0
     video_file_count: int = 0
+    video_files: list[str] = Field(default_factory=list)
     title: str | None = None
     edition: str | None = None
     original_release_name: str | None = None
@@ -41,6 +42,8 @@ class BatchSummary(BaseModel):
     show_title: str | None = None
     season_count: int = 0
     episode_count: int = 0
+    special_episode_count: int = 0
+    special_episodes: list[dict] = Field(default_factory=list)
     seasons: list[dict] = Field(default_factory=list)
     ignored_corrupt_video_count: int = 0
     ignored_corrupt_video_files: list[str] = Field(default_factory=list)

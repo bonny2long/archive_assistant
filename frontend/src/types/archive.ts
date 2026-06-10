@@ -55,6 +55,7 @@ export type BatchSummary = {
   ignored_sidecar_count: number;
   subtitle_count: number;
   video_file_count: number;
+  video_files?: string[];
   title?: string | null;
   edition?: string | null;
   original_release_name?: string | null;

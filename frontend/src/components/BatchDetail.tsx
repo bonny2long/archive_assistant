@@ -272,7 +272,13 @@ function MovieBatchDetail({ batch, moveSummary }: Props) {
         <div>
           <div className="library-status__eyebrow">Movie detected</div>
           <h2>{getBatchDisplayTitle(batch)}</h2>
-          <p>{metadataValue(batch, "format")} · {metadataValue(batch, "video_file_count")} video file(s)</p>
+          <p>
+            {metadataValue(batch, "format")} · {" "}
+            {(() => {
+              const count = Number(batch.metadata_json?.video_file_count ?? 0);
+              return `${count} ${count === 1 ? "video file" : "video files"}`;
+            })()}
+          </p>
         </div>
         <div className="library-status__facts">
           <span>{Math.round(batch.confidence * 100)}% confidence</span>
@@ -290,17 +296,31 @@ function MovieBatchDetail({ batch, moveSummary }: Props) {
               <div><dt>Edition / Version</dt><dd>{metadataValue(batch, "edition")}</dd></div>
             )}
             <div><dt>Format</dt><dd>{metadataValue(batch, "format")}</dd></div>
-            <div><dt>Video files</dt><dd>{metadataValue(batch, "video_file_count")}</dd></div>
-            <div><dt>Artwork</dt><dd>{metadataValue(batch, "artwork_count")}</dd></div>
-            <div><dt>Subtitles</dt><dd>{metadataValue(batch, "subtitle_count")}</dd></div>
+            <div>
+              <dt>Video files</dt>
+              <dd>{metadataValue(batch, "video_file_count")}</dd>
+            </div>
+            {(() => {
+              const pvf = batch.metadata_json?.primary_video_file;
+              return pvf ? (
+                <div>
+                  <dt>Primary video file</dt>
+                  <dd style={{ fontSize: "0.8em", wordBreak: "break-all" }}>{String(pvf)}</dd>
+                </div>
+              ) : null;
+            })()}
+            <div><dt>Artwork files</dt><dd>{metadataValue(batch, "artwork_count")}</dd></div>
+            <div><dt>Subtitle files</dt><dd>{metadataValue(batch, "subtitle_count")}</dd></div>
             <div><dt>Ignored sidecars</dt><dd>{metadataValue(batch, "ignored_sidecar_count")}</dd></div>
-            {Array.isArray(batch.metadata_json?.release_tags_removed)
-              && batch.metadata_json.release_tags_removed.length > 0 && (
-              <div>
-                <dt>Release tags removed</dt>
-                <dd>{batch.metadata_json.release_tags_removed.join(", ")}</dd>
-              </div>
-            )}
+            {(() => {
+              const tags = batch.metadata_json?.release_tags_removed;
+              return Array.isArray(tags) && tags.length > 0 ? (
+                <div>
+                  <dt>Release tags removed</dt>
+                  <dd>{tags.join(", ")}</dd>
+                </div>
+              ) : null;
+            })()}
           </dl>
         </section>
         <section className="library-card">

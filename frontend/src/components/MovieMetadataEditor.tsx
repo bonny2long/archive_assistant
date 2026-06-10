@@ -21,6 +21,7 @@ export default function MovieMetadataEditor({
   onConfirm,
   onClose,
 }: Props) {
+  const [showAllVideos, setShowAllVideos] = useState(false);
   const [title, setTitle] = useState(
     () => batch.suggested_metadata?.title ?? batch.title ?? "",
   );
@@ -36,10 +37,11 @@ export default function MovieMetadataEditor({
 
   const yearValid = year.trim() === "" || /^(19|20)\d{2}$/.test(year.trim());
   const valid = title.trim() !== "" && yearValid;
-  const preview = useMemo(
-    () => `Movies/Library/${sanitizePathPart(`${year.trim() || "Unknown Year"} - ${title}`)}`,
-    [title, year],
-  );
+  const preview = useMemo(() => {
+    const base = `${year.trim() || "Unknown Year"} - ${title.trim() || "Unknown Title"}`;
+    const folder = edition.trim() ? `${base} [${edition.trim()}]` : base;
+    return `Movies/Library/${sanitizePathPart(folder)}`;
+  }, [title, year, edition]);
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -75,7 +77,26 @@ export default function MovieMetadataEditor({
               <span>Detected video file</span>
               <strong>{batch.primary_video_file ?? "Unknown video file"}</strong>
             </div>
+            {batch.video_files && batch.video_files.length > 1 && (
+              <div>
+                <button
+                  type="button"
+                  className="btn-sm"
+                  onClick={() => setShowAllVideos((value) => !value)}
+                >
+                  {showAllVideos ? "Hide video files" : `Show all ${batch.video_files.length} video files`}
+                </button>
+                {showAllVideos && (
+                  <ul style={{ margin: "0.25rem 0", paddingLeft: "1.25rem" }}>
+                    {batch.video_files.map((vf) => (
+                      <li key={vf}><code>{vf}</code></li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
             <div className="movie-editor__counts">
+              <span>Video files: {batch.video_file_count}</span>
               <span>Artwork: {batch.artwork_count}</span>
               <span>Subtitles: {batch.subtitle_count}</span>
               <span>Ignored sidecars: {batch.ignored_sidecar_count}</span>

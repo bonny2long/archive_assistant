@@ -117,9 +117,7 @@ def classify_ingest_item(path: Path) -> str:
     if video_files and not audio_files:
         if folder_looks_like_tv_show(path, video_files):
             return "video_tv_show"
-        if (
-            len(video_files) == 1
-        ):
+        if len(video_files) >= 1:
             return "video_movie"
         return "unknown_type"
     if not audio_files:
@@ -690,7 +688,7 @@ def _create_movie_batch(db: Session, source: Path) -> IngestBatch | None:
             db.commit()
         return None
     files = _movie_files(source)
-    if len(files["video"]) != 1:
+    if not files["video"]:
         return None
     for stale_batch in stale_batches:
         stale_batch.status = "merged"
@@ -713,6 +711,8 @@ def _create_movie_batch(db: Session, source: Path) -> IngestBatch | None:
     )
     title = parsed["title"]
     year = parsed["year"]
+    video_files = [path.name for path in files["video"]]
+    video_file_count = len(files["video"])
     folder = safe_movie_path_part(f"{year or 'Unknown Year'} - {title}")
     destination = settings.movies_dir / folder
     warnings = [] if year else ["movie_year_missing"]
@@ -721,7 +721,8 @@ def _create_movie_batch(db: Session, source: Path) -> IngestBatch | None:
         "title": title,
         "year": year,
         "format": main_video.suffix.lstrip(".").upper(),
-        "video_file_count": 1,
+        "video_file_count": video_file_count,
+        "video_files": video_files,
         "artwork_count": len(files["artwork"]),
         "subtitle_count": len(files["subtitles"]),
         "ignored_sidecar_count": len(files["ignored"]),

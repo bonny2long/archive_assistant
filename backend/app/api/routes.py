@@ -523,7 +523,11 @@ def update_movie_metadata(
     if movie_format:
         metadata["format"] = movie_format
 
-    folder = safe_movie_path_part(f"{year or 'Unknown Year'} - {title}")
+    folder = safe_movie_path_part(
+        f"{year or 'Unknown Year'} - {title}"
+        if not edition
+        else f"{year or 'Unknown Year'} - {title} [{edition}]"
+    )
     metadata["review_confirmed"] = True
     metadata = build_review_state(batch.detected_type, metadata)
     batch.metadata_json = metadata
@@ -540,13 +544,13 @@ def update_movie_metadata(
         },
     }
     batch.suggested_destination = str(settings.movies_dir / folder)
-    batch.metadata_confirmed = True
     batch.confidence = metadata["confidence"]
-    batch.status = (
-        "needs_metadata_review"
-        if metadata["blocking_review_items"]
-        else "pending_review"
-    )
+    if metadata["blocking_review_items"]:
+        batch.metadata_confirmed = False
+        batch.status = "needs_metadata_review"
+    else:
+        batch.metadata_confirmed = True
+        batch.status = "pending_review"
     batch.updated_at = now_utc()
     db.commit()
     return _batch_to_summary(batch, action_message="Movie metadata saved.")
@@ -1170,6 +1174,7 @@ def _batch_to_summary(
         ignored_sidecar_count=meta.get("ignored_sidecar_count", 0),
         subtitle_count=meta.get("subtitle_count", 0),
         video_file_count=meta.get("video_file_count", 0),
+        video_files=meta.get("video_files", []),
         title=meta.get("title"),
         edition=meta.get("edition"),
         original_release_name=meta.get("original_release_name"),

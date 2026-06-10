@@ -68,9 +68,13 @@ def _move_movie_batch(
     metadata = dict(batch.metadata_json or {})
     title = str(metadata.get("title") or "Unknown Movie")
     year = str(metadata.get("year") or "")[:4]
-    destination = settings.movies_dir / _safe_path_part(
+    edition = str(metadata.get("edition") or "").strip()
+    destination_part = (
         f"{year or 'Unknown Year'} - {title}"
+        if not edition
+        else f"{year or 'Unknown Year'} - {title} [{edition}]"
     )
+    destination = settings.movies_dir / _safe_path_part(destination_part)
     batch.suggested_destination = str(destination)
     if destination.exists() and not _same_batch_retry(db, batch.id, destination):
         warnings = list(metadata.get("metadata_warnings", []))
@@ -180,6 +184,9 @@ def _move_movie_batch(
                 "media_type": "video_movie",
                 "title": metadata.get("title"),
                 "year": metadata.get("year"),
+                "edition": metadata.get("edition"),
+                "format": metadata.get("format"),
+                "source_path": batch.source_path,
                 "summary": {
                     "video_files_moved": sum(
                         role == "video_file" for role in completed_roles
@@ -196,6 +203,10 @@ def _move_movie_batch(
                 "destination_path": str(destination),
                 "moved_files": moved_files,
                 "failed_files": failed_files,
+                "warnings": list(dict.fromkeys(
+                    (metadata.get("metadata_warnings") or [])
+                    + (metadata.get("metadata_alerts") or [])
+                )),
                 "moved_at": serialize_utc(now_utc()),
             },
             indent=2,
