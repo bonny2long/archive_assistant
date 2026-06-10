@@ -94,6 +94,7 @@ export type BatchSummary = {
   review_type?: string | null;
   review_mode?: string | null;
   movie_items?: MovieCollectionItem[];
+  collection_title?: string | null;
   suggested_destination?: string | null;
   suggested_metadata?: SuggestedMetadata | null;
   metadata_confirmed: boolean;

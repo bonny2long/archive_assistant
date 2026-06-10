@@ -118,6 +118,15 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
                     source_folder=source,
                 ))
     elif detected_type == "video_movie":
+        # Determine resolved review_type — preserve movie_collection if set
+        existing_review_type = str(meta.get("review_type") or "")
+        has_movie_items = bool(meta.get("movie_items"))
+        if existing_review_type == "movie_collection" or has_movie_items:
+            resolved_review_type = "movie_collection"
+        else:
+            resolved_review_type = "movie"
+        meta["review_type"] = resolved_review_type
+
         if not str(meta.get("title") or "").strip():
             blocking.append(_item("movie_title_missing", "Movie title is required."))
         year = str(meta.get("year") or "")
@@ -125,9 +134,8 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
             blocking.append(_item("movie_year_missing", "A four-digit movie year is required."))
         video_file_count = int(meta.get("video_file_count") or 0)
         if video_file_count > 1:
-            # If the user has already performed a collection review (movie_items populated),
-            # the ambiguity is resolved — skip the multiple_movie_candidates check.
-            if meta.get("review_type") == "movie_collection" and meta.get("movie_items"):
+            # If resolved as movie_collection, the ambiguity is resolved.
+            if resolved_review_type == "movie_collection" and meta.get("movie_items"):
                 pass  # resolved via collection review
             else:
                 video_files = meta.get("video_files") or []
@@ -144,11 +152,13 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
 
         # If movie_items have been set by a movie collection review,
         # check each included item has title and year.
+        included_count = 0
         for movie_item in meta.get("movie_items", []):
             if not isinstance(movie_item, dict):
                 continue
             if not movie_item.get("include", True):
                 continue
+            included_count += 1
             source_file = str(movie_item.get("source_file") or "")
             if not str(movie_item.get("title") or "").strip():
                 blocking.append(_item(
@@ -163,6 +173,13 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
                     "Movie in collection is missing a valid year.",
                     file_name=source_file,
                 ))
+
+        # At least one movie must be included
+        if has_movie_items and included_count == 0:
+            blocking.append(_item(
+                "movie_collection_no_included_items",
+                "At least one movie must be included before approval.",
+            ))
     elif detected_type == "video_tv_show":
         if not str(meta.get("show_title") or "").strip():
             blocking.append(_item("tv_show_title_missing", "TV show title is required."))
@@ -328,7 +345,7 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
         "blocking_review_items": blocking,
         "non_blocking_review_items": non_blocking,
         "review_confirmed": confirmed,
-        "review_type": REVIEW_TYPES.get(detected_type, detected_type),
+        "review_type": meta.get("review_type") or REVIEW_TYPES.get(detected_type, detected_type),
         "review_mode": review_mode,
     })
     return meta

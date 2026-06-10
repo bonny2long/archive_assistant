@@ -1044,7 +1044,7 @@ def update_review_confirmation(
     )
     metadata = build_review_state(batch.detected_type, metadata)
     batch.metadata_json = metadata
-    batch.metadata_confirmed = update.confirmed
+    batch.metadata_confirmed = bool(update.confirmed and not metadata["blocking_review_items"])
     if metadata["blocking_review_items"]:
         batch.status = "needs_metadata_review"
     elif update.confirmed:
@@ -1139,6 +1139,7 @@ def approve_selected_batches(
             batch.approved_at = now_utc()
             batch.approved_by = "bonny-local"
             batch.updated_at = now_utc()
+            _lock_metadata_for_move(batch)
             approved.append(batch_id)
             continue
 
@@ -1306,6 +1307,7 @@ def _batch_to_summary(
         review_type=meta.get("review_type"),
         review_mode=meta.get("review_mode"),
         movie_items=list(meta.get("movie_items") or []),
+        collection_title=meta.get("collection_title"),
         suggested_destination=batch.suggested_destination,
         suggested_metadata=batch.suggested_metadata,
         metadata_confirmed=batch.metadata_confirmed,

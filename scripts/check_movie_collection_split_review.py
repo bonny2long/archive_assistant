@@ -117,12 +117,12 @@ def run():
         print("Step 4 PASS: no blockers after complete collection review")
 
     # Step 5: verify review_type and review_mode set correctly
-    if reviewed_result.get("review_type") != "movie":
+    if reviewed_result.get("review_type") != "movie_collection":
         failures.append(
-            f"Step 5 FAIL: review_type={reviewed_result.get('review_type')!r}, expected 'movie'"
+            f"Step 5 FAIL: review_type={reviewed_result.get('review_type')!r}, expected 'movie_collection'"
         )
     else:
-        print("Step 5 PASS: review_type=movie")
+        print("Step 5 PASS: review_type=movie_collection")
 
     if reviewed_result.get("review_mode") != "item_list":
         failures.append(

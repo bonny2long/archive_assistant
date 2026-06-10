@@ -66,6 +66,7 @@ class BatchSummary(BaseModel):
     review_type: str | None = None
     review_mode: str | None = None
     movie_items: list[dict] = Field(default_factory=list)
+    collection_title: str | None = None
     suggested_destination: str | None = None
     suggested_metadata: dict | None = None
     metadata_confirmed: bool = False

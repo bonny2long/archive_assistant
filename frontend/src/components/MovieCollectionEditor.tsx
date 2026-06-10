@@ -1,7 +1,6 @@
 import { useState, useMemo } from "react";
 import type {
   BatchSummary,
-  MovieCollectionItem,
   MovieCollectionItemUpdate,
   MovieCollectionReviewUpdate,
 } from "../types/archive";
@@ -184,9 +183,7 @@ export default function MovieCollectionEditor({
   onClose,
 }: Props) {
   const [collectionTitle, setCollectionTitle] = useState(
-    () =>
-      (batch.movie_items?.[0] as MovieCollectionItem | undefined)
-        ?.title ?? "",
+    () => batch.collection_title ?? "",
   );
   const [items, setItems] = useState<MovieCollectionItemUpdate[]>(
     () => buildInitialItems(batch),
