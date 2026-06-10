@@ -441,7 +441,6 @@ bash scripts/create_sample_tree.sh
 
 **Included:**
 - Music scan
-- Metadata extraction using mutagen
 - SQLite database
 - Pending approval workflow
 - Approved move workflow

@@ -211,8 +211,8 @@ def _tv_season_destination(root: Path, season_number: int) -> Path:
 def _tv_special_group_destination(root: Path, group: str) -> Path:
     mapping = {
         "specials": "Specials",
-        "oad": "OADs",
-        "ova": "OVAs",
+        "oad": "Specials",
+        "ova": "Specials",
         "extras": "Extras",
     }
     return root / mapping.get(group, "Specials")
@@ -235,14 +235,14 @@ def _tv_episode_destination(
     if preserve:
         if season_number is not None:
             folder = _tv_season_destination(destination, int(season_number))
-        elif destination_group in {"specials", "oad", "ova", "extras"}:
+        elif destination_group in {"specials", "oad", "extras"}:
             folder = _tv_special_group_destination(destination, destination_group)
         else:
             return None
         return folder / ingest_file.file_name
 
     # Specials going to destination group folder (Specials / OADs / OVAs / Extras)
-    if is_special and destination_group in {"specials", "oad", "ova"}:
+    if is_special and destination_group in {"specials", "oad", "extras"}:
         episode_title = str(metadata.get("episode_title") or "").strip()
         if special_label:
             file_name = (
@@ -338,6 +338,47 @@ def _tv_artwork_destination(
     return parent / ingest_file.file_name
 
 
+def _validate_tv_file_metadata_ready(batch: IngestBatch) -> list[str]:
+    errors: list[str] = []
+    for ingest_file in batch.files:
+        if ingest_file.detected_role != "tv_episode":
+            continue
+        meta = ingest_file.metadata_json or {}
+        if not meta.get("include", True):
+            continue
+        source = ingest_file.file_name
+        is_special = bool(meta.get("is_special"))
+        preserve = bool(meta.get("preserve_source_filename"))
+        destination_group = str(meta.get("destination_group") or "").strip()
+        season_number = meta.get("season_number")
+        episode_number = meta.get("episode_number")
+        episode_code = str(meta.get("episode_code") or "").strip()
+        special_label = str(meta.get("special_label") or "").strip()
+        if preserve:
+            if season_number is None and destination_group not in {"specials", "oad", "extras"}:
+                errors.append(f"{source}: preserve original filename requires season number or special group")
+            continue
+        if is_special:
+            if destination_group in {"specials", "oad", "extras"}:
+                if not special_label and not episode_code:
+                    errors.append(f"{source}: special item requires special_label or episode_code")
+            elif destination_group in {"season", ""}:
+                if season_number is None:
+                    errors.append(f"{source}: season special requires season number")
+                if not special_label and not episode_code:
+                    errors.append(f"{source}: season special requires special_label or episode_code")
+            else:
+                errors.append(f"{source}: invalid destination group {destination_group}")
+            continue
+        if season_number is None:
+            errors.append(f"{source}: missing season number")
+        if episode_number is None:
+            errors.append(f"{source}: missing episode number")
+        if not episode_code:
+            errors.append(f"{source}: missing episode code")
+    return errors
+
+
 def _move_tv_batch(
     db: Session,
     batch: IngestBatch,
@@ -346,6 +387,19 @@ def _move_tv_batch(
     show_title = str(metadata.get("show_title") or "Unknown TV Show")
     destination = settings.tv_dir / safe_tv_path_part(show_title)
     batch.suggested_destination = str(destination)
+
+    validation_errors = _validate_tv_file_metadata_ready(batch)
+    if validation_errors:
+        metadata["tv_file_metadata_not_ready"] = validation_errors
+        warnings = list(metadata.get("metadata_warnings", []))
+        warnings.append("tv_file_metadata_not_ready")
+        metadata["metadata_warnings"] = list(dict.fromkeys(warnings))
+        batch.metadata_json = metadata
+        batch.status = "needs_metadata_review"
+        batch.updated_at = now_utc()
+        db.commit()
+        return [], validation_errors
+
     if destination.exists() and not _same_batch_retry(db, batch.id, destination):
         warnings = list(metadata.get("metadata_warnings", []))
         warnings.append("tv_destination_exists")
@@ -490,8 +544,10 @@ def _move_tv_batch(
         json.dumps(
             {
                 "batch_id": batch.id,
-                "media_type": "video_tv_show",
+                "media_type": "tv_show",
                 "show_title": show_title,
+                "review_confirmed": bool(metadata.get("review_confirmed", False)),
+                "metadata_quality": str(metadata.get("metadata_quality", "weak")),
                 "season_count": metadata.get("season_count", 0),
                 "episode_count": metadata.get("episode_count", 0),
                 "subtitle_count": metadata.get("subtitle_count", 0),
@@ -506,6 +562,20 @@ def _move_tv_batch(
                 ),
                 "ignored_corrupt_video_files_preserved_in_ingest": bool(
                     metadata.get("ignored_corrupt_video_count", 0)
+                ),
+                "warnings": metadata.get("metadata_warnings", []),
+                "special_count": metadata.get("special_episode_count", 0),
+                "excluded_count": sum(
+                    not bool(e.get("include", True))
+                    for season in metadata.get("seasons", [])
+                    if isinstance(season, dict)
+                    for e in season.get("episodes", [])
+                ),
+                "preserved_filename_count": sum(
+                    bool(e.get("preserve_source_filename"))
+                    for season in metadata.get("seasons", [])
+                    if isinstance(season, dict)
+                    for e in season.get("episodes", [])
                 ),
                 "destination": str(destination),
                 "seasons": [

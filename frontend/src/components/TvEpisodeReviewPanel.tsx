@@ -385,15 +385,11 @@ function SpecialEpisodeReviewCard({
 }: SpecialCardProps) {
   const destPreview = (() => {
     if (!patch.include) return "Excluded — will not be moved";
-    const folder = patch.destination_group === "season"
-      ? `Season ${String(patch.season_number ?? "").padStart(2, "0")}`
-      : patch.destination_group === "oad"
-      ? "OADs"
-      : patch.destination_group === "ova"
-      ? "OVAs"
-      : patch.destination_group === "extras"
-      ? "Extras"
-      : "Specials";
+      const folder = patch.destination_group === "season"
+        ? `Season ${String(patch.season_number ?? "").padStart(2, "0")}`
+        : patch.destination_group === "extras"
+        ? "Extras"
+        : "Specials";
     const label = patch.special_label ?? "";
     const title = patch.episode_title ? ` - ${patch.episode_title}` : "";
     const ext = episode.source_file.split(".").pop() ?? "mkv";
@@ -512,11 +508,7 @@ function UnresolvedVideoRepairCard({
       return `TV/Library/${showTitle}/${folder}/${file.source_file}`;
     }
     if (patch.is_special && patch.special_label) {
-      const folder = patch.destination_group === "oad"
-        ? "OADs"
-        : patch.destination_group === "ova"
-        ? "OVAs"
-        : patch.destination_group === "extras"
+      const folder = patch.destination_group === "extras"
         ? "Extras"
         : "Specials";
       const title = patch.episode_title ? ` - ${patch.episode_title}` : "";

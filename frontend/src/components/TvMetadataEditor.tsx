@@ -245,7 +245,7 @@ export default function TvMetadataEditor({
               onClick={handleEpisodeReviewSave}
             >
               <i className={`ti ti-${saving ? "loader-2 spinner" : "device-floppy"}`} />
-              Save episode review
+              Save review
             </button>
           )}
         </div>

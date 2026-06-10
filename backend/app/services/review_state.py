@@ -21,6 +21,9 @@ BLOCKING_WARNING_TYPES = {
     "movie_destination_exists",
     "tv_destination_exists",
     "partial_duplicate_tracks_detected",
+    "tv_review_file_sync_unmatched",
+    "tv_review_count_mismatch",
+    "tv_file_metadata_not_ready",
 }
 
 
@@ -36,7 +39,42 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
 
     for warning in warnings:
         target = blocking if warning in BLOCKING_WARNING_TYPES else non_blocking
-        target.append(_item(warning, warning.replace("_", " ").capitalize()))
+        if warning == "tv_review_file_sync_unmatched":
+            unmatched = meta.get("tv_review_file_sync_unmatched") or []
+            if unmatched:
+                target.append(_item(
+                    "tv_review_file_sync_unmatched",
+                    "Some reviewed TV episodes could not be matched back to source files. Move is blocked until review metadata and file metadata are synced.",
+                    files=unmatched,
+                    count=len(unmatched),
+                ))
+            else:
+                target.append(_item(
+                    "tv_review_file_sync_unmatched",
+                    "Some reviewed TV episodes could not be matched back to source files.",
+                ))
+        elif warning == "tv_review_count_mismatch":
+            detail = meta.get("tv_review_count_mismatch")
+            target.append(_item(
+                warning,
+                "Episode count mismatch between batch and files. Batch-level and file-level counts must match before moving.",
+                detail=detail,
+            ) if detail else _item(
+                warning,
+                "Episode count mismatch between batch and files.",
+            ))
+        elif warning == "tv_file_metadata_not_ready":
+            detail = meta.get("tv_file_metadata_not_ready")
+            target.append(_item(
+                warning,
+                "Some TV file metadata is not ready for moving. Review each file's season, episode, and code fields.",
+                detail=detail,
+            ) if detail else _item(
+                warning,
+                "Some TV file metadata is not ready for moving.",
+            ))
+        else:
+            target.append(_item(warning, warning.replace("_", " ").capitalize()))
 
     if detected_type == "music_album":
         if not str(meta.get("artist") or meta.get("albumartist") or "").strip():

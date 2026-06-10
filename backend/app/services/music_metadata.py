@@ -2,9 +2,6 @@ import re
 from collections import Counter
 from pathlib import Path
 
-# pyrefly: ignore [missing-import]
-from mutagen import File as MutagenFile
-
 AUDIO_EXTENSIONS = {".mp3", ".flac", ".m4a", ".aac", ".wav", ".ogg", ".opus"}
 ARTWORK_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 PREFERRED_ARTWORK_STEMS = {
@@ -507,22 +504,16 @@ def build_suggested_metadata(
 
 
 def extract_music_metadata(path: Path) -> dict:
-    audio = MutagenFile(path, easy=True)
-    folder_artist = "Unknown Artist"
-    folder_album = path.parent.name or "Unknown Album"
-    folder_year = "Unknown Year"
-    duration = round(audio.info.length, 2) if audio and hasattr(audio, "info") else 0
-
     return {
-        "albumartist": _first(audio.get("albumartist"), folder_artist) if audio else folder_artist,
-        "artist": _first(audio.get("artist"), folder_artist) if audio else folder_artist,
-        "album": _first(audio.get("album"), folder_album) if audio else folder_album,
-        "title": _first(audio.get("title"), path.stem) if audio else path.stem,
-        "tracknumber": _first(audio.get("tracknumber"), "1") if audio else "1",
-        "discnumber": _parse_disc(audio.get("discnumber") if audio else None, path),
-        "date": _first(audio.get("date"), folder_year) if audio else folder_year,
-        "genre": _first(audio.get("genre"), "Unknown") if audio else "Unknown",
-        "duration_seconds": duration,
+        "albumartist": "Unknown Artist",
+        "artist": "Unknown Artist",
+        "album": path.parent.name or "Unknown Album",
+        "title": path.stem,
+        "tracknumber": "1",
+        "discnumber": _parse_disc(None, path),
+        "date": "Unknown Year",
+        "genre": "Unknown",
+        "duration_seconds": 0,
         "extension": path.suffix.lower(),
     }
 

@@ -287,7 +287,7 @@ def parse_tv_episode_name(value: str) -> dict:
         oad_type = oad_match.group("type").lower()
         number = int(oad_match.group("number"))
         dest_group = "oad" if oad_type == "oad" else "ova"
-        special_label = f"{oad_type.upper()}E{number:02d}"
+        special_label = f"{oad_type.upper()}{number:02d}"
         show_title, episode_title = _extract_titles(
             raw, oad_match.start(), oad_match.end()
         )
@@ -309,7 +309,7 @@ def parse_tv_episode_name(value: str) -> dict:
     special_match = TV_SPECIAL_PATTERN.search(raw)
     if special_match:
         number = int(special_match.group("number"))
-        special_label = f"SP{number:02d}"
+        special_label = special_match.group(0).strip()
         show_title, episode_title = _extract_titles(
             raw, special_match.start(), special_match.end()
         )

@@ -54,7 +54,7 @@ from app.services.scanner import scan_music_ingest
 from app.services.mover import move_approved_batches
 from app.services.quarantine import quarantine_batch, restore_quarantined_batch
 from app.services.video_metadata import safe_movie_path_part, safe_tv_path_part
-from app.services.tv_review import apply_tv_episode_review_patches
+from app.services.tv_review import apply_tv_episode_review_patches, sync_tv_episode_metadata_to_ingest_files
 from app.services.review_state import build_review_state
 from app.core.config import settings
 from app.core.time import configured_timezone, now_local, now_utc, serialize_utc
@@ -842,14 +842,52 @@ def update_tv_episode_review(
         year = update.year.strip()
         metadata["year"] = year or None
 
-    metadata = apply_tv_episode_review_patches(metadata, batch.files, update.patches)
+    metadata, reviewed_episodes = apply_tv_episode_review_patches(
+        metadata, batch.files, update.patches
+    )
+
+    unmatched = sync_tv_episode_metadata_to_ingest_files(
+        batch.files, reviewed_episodes
+    )
+
+    if unmatched:
+        warnings = list(metadata.get("metadata_warnings", []))
+        warnings.append("tv_review_file_sync_unmatched")
+        metadata["metadata_warnings"] = list(dict.fromkeys(warnings))
+        metadata["tv_review_file_sync_unmatched"] = unmatched
+
+    included_file_count = sum(
+        1
+        for item in batch.files
+        if item.detected_role == "tv_episode"
+        and (item.metadata_json or {}).get("include", True)
+    )
+
+    included_batch_count = sum(
+        1
+        for season in metadata.get("seasons", [])
+        for episode in season.get("episodes", [])
+        if episode.get("include", True)
+    )
+
+    if included_file_count != included_batch_count:
+        warnings = list(metadata.get("metadata_warnings", []))
+        warnings.append("tv_review_count_mismatch")
+        metadata["metadata_warnings"] = list(dict.fromkeys(warnings))
+        metadata["tv_review_count_mismatch"] = {
+            "batch_episode_count": included_batch_count,
+            "file_episode_count": included_file_count,
+        }
+        batch.status = "needs_metadata_review"
 
     if update.confirm_non_blocking_warnings:
         metadata["review_confirmed"] = True
 
     metadata = build_review_state(batch.detected_type, metadata)
 
-    if metadata.get("blocking_review_items"):
+    has_sync_errors = bool(unmatched)
+
+    if metadata.get("blocking_review_items") or has_sync_errors:
         batch.status = "needs_metadata_review"
         metadata["metadata_quality"] = "weak"
     else:
