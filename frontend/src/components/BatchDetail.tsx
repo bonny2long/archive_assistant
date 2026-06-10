@@ -492,6 +492,76 @@ function TvBatchDetail({ batch, moveSummary }: Props) {
         </section>
       )}
 
+      {(() => {
+        const specials: Array<Record<string, unknown>> = Array.isArray(
+          (batch as Record<string, unknown>).special_episodes
+        )
+          ? (batch as Record<string, unknown>).special_episodes as Array<Record<string, unknown>>
+          : (() => {
+              const raw = metadataValue(batch, "special_episodes");
+              if (raw === "-") return [];
+              try {
+                const parsed = JSON.parse(raw);
+                return Array.isArray(parsed) ? parsed as Array<Record<string, unknown>> : [];
+              } catch {
+                return [];
+              }
+            })();
+        const specialCount = specials.length;
+        if (specialCount === 0) return null;
+        const limit = 10;
+        const showAll = specialCount <= limit;
+        const displayList = showAll ? specials : specials.slice(0, limit);
+        const [expanded, setExpanded] = useState(showAll);
+        const visible = expanded ? specials : displayList;
+        return (
+          <section className="track-preview">
+            <div className="track-preview__header">
+              <h3>Specials / OADs / Extras</h3>
+              <span>{specialCount} video(s)</span>
+            </div>
+            <div className="track-preview__table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Label</th>
+                    <th>Title</th>
+                    <th>Group</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visible.map((special, index) => {
+                    const code = String(
+                      special.episode_code ?? special.special_label ?? "Special"
+                    );
+                    const title = String(
+                      special.episode_title ?? special.source_file ?? ""
+                    );
+                    const group = String(special.destination_group ?? "");
+                    return (
+                      <tr key={`special-${code}-${index}`}>
+                        <td>{code}</td>
+                        <td>{title}</td>
+                        <td>{group}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {!expanded && specialCount > limit && (
+              <button
+                className="btn btn--compact"
+                onClick={() => setExpanded(true)}
+                style={{ marginTop: "0.5rem" }}
+              >
+                Show all {specialCount} specials
+              </button>
+            )}
+          </section>
+        );
+      })()}
+
       {moved && moveSummary && (
         <div className="move-log__empty">
           {moveSummary.completed} files completed, {moveSummary.failed} failed.

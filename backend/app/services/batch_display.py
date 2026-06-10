@@ -67,40 +67,27 @@ def build_batch_display_fields(batch: IngestBatch) -> dict:
     if detected_type in TV_TYPES:
         season_count = int(metadata.get("season_count") or 0)
         episode_count = int(metadata.get("episode_count") or 0)
-        season_label = "season" if season_count == 1 else "seasons"
-        episode_label = "episode" if episode_count == 1 else "episodes"
-        seasons = metadata.get("seasons") or []
-        season_number = (
-            seasons[0].get("season_number")
-            if season_count == 1
-            and len(seasons) == 1
-            and isinstance(seasons[0], dict)
-            else None
-        )
-        season_text = (
-            f"Season {int(season_number):02d}"
-            if season_number is not None
-            else f"{season_count} {season_label}"
-        )
+        special_count = int(metadata.get("special_episode_count") or 0)
+        video_count = int(metadata.get("video_file_count") or 0)
+        parts: list[str] = []
+        if season_count:
+            parts.append(f"{season_count} {'season' if season_count == 1 else 'seasons'}")
+        if episode_count:
+            parts.append(f"{episode_count} {'episode' if episode_count == 1 else 'episodes'}")
+        if special_count:
+            parts.append(f"{special_count} {'special' if special_count == 1 else 'specials'}")
+        if video_count and video_count != episode_count:
+            parts.append(f"{video_count} videos")
+        if metadata.get("metadata_quality") == "weak":
+            parts.append("needs episode review")
         return {
             "media_category": "tv",
             "media_label": "TV Show",
             "primary_name": metadata.get("show_title") or "Unknown TV Show",
-            "secondary_name": (
-                f"{season_count} {season_label} · "
-                f"{episode_count} {episode_label}"
-            ),
-            "item_label": "episodes",
-            "item_count": episode_count,
+            "secondary_name": " · ".join(parts),
+            "item_label": "videos",
+            "item_count": video_count or episode_count,
             "edit_kind": "tv_show",
-            "secondary_name": (
-                f"{season_text} \u00b7 {episode_count} {episode_label}"
-                + (
-                    " \u00b7 needs episode review"
-                    if metadata.get("metadata_quality") == "weak"
-                    else ""
-                )
-            ),
         }
 
     if detected_type in QUARANTINE_TYPES:

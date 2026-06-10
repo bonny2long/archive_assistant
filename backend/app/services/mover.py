@@ -1,5 +1,6 @@
 import json
 import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 from sqlalchemy.orm import Session, selectinload
 from app.core.config import settings
@@ -1145,6 +1146,15 @@ def find_possible_existing_destination(db: Session, batch: IngestBatch) -> dict 
     return None
 
 
+def _lock_metadata_for_move(batch: IngestBatch) -> None:
+    metadata = dict(batch.metadata_json or {})
+    metadata["review_confirmed"] = True
+    metadata["metadata_locked_for_move"] = True
+    metadata["metadata_locked_at"] = datetime.now(timezone.utc).isoformat()
+    batch.metadata_json = metadata
+    batch.metadata_confirmed = True
+
+
 def move_approved_batches(db: Session) -> tuple[int, list[str]]:
     approved = (
         db.query(IngestBatch)
@@ -1184,6 +1194,8 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                     continue
                 batch.status = "move_failed" if failed_files else "moved"
                 batch.updated_at = now_utc()
+                if batch.status == "moved":
+                    _lock_metadata_for_move(batch)
                 metadata = batch.metadata_json or {}
                 if not (
                     db.query(ArchiveItem)
@@ -1225,6 +1237,8 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                     continue
                 batch.status = "move_failed" if failed_files else "moved"
                 batch.updated_at = now_utc()
+                if batch.status == "moved":
+                    _lock_metadata_for_move(batch)
                 metadata = batch.metadata_json or {}
                 if not (
                     db.query(ArchiveItem)

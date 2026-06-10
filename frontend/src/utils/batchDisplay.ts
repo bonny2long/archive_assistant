@@ -78,6 +78,38 @@ export function getBatchMediaLabel(batch: DisplayBatch): string {
   return "Quarantine Review";
 }
 
+export function tvCountSummary(batch: DisplayBatch): string {
+  const seasonCount = Number(metadataValue(batch, "season_count") ?? 0);
+  const episodeCount = Number(metadataValue(batch, "episode_count") ?? 0);
+  const specialCount = Number(metadataValue(batch, "special_episode_count") ?? 0);
+  const videoCount = Number(metadataValue(batch, "video_file_count") ?? 0);
+  const weak = metadataValue(batch, "metadata_quality") === "weak";
+
+  const parts: string[] = [];
+
+  if (seasonCount > 0) {
+    parts.push(`${seasonCount} season${seasonCount === 1 ? "" : "s"}`);
+  }
+
+  if (episodeCount > 0) {
+    parts.push(`${episodeCount} episode${episodeCount === 1 ? "" : "s"}`);
+  }
+
+  if (specialCount > 0) {
+    parts.push(`${specialCount} special${specialCount === 1 ? "" : "s"}`);
+  }
+
+  if (videoCount > 0 && videoCount !== episodeCount) {
+    parts.push(`${videoCount} videos`);
+  }
+
+  if (weak) {
+    parts.push("needs episode review");
+  }
+
+  return parts.join(" · ");
+}
+
 export function getBatchPrimaryName(batch: DisplayBatch): string {
   if ("primary_name" in batch && batch.primary_name) return batch.primary_name;
   if (batch.detected_type === "video_movie") {
@@ -122,33 +154,7 @@ export function getBatchSecondaryName(batch: DisplayBatch): string {
     return year ? `${String(year)} movie` : "Movie";
   }
   if (batch.detected_type === "video_tv_show") {
-    const seasons = Number(
-      ("season_count" in batch ? batch.season_count : null)
-      ?? metadataValue(batch, "season_count")
-      ?? 0,
-    );
-    const episodes = Number(
-      ("episode_count" in batch ? batch.episode_count : null)
-      ?? metadataValue(batch, "episode_count")
-      ?? 0,
-    );
-    const seasonRows = metadataValue(batch, "seasons");
-    const seasonNumber = (
-      seasons === 1
-      && Array.isArray(seasonRows)
-      && typeof seasonRows[0] === "object"
-      && seasonRows[0] !== null
-      && "season_number" in seasonRows[0]
-    ) ? Number(seasonRows[0].season_number) : null;
-    const reviewText = (
-      metadataValue(batch, "metadata_quality") === "weak"
-        ? " · needs episode review"
-        : ""
-    );
-    if (seasonNumber !== null && Number.isFinite(seasonNumber)) {
-      return `Season ${String(seasonNumber).padStart(2, "0")} · ${episodes} ${episodes === 1 ? "episode" : "episodes"}${reviewText}`;
-    }
-    return `${seasons} ${seasons === 1 ? "season" : "seasons"} · ${episodes} ${episodes === 1 ? "episode" : "episodes"}`;
+    return tvCountSummary(batch);
   }
   if (batch.detected_type === "unknown_type" || batch.detected_type === "unsupported_file") {
     const fileCount = "file_count" in batch ? batch.file_count : metadataValue(batch, "file_count");
@@ -178,10 +184,19 @@ export function getBatchItemText(batch: DisplayBatch): string {
     return `${count} ${count === 1 ? "video" : "videos"}`;
   }
   if (batch.detected_type === "video_tv_show") {
-    const count = "episode_count" in batch
-      ? batch.episode_count
-      : Number(metadataValue(batch, "episode_count") ?? 0);
-    return `${count} ${count === 1 ? "episode" : "episodes"}`;
+    const videoCount = Number(
+      "video_file_count" in batch
+        ? batch.video_file_count
+        : metadataValue(batch, "video_file_count") ?? 0
+    );
+    const episodeCount = Number(
+      "episode_count" in batch
+        ? batch.episode_count
+        : metadataValue(batch, "episode_count") ?? 0
+    );
+    const count = videoCount || episodeCount;
+    const label = videoCount && videoCount !== episodeCount ? "video" : "episode";
+    return `${count} ${count === 1 ? label : label + "s"}`;
   }
   if (batch.detected_type === "unknown_type" || batch.detected_type === "unsupported_file") {
     const count = "file_count" in batch

@@ -51,7 +51,7 @@ from app.services.music_metadata import (
     suggest_music_destination,
 )
 from app.services.scanner import scan_music_ingest
-from app.services.mover import move_approved_batches
+from app.services.mover import _lock_metadata_for_move, move_approved_batches
 from app.services.quarantine import quarantine_batch, restore_quarantined_batch
 from app.services.video_metadata import safe_movie_path_part, safe_tv_path_part
 from app.services.tv_review import apply_tv_episode_review_patches, sync_tv_episode_metadata_to_ingest_files
@@ -998,6 +998,7 @@ def approve_batch(batch_id: int, db: Session = Depends(get_db)):
     batch.approved_at = now_utc()
     batch.approved_by = "bonny-local"
     batch.updated_at = now_utc()
+    _lock_metadata_for_move(batch)
     db.commit()
     return ApproveResponse(batch_id=batch.id, status=batch.status, message="Batch approved")
 
