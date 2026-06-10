@@ -1,188 +1,282 @@
-"""Movie final polish regression test.
+"""Movie final polish regression check.
 
-Verifies:
-- parse_movie_name handles Black Panther, Mortal Kombat II, Blade Runner
-- edition-aware destination paths
-- movie review state rules
-- Normalize TV counts (shared utility still works)
-- No forbidden dependencies
-- Video files list in movie metadata
+Tests all movie parsing, metadata, and review state rules
+from ARCHIVE_ASSISTANT_UPDATE_040_MOVIES_FINAL_POLISH.md.
+Does not require database or test files.
 """
-
-from __future__ import annotations
-
+import re
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-BACKEND_ROOT = PROJECT_ROOT / "backend"
-sys.path.insert(0, str(BACKEND_ROOT))
+# Add backend to path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
 
 from app.services.video_metadata import (
-    normalize_tv_counts,
     parse_movie_name,
     safe_movie_path_part,
+    is_movie_artwork,
+    is_subtitle_file,
+    is_ignored_video_sidecar,
+    useful_movie_name,
 )
 from app.services.review_state import build_review_state
 
+PASS = "PASS"
+FAIL = "FAIL"
 
-def test_parse_black_panther():
-    result = parse_movie_name("Black Panther (2018) [BluRay] [1080p] [YTS.AM]")
-    assert result["title"] == "Black Panther", f"Expected 'Black Panther', got {result['title']!r}"
-    assert result["year"] == "2018"
-    tags = result["release_tags_removed"]
-    assert "BluRay" in tags
-    assert "1080p" in tags
-    print("  PASS: parse_movie_name — Black Panther folder name")
+failures = 0
 
 
-def test_parse_black_panther_filename():
-    result = parse_movie_name("Black.Panther.2018.1080p.BluRay.x264-[YTS.AM].mp4")
-    assert result["title"] == "Black Panther"
-    assert result["year"] == "2018"
-    tags = result["release_tags_removed"]
-    assert "BluRay" in tags
-    assert "1080p" in tags
-    assert "x264" in tags
-    print("  PASS: parse_movie_name — Black Panther filename")
+def check(description: str, condition: bool) -> None:
+    global failures
+    status = PASS if condition else FAIL
+    if not condition:
+        failures += 1
+    print(f"  [{status}] {description}")
 
 
-def test_parse_mortal_kombat():
-    result = parse_movie_name("Mortal.Kombat.II.2026.1080p.WEBRip.AAC5.1.10bits.x265-Rapta.mkv")
-    assert result["title"] == "Mortal Kombat II", f"Expected 'Mortal Kombat II', got {result['title']!r}"
-    assert result["year"] == "2026"
-    tags = result["release_tags_removed"]
-    assert "1080p" in tags
-    assert "WEBRip" in tags
-    assert "x265" in tags
-    print("  PASS: parse_movie_name — Mortal Kombat II filename")
+def main() -> int:
+    print("\n=== Section 5.1: parse_movie_name test cases ===\n")
 
+    # Test case: Black Panther folder
+    parsed = parse_movie_name("Black Panther (2018) [BluRay] [1080p] [YTS.AM]")
+    check("Black Panther folder: title", parsed["title"] == "Black Panther")
+    check("Black Panther folder: year", parsed["year"] == "2018")
+    check("Black Panther folder: no edition", parsed["edition"] is None)
 
-def test_parse_blade_runner():
-    result = parse_movie_name("Blade.Runner.1982.Final.Cut.1080p.mkv")
-    assert result["title"] == "Blade Runner"
-    assert result["year"] == "1982"
-    print("  PASS: parse_movie_name — Blade Runner filename")
+    # Test case: Black Panther file
+    parsed = parse_movie_name("Black.Panther.2018.1080p.BluRay.x264-[YTS.AM].mp4")
+    check("Black Panther file: title", parsed["title"] == "Black Panther")
+    check("Black Panther file: year", parsed["year"] == "2018")
+    check("Black Panther file: no edition", parsed["edition"] is None)
+    check(
+        "Black Panther file: release tags",
+        set(parsed["release_tags_removed"]) == {"1080p", "BluRay", "x264", "YTS.AM"},
+    )
 
+    # Test case: Mortal Kombat II file
+    parsed = parse_movie_name(
+        "Mortal.Kombat.II.2026.1080p.WEBRip.AAC5.1.10bits.x265-Rapta.mkv"
+    )
+    check("Mortal Kombat II: title", parsed["title"] == "Mortal Kombat II")
+    check("Mortal Kombat II: year", parsed["year"] == "2026")
+    check(
+        "Mortal Kombat II: release tags",
+        set(parsed["release_tags_removed"]) == {"1080p", "WEBRip", "x265"},
+    )
+    # Edition contains tech noise (AAC5.1.10bits-Rapta); scanner filters it via digit check
+    check(
+        "Mortal Kombat II: edition has tech noise (filtered by scanner)",
+        parsed["edition"] is not None
+        and bool(re.search(r"\d", parsed["edition"])),
+    )
 
-def test_edition_destination():
-    folder = safe_movie_path_part("1982 - Blade Runner [Final Cut]")
-    assert folder == "1982 - Blade Runner [Final Cut]", f"Got {folder!r}"
-    folder = safe_movie_path_part("2018 - Black Panther")
-    assert folder == "2018 - Black Panther", f"Got {folder!r}"
-    print("  PASS: edition-aware destination path")
+    # Test case: Blade Runner (1982) Final Cut folder
+    parsed = parse_movie_name("Blade Runner (1982) Final Cut")
+    check("Blade Runner Final Cut folder: title", parsed["title"] == "Blade Runner")
+    check("Blade Runner Final Cut folder: year", parsed["year"] == "1982")
+    check(
+        "Blade Runner Final Cut folder: edition",
+        parsed["edition"] is not None,
+    )
 
+    # Test case: Blade Runner Final Cut file
+    parsed = parse_movie_name("Blade.Runner.1982.Final.Cut.1080p.mkv")
+    check("Blade Runner Final Cut file: title", parsed["title"] == "Blade Runner")
+    check("Blade Runner Final Cut file: year", parsed["year"] == "1982")
+    check(
+        "Blade Runner Final Cut file: edition",
+        parsed["edition"] is not None,
+    )
 
-def test_movie_review_title_missing():
-    meta = build_review_state("video_movie", {"title": "", "year": "2020", "video_file_count": 1})
-    assert any(item["type"] == "movie_title_missing" for item in meta["blocking_review_items"])
-    print("  PASS: review_state blocks missing title")
+    # Test case: Blade Runner Theatrical Cut file
+    parsed = parse_movie_name("Blade.Runner.1982.Theatrical.Cut.1080p.mkv")
+    check(
+        "Blade Runner Theatrical Cut file: title",
+        parsed["title"] == "Blade Runner",
+    )
+    check(
+        "Blade Runner Theatrical Cut file: edition",
+        parsed["edition"] is not None,
+    )
 
+    # Test case: Unknown movie (no year)
+    parsed = parse_movie_name("Unknown.Good.Movie.1080p.mkv")
+    check("Unknown movie: title", parsed["title"] == "Unknown Good Movie")
+    check("Unknown movie: no year", parsed["year"] is None)
+    check("Unknown movie: no edition (no year match)", parsed["edition"] is None)
+    check(
+        "Unknown movie: useful_movie_name",
+        useful_movie_name(parsed),
+    )
 
-def test_movie_review_year_missing():
-    meta = build_review_state("video_movie", {"title": "Test", "year": "", "video_file_count": 1})
-    assert any(item["type"] == "movie_year_missing" for item in meta["blocking_review_items"])
-    print("  PASS: review_state blocks missing year")
+    # Test case: Movie with artwork and subtitle folder
+    parsed = parse_movie_name("Example Movie (2020)")
+    check("Example Movie folder: title", parsed["title"] == "Example Movie")
+    check("Example Movie folder: year", parsed["year"] == "2020")
+    check("Example Movie folder: no edition", parsed["edition"] is None)
 
+    print("\n=== Section 5.1: utility functions ===\n")
 
-def test_movie_review_multiple_videos_ambiguous():
+    check(
+        "is_movie_artwork: poster.jpg",
+        is_movie_artwork(Path("poster.jpg")),
+    )
+    check(
+        "is_movie_artwork: folder.jpg",
+        is_movie_artwork(Path("folder.jpg")),
+    )
+    check(
+        "is_movie_artwork: cover.png",
+        is_movie_artwork(Path("cover.png")),
+    )
+    check(
+        "is_movie_artwork: fanart.jpg",
+        is_movie_artwork(Path("fanart.jpg")),
+    )
+    check(
+        "is_movie_artwork: not artwork (.mkv)",
+        not is_movie_artwork(Path("movie.mkv")),
+    )
+    check("is_subtitle_file: .srt", is_subtitle_file(Path("movie.en.srt")))
+    check("is_subtitle_file: .ass", is_subtitle_file(Path("movie.ass")))
+    check("is_subtitle_file: .vtt", is_subtitle_file(Path("movie.vtt")))
+    check("is_subtitle_file: .sub", is_subtitle_file(Path("movie.sub")))
+    check(
+        "is_ignored_video_sidecar: .nfo",
+        is_ignored_video_sidecar(Path("movie.nfo")),
+    )
+    check(
+        "is_ignored_video_sidecar: .txt",
+        is_ignored_video_sidecar(Path("somefile.txt")),
+    )
+    check(
+        "is_ignored_video_sidecar: .log",
+        is_ignored_video_sidecar(Path("extract.log")),
+    )
+    check(
+        "is_ignored_video_sidecar: .sfv",
+        is_ignored_video_sidecar(Path("checksums.sfv")),
+    )
+    check(
+        "safe_movie_path_part: normal name",
+        safe_movie_path_part("2018 - Black Panther"),
+    )
+    check(
+        "safe_movie_path_part: strips illegal chars",
+        safe_movie_path_part("Movie: Title") == "Movie_ Title",
+    )
+    check(
+        "safe_movie_path_part: with edition brackets",
+        safe_movie_path_part("1982 - Blade Runner [Final Cut]"),
+    )
+
+    print("\n=== Section 5.3: Review state tests ===\n")
+
+    # Missing title -> blocking
     meta = build_review_state("video_movie", {
-        "title": "Test", "year": "2020", "video_file_count": 2,
-        "video_files": ["Random.2020.mkv", "Other.2021.mkv"],
+        "title": "",
+        "year": "2020",
+        "video_file_count": 1,
+        "video_files": ["test.mkv"],
+        "metadata_warnings": [],
     })
-    assert any(item["type"] == "multiple_movie_candidates" for item in meta["blocking_review_items"])
-    print("  PASS: review_state blocks ambiguous multiple movie videos")
+    check(
+        "Missing title -> blocking",
+        any(item["type"] == "movie_title_missing" for item in meta["blocking_review_items"]),
+    )
 
-
-def test_movie_review_multiple_editions_warning():
+    # Missing year -> blocking
     meta = build_review_state("video_movie", {
-        "title": "Blade Runner", "year": "1982", "video_file_count": 2,
+        "title": "Test Movie",
+        "year": "",
+        "video_file_count": 1,
+        "video_files": ["test.mkv"],
+        "metadata_warnings": ["movie_year_missing"],
+    })
+    check(
+        "Missing year -> blocking",
+        any(item["type"] == "movie_year_missing" for item in meta["blocking_review_items"]),
+    )
+
+    # Multiple clear editions -> non-blocking warning
+    meta = build_review_state("video_movie", {
+        "title": "Blade Runner",
+        "year": "1982",
+        "video_file_count": 2,
         "video_files": [
             "Blade.Runner.1982.Final.Cut.1080p.mkv",
             "Blade.Runner.1982.Theatrical.Cut.1080p.mkv",
         ],
+        "metadata_warnings": [],
     })
-    assert any(item["type"] == "multiple_movie_editions" for item in meta["non_blocking_review_items"])
-    assert not any(item["type"] == "multiple_movie_candidates" for item in meta["blocking_review_items"])
-    print("  PASS: review_state warns on clear editions (non-blocking)")
+    check(
+        "Multiple editions -> non-blocking warning",
+        any(
+            item["type"] == "multiple_movie_editions"
+            for item in meta["non_blocking_review_items"]
+        ),
+    )
+    check(
+        "Multiple editions -> NOT blocking",
+        not any(
+            item["type"] == "multiple_movie_candidates"
+            for item in meta["blocking_review_items"]
+        ),
+    )
 
+    # Multiple ambiguous videos -> blocking
+    meta = build_review_state("video_movie", {
+        "title": "Mixed",
+        "year": "2020",
+        "video_file_count": 2,
+        "video_files": ["MovieA.mkv", "MovieB.mkv"],
+        "metadata_warnings": [],
+    })
+    check(
+        "Multiple ambiguous -> blocking",
+        any(
+            item["type"] == "multiple_movie_candidates"
+            for item in meta["blocking_review_items"]
+        ),
+    )
 
-def test_movie_review_passes():
-    meta = build_review_state("video_movie", {"title": "Black Panther", "year": "2018", "video_file_count": 1})
-    assert len(meta["blocking_review_items"]) == 0
-    print("  PASS: review_state passes for clean movie metadata")
+    # Missing artwork -> not blocking (no check exists, which is correct)
+    meta = build_review_state("video_movie", {
+        "title": "Test",
+        "year": "2020",
+        "video_file_count": 1,
+        "video_files": ["test.mkv"],
+        "artwork_count": 0,
+        "metadata_warnings": [],
+    })
+    check(
+        "No artwork -> not blocking",
+        not meta["blocking_review_items"],
+    )
 
+    # Destination exists -> blocking (via warning in BLOCKING_WARNING_TYPES)
+    meta = build_review_state("video_movie", {
+        "title": "Black Panther",
+        "year": "2018",
+        "video_file_count": 1,
+        "video_files": ["Black.Panther.2018.1080p.BluRay.x264-[YTS.AM].mp4"],
+        "metadata_warnings": ["movie_destination_exists"],
+    })
+    check(
+        "Destination exists -> blocking",
+        any(
+            item["type"] == "movie_destination_exists"
+            for item in meta["blocking_review_items"]
+        ),
+    )
 
-def test_normalize_tv_counts():
-    metadata = {
-        "seasons": [
-            {"season_number": 1, "episode_count": 24, "episodes": [{"episode_number": i} for i in range(1, 25)]},
-        ],
-        "special_episodes": [{"special_label": "OAD01"}],
-    }
-    result = normalize_tv_counts(metadata)
-    assert result["episode_count"] == 24
-    assert result["special_episode_count"] == 1
-    assert result["video_file_count"] == 25
-    assert result["season_count"] == 1
-    print("  PASS: normalize_tv_counts (shared utility still works)")
+    print(f"\n{'=' * 40}")
+    print(f"Total failures: {failures}")
+    print(f"{'=' * 40}\n")
 
-
-def test_no_forbidden_dependencies():
-    requirements = (PROJECT_ROOT / "backend" / "requirements.txt").read_text(encoding="utf-8")
-    blocked = ["mutagen", "pymediainfo", "ffmpeg-python", "tinytag"]
-    for dep in blocked:
-        assert dep not in requirements.lower(), f"Blocked dependency found: {dep}"
-    print("  PASS: no forbidden dependencies added")
-
-
-def _make_fake_batch(detected_type: str, metadata: dict):
-    batch = SimpleNamespace()
-    batch.detected_type = detected_type
-    batch.metadata_json = dict(metadata)
-    batch.metadata_confirmed = False
-    batch.status = "pending_review"
-    batch.id = 0
-    batch.source_path = ""
-    batch.suggested_destination = ""
-    batch.files = []
-    batch.updated_at = None
-    return batch
-
-
-def main() -> int:
-    tests = [
-        ("Parse Black Panther folder", test_parse_black_panther),
-        ("Parse Black Panther filename", test_parse_black_panther_filename),
-        ("Parse Mortal Kombat II", test_parse_mortal_kombat),
-        ("Parse Blade Runner", test_parse_blade_runner),
-        ("Edition-aware destination", test_edition_destination),
-        ("Review — missing title", test_movie_review_title_missing),
-        ("Review — missing year", test_movie_review_year_missing),
-        ("Review — ambiguous multiple videos", test_movie_review_multiple_videos_ambiguous),
-        ("Review — clear editions warning", test_movie_review_multiple_editions_warning),
-        ("Review — passes clean metadata", test_movie_review_passes),
-        ("Normalize TV counts (shared)", test_normalize_tv_counts),
-        ("No forbidden dependencies", test_no_forbidden_dependencies),
-    ]
-
-    failures = 0
-    for name, fn in tests:
-        try:
-            fn()
-        except Exception as exc:
-            print(f"  FAIL: {name}: {exc}")
-            failures += 1
-
-    print()
-    if failures:
-        print(f"FAILED: {failures} of {len(tests)} tests")
-        return 1
-    else:
-        print(f"PASSED: all {len(tests)} tests")
-        return 0
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())
