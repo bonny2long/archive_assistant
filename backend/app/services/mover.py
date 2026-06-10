@@ -208,6 +208,16 @@ def _tv_season_destination(root: Path, season_number: int) -> Path:
     return root / f"Season {season_number:02d}"
 
 
+def _tv_special_group_destination(root: Path, group: str) -> Path:
+    mapping = {
+        "specials": "Specials",
+        "oad": "OADs",
+        "ova": "OVAs",
+        "extras": "Extras",
+    }
+    return root / mapping.get(group, "Specials")
+
+
 def _tv_episode_destination(
     destination: Path,
     ingest_file,
@@ -225,14 +235,14 @@ def _tv_episode_destination(
     if preserve:
         if season_number is not None:
             folder = _tv_season_destination(destination, int(season_number))
-        elif destination_group in {"specials", "oad", "extras"}:
-            folder = destination / "Specials"
+        elif destination_group in {"specials", "oad", "ova", "extras"}:
+            folder = _tv_special_group_destination(destination, destination_group)
         else:
             return None
         return folder / ingest_file.file_name
 
-    # Specials going to Specials folder
-    if is_special and destination_group in {"specials", "oad"}:
+    # Specials going to destination group folder (Specials / OADs / OVAs / Extras)
+    if is_special and destination_group in {"specials", "oad", "ova"}:
         episode_title = str(metadata.get("episode_title") or "").strip()
         if special_label:
             file_name = (
@@ -242,7 +252,7 @@ def _tv_episode_destination(
             )
         else:
             file_name = ingest_file.file_name
-        return destination / "Specials" / file_name
+        return _tv_special_group_destination(destination, destination_group) / file_name
 
     # Specials inside a season folder (e.g. S01E13.5, S04SP01)
     if is_special and special_label:
@@ -275,13 +285,26 @@ def _tv_subtitle_destination(
 ) -> Path | None:
     metadata = ingest_file.metadata_json or {}
     season_number = metadata.get("season_number")
-    if season_number is None:
-        return None
+    is_special = bool(metadata.get("is_special"))
+    destination_group = str(metadata.get("destination_group") or "").strip()
 
     episode_code = metadata.get("episode_code")
     episode_title = str(metadata.get("episode_title") or "").strip()
     language_suffix = str(metadata.get("language_suffix") or "")
     suffix = Path(ingest_file.file_name).suffix.lower()
+
+    if is_special and destination_group in {"oad", "ova", "extras", "specials"}:
+        # Subtitle for a special — place alongside the episode
+        file_name = (
+            f"{episode_code}{language_suffix}{suffix}"
+            if episode_code
+            else ingest_file.file_name
+        )
+        return _tv_special_group_destination(destination, destination_group) / file_name
+
+    if season_number is None:
+        return None
+
     if episode_code:
         title_part = (
             f" - {safe_tv_path_part(episode_title)}"

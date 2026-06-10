@@ -106,6 +106,12 @@ export default function TvMetadataEditor({
               Batch {batch.id} · {batch.season_count} season
               {batch.season_count !== 1 ? "s" : ""} · {batch.episode_count}{" "}
               episode{batch.episode_count !== 1 ? "s" : ""}
+              {batch.special_episode_count != null && batch.special_episode_count > 0 && (
+                <> · {batch.special_episode_count} special</>
+              )}
+              {batch.unresolved_video_count != null && batch.unresolved_video_count > 0 && (
+                <> · {batch.unresolved_video_count} unresolved</>
+              )}
             </p>
           </div>
           <button
@@ -185,13 +191,12 @@ export default function TvMetadataEditor({
 
           {/* RIGHT: repair cards */}
           <div className="tv-editor__right">
-            {(hasBlockingItems || hasNonBlocking) ? (
-              <TvEpisodeReviewPanel
-                batch={batch}
-                patches={patches}
-                onPatchChange={setPatches}
-              />
-            ) : (
+            <TvEpisodeReviewPanel
+              batch={batch}
+              patches={patches}
+              onPatchChange={setPatches}
+            />
+            {!hasBlockingItems && !hasNonBlocking && (
               <div className="tv-editor__confirm-area">
                 {!batch.review_confirmed && (
                   <button
@@ -299,6 +304,22 @@ function TvSeasonSidebar({ batch }: SeasonSidebarProps) {
           );
         })}
       </div>
+
+      {batch.special_episode_count != null && batch.special_episode_count > 0 && (
+        <div className="tv-season-preview__ignored">
+          <i className="ti ti-disc" />
+          <span>Specials / OADs / OVAs: {batch.special_episode_count}</span>
+          <small>Review in the right panel</small>
+        </div>
+      )}
+
+      {batch.unresolved_video_count != null && batch.unresolved_video_count > 0 && (
+        <div className="tv-season-preview__ignored">
+          <i className="ti ti-question-mark" />
+          <span>Unresolved videos: {batch.unresolved_video_count}</span>
+          <small>Requires classification before approval</small>
+        </div>
+      )}
 
       {batch.ignored_corrupt_video_count > 0 && (
         <div className="tv-season-preview__ignored">

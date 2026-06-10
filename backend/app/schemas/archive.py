@@ -140,7 +140,7 @@ class TvEpisodeReviewPatch(BaseModel):
     is_special: bool = False
     special_label: str | None = None
     destination_group: str | None = None
-    # Allowed values: None | "season" | "specials" | "oad" | "extras"
+    # Allowed values: None | "season" | "specials" | "oad" | "ova" | "extras"
 
     episode_title: str | None = None
     preserve_source_filename: bool = False

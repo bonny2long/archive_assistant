@@ -146,6 +146,46 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
                     f"Episode code {code} appears more than once.",
                     episode_code=code,
                 ))
+
+        # Unresolved video files — each is a blocking item with no safe destination
+        for unresolved in meta.get("unresolved_video_files", []):
+            source_file = unresolved.get("source_file")
+            blocking.append(_item(
+                "unresolved_video_file",
+                "Unresolved video file needs a classification before approval.",
+                file_name=source_file,
+            ))
+
+        # Special episodes — check for missing labels and duplicate labels
+        special_labels_seen: dict[str, list[str]] = {}
+        for special in meta.get("special_episodes", []):
+            source_file = special.get("source_file")
+            special_label = str(special.get("special_label") or "").strip()
+            dest_group = str(special.get("destination_group") or "specials").strip()
+
+            if not special_label:
+                blocking.append(_item(
+                    "missing_special_label",
+                    "Special/OVA episode is missing a label.",
+                    file_name=source_file,
+                ))
+
+            label_key = f"{dest_group}:{special_label}"
+            if special_label:
+                special_labels_seen.setdefault(label_key, [])
+                special_labels_seen[label_key].append(
+                    source_file or "unknown"
+                )
+
+        for label_key, sources in special_labels_seen.items():
+            if len(sources) > 1:
+                dest_group, special_label = label_key.split(":", 1)
+                blocking.append(_item(
+                    "duplicate_special_label",
+                    f"Duplicate special label '{special_label}' in '{dest_group}' group.",
+                    special_label=special_label,
+                    file_name=sources[0],
+                ))
     elif detected_type in {"unknown_type", "unsupported_file"}:
         blocking.append(_item(
             "quarantine_review_required",

@@ -23,6 +23,24 @@ export type IngestBatch = {
   files: IngestFile[];
 };
 
+export type TvWarningFile = {
+  source_file: string;
+  relative_source?: string | null;
+  raw_name?: string | null;
+};
+
+export type TvWarningDetails = {
+  unparsed_video_files: TvWarningFile[];
+  generic_title_files: TvWarningFile[];
+};
+
+export type UnresolvedVideoFile = {
+  source_file: string;
+  relative_source?: string | null;
+  raw_name?: string | null;
+  show_title?: string | null;
+};
+
 export type BatchSummary = {
   id: number;
   detected_type: string;
@@ -49,6 +67,11 @@ export type BatchSummary = {
   season_count: number;
   episode_count: number;
   seasons: TvSeason[];
+  special_episode_count?: number;
+  special_episodes?: TvEpisode[];
+  unresolved_video_count?: number;
+  unresolved_video_files?: UnresolvedVideoFile[];
+  tv_warning_details?: TvWarningDetails | null;
   ignored_corrupt_video_count: number;
   ignored_corrupt_video_files: string[];
   name?: string | null;
@@ -188,7 +211,7 @@ export type TvEpisode = {
   include?: boolean;
   is_special?: boolean;
   special_label?: string | null;
-  destination_group?: "season" | "specials" | "oad" | "extras" | null;
+  destination_group?: "season" | "specials" | "oad" | "ova" | "extras" | null;
   preserve_source_filename?: boolean;
   reviewed?: boolean;
 };
@@ -339,7 +362,7 @@ export type TvEpisodeReviewPatch = {
   episode_number?: number | null;
   is_special?: boolean;
   special_label?: string | null;
-  destination_group?: "season" | "specials" | "oad" | "extras" | null;
+  destination_group?: "season" | "specials" | "oad" | "ova" | "extras" | null;
   episode_title?: string | null;
   preserve_source_filename?: boolean;
 };

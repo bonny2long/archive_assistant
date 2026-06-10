@@ -328,15 +328,65 @@ def _tv_batch_data(source: Path) -> dict | None:
     if not files["video"]:
         return None
 
-    episode_rows = [
+    all_episode_rows = [
         (path, _tv_episode_metadata(path, source))
         for path in files["video"]
     ]
-    episodes = [metadata for _, metadata in episode_rows]
+
+    # Categorize: normal episodes, special episodes, unresolved files
+    normal_rows: list[tuple[Path, dict]] = []
+    special_rows: list[tuple[Path, dict]] = []
+    unresolved_rows: list[tuple[Path, dict]] = []
+    for path, metadata in all_episode_rows:
+        if metadata.get("is_special"):
+            special_rows.append((path, metadata))
+        elif (
+            metadata.get("season_number") is not None
+            and metadata.get("episode_number") is not None
+            and metadata.get("episode_code") is not None
+        ):
+            normal_rows.append((path, metadata))
+        else:
+            unresolved_rows.append((path, metadata))
+
+    episodes = [metadata for _, metadata in normal_rows]
+    # Subtitles still matched against all rows (including specials/unresolved)
     subtitles = [
-        _tv_subtitle_metadata(path, source, episode_rows)
+        _tv_subtitle_metadata(path, source, all_episode_rows)
         for path in files["subtitles"]
     ]
+
+    # TV warning details — per-file information for actionable warnings
+    unparsed_video_files = [
+        {
+            "source_file": metadata["source_file"],
+            "relative_source": metadata.get("relative_source"),
+            "raw_name": metadata["raw_name"],
+        }
+        for _, metadata in unresolved_rows
+    ]
+    generic_title_files = [
+        {
+            "source_file": metadata["source_file"],
+            "relative_source": metadata.get("relative_source"),
+        }
+        for _, metadata in all_episode_rows
+        if not metadata.get("episode_title")
+    ]
+
+    # Special episodes list
+    special_episodes = [metadata for _, metadata in special_rows]
+    # Unresolved files list
+    unresolved_files = [
+        {
+            "source_file": metadata["source_file"],
+            "relative_source": metadata.get("relative_source"),
+            "raw_name": metadata["raw_name"],
+            "show_title": metadata.get("show_title"),
+        }
+        for _, metadata in unresolved_rows
+    ]
+
     parsed_titles = [
         str(episode["show_title"]).strip()
         for episode in episodes
@@ -363,6 +413,8 @@ def _tv_batch_data(source: Path) -> dict | None:
         for episode in episodes
     )
     if parse_failed:
+        warnings.append("tv_episode_parse_failed")
+    if unresolved_rows:
         warnings.append("tv_episode_parse_failed")
     folder_only_title = not parsed_titles
     if folder_only_title:
@@ -421,6 +473,8 @@ def _tv_batch_data(source: Path) -> dict | None:
         "season_count": len(seasons),
         "episode_count": len(episodes),
         "video_file_count": len(files["video"]),
+        "special_episode_count": len(special_episodes),
+        "unresolved_video_count": len(unresolved_files),
         "format": files["video"][0].suffix.lstrip(".").upper(),
         "subtitle_count": len(files["subtitles"]),
         "artwork_count": len(files["artwork"]),
@@ -440,6 +494,12 @@ def _tv_batch_data(source: Path) -> dict | None:
             str(path.relative_to(source)) for path in files["ignored"]
         ],
         "seasons": seasons,
+        "special_episodes": special_episodes,
+        "unresolved_video_files": unresolved_files,
+        "tv_warning_details": {
+            "unparsed_video_files": unparsed_video_files,
+            "generic_title_files": generic_title_files,
+        },
         "metadata_quality": (
             "weak" if parse_failed or folder_only_title else "good"
         ),
@@ -456,7 +516,7 @@ def _tv_batch_data(source: Path) -> dict | None:
         "metadata": metadata,
         "status": (
             "needs_metadata_review"
-            if parse_failed or folder_only_title
+            if parse_failed or folder_only_title or unresolved_rows
             else "pending_review"
         ),
         "suggested_destination": str(

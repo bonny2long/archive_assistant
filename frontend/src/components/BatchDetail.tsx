@@ -94,6 +94,10 @@ const WARNING_LABELS: Record<string, string> = {
   tv_unmatched_subtitle: "Some subtitles could not be matched to an episode",
   tv_metadata_review_required: "TV metadata review required",
   tv_destination_exists: "TV show destination already exists",
+  zero_byte_video_files_ignored: "Zero-byte video files ignored",
+  unresolved_video_file: "Unresolved video needs classification",
+  missing_special_label: "Special/OAD/OVA missing label",
+  duplicate_special_label: "Duplicate special label",
 };
 
 function metadataWarnings(batch: IngestBatch): string[] {

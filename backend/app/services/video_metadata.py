@@ -56,6 +56,23 @@ RELEASE_TAG_PATTERN = re.compile(
     r"amzn|nf|hmax)(?![a-z0-9])",
     re.IGNORECASE,
 )
+TV_OAD_PATTERN = re.compile(
+    r"(?<![a-z0-9])(?P<type>oad|ova)[ ._-]*(?:e|ep)?(?P<number>\d{1,3})(?![a-z0-9])",
+    re.IGNORECASE,
+)
+TV_SPECIAL_PATTERN = re.compile(
+    r"(?<![a-z0-9])(?:sp|special)[ ._-]*(?P<number>\d{1,3})(?![a-z0-9])",
+    re.IGNORECASE,
+)
+TV_PART_PATTERN = re.compile(
+    r"(?<![a-z0-9])s(?P<season>\d{1,2})[ ._-]*p(?P<part>\d{1,3})(?![a-z0-9])",
+    re.IGNORECASE,
+)
+TV_FRACTIONAL_EPISODE_PATTERN = re.compile(
+    r"(?<![a-z0-9])s(?P<season>\d{1,2})[ ._-]*e(?P<episode>\d{1,3})[ ._-]*"
+    r"\.(?P<fraction>\d{1,3})(?![a-z0-9])",
+    re.IGNORECASE,
+)
 GENERIC_MOVIE_NAMES = {
     "movie",
     "movies",
@@ -201,23 +218,9 @@ def useful_movie_name(parsed: dict) -> bool:
     )
 
 
-def parse_tv_episode_name(value: str) -> dict:
-    name = Path(value).name
-    raw = Path(name).stem if Path(name).suffix.lower() in (
-        VIDEO_EXTENSIONS | SUBTITLE_EXTENSIONS
-    ) else name
-    match = TV_CODE_PATTERN.search(raw) or TV_X_PATTERN.search(raw)
-    season_match = SEASON_PATTERN.search(raw)
-    episode_match = EPISODE_ONLY_PATTERN.search(raw)
-    season_number = int(match.group("season")) if match else (
-        int(season_match.group("season")) if season_match else None
-    )
-    episode_number = int(match.group("episode")) if match else (
-        int(episode_match.group("episode")) if episode_match else None
-    )
-    token_match = match or episode_match
-    show_source = raw[:token_match.start()] if token_match else raw
-    title_source = raw[token_match.end():] if token_match else ""
+def _extract_titles(raw: str, token_start: int, token_end: int) -> tuple[str | None, str | None]:
+    show_source = raw[:token_start]
+    title_source = raw[token_end:]
     show_title = re.sub(r"[._]+", " ", show_source)
     show_title = re.sub(r"\s*[-]+\s*$", "", show_title)
     show_title = re.sub(r"\s+", " ", show_title).strip(" -._()[]")
@@ -225,23 +228,168 @@ def parse_tv_episode_name(value: str) -> dict:
     episode_title = re.sub(r"^[ ._-]+", "", episode_title)
     episode_title = re.sub(r"[._]+", " ", episode_title)
     episode_title = re.sub(r"\s+", " ", episode_title).strip(" -._()[]")
+    return (show_title or None), (episode_title or None)
+
+
+def _year_from_raw(raw: str) -> str | None:
     year_matches = list(YEAR_PATTERN.finditer(raw))
-    year = year_matches[-1].group(1) if year_matches else None
+    return year_matches[-1].group(1) if year_matches else None
+
+
+def parse_tv_episode_name(value: str) -> dict:
+    name = Path(value).name
+    raw = Path(name).stem if Path(name).suffix.lower() in (
+        VIDEO_EXTENSIONS | SUBTITLE_EXTENSIONS
+    ) else name
+    year = _year_from_raw(raw)
+
+    result: dict = {
+        "show_title": None,
+        "season_number": None,
+        "episode_number": None,
+        "episode_code": None,
+        "episode_title": None,
+        "raw_name": raw,
+        "year": year,
+        "confidence": 0.4,
+        "is_special": False,
+        "destination_group": None,
+        "special_label": None,
+    }
+
+    # 1. Fractional episode (SxxExx.x) — must be checked before regular SxxExx
+    fractional_match = TV_FRACTIONAL_EPISODE_PATTERN.search(raw)
+    if fractional_match:
+        season = int(fractional_match.group("season"))
+        episode = int(fractional_match.group("episode"))
+        fraction = fractional_match.group("fraction")
+        special_label = f"S{season:02d}E{episode:02d}.{fraction}"
+        show_title, episode_title = _extract_titles(
+            raw, fractional_match.start(), fractional_match.end()
+        )
+        result.update({
+            "season_number": season,
+            "episode_number": episode,
+            "episode_code": special_label,
+            "episode_title": episode_title,
+            "show_title": show_title,
+            "year": year,
+            "confidence": 0.8,
+            "is_special": True,
+            "destination_group": "specials",
+            "special_label": special_label,
+        })
+        return result
+
+    # 2. OAD/OVA pattern
+    oad_match = TV_OAD_PATTERN.search(raw)
+    if oad_match:
+        oad_type = oad_match.group("type").lower()
+        number = int(oad_match.group("number"))
+        dest_group = "oad" if oad_type == "oad" else "ova"
+        special_label = f"{oad_type.upper()}E{number:02d}"
+        show_title, episode_title = _extract_titles(
+            raw, oad_match.start(), oad_match.end()
+        )
+        result.update({
+            "season_number": None,
+            "episode_number": None,
+            "episode_code": special_label,
+            "episode_title": episode_title,
+            "show_title": show_title,
+            "year": year,
+            "confidence": 0.8,
+            "is_special": True,
+            "destination_group": dest_group,
+            "special_label": special_label,
+        })
+        return result
+
+    # 3. Special/SP pattern
+    special_match = TV_SPECIAL_PATTERN.search(raw)
+    if special_match:
+        number = int(special_match.group("number"))
+        special_label = f"SP{number:02d}"
+        show_title, episode_title = _extract_titles(
+            raw, special_match.start(), special_match.end()
+        )
+        result.update({
+            "season_number": None,
+            "episode_number": None,
+            "episode_code": special_label,
+            "episode_title": episode_title,
+            "show_title": show_title,
+            "year": year,
+            "confidence": 0.8,
+            "is_special": True,
+            "destination_group": "specials",
+            "special_label": special_label,
+        })
+        return result
+
+    # 4. Standard SxxExx or Xxx pattern
+    match = TV_CODE_PATTERN.search(raw) or TV_X_PATTERN.search(raw)
+
+    # 5. Part pattern (SxxPxx)
+    part_match = TV_PART_PATTERN.search(raw) if not match else None
+
+    season_match = SEASON_PATTERN.search(raw)
+    episode_match = EPISODE_ONLY_PATTERN.search(raw)
+
+    season_number = int(match.group("season")) if match else (
+        int(part_match.group("season")) if part_match else (
+            int(season_match.group("season")) if season_match else None
+        )
+    )
+    episode_number = int(match.group("episode")) if match else (
+        int(part_match.group("part")) if part_match else (
+            int(episode_match.group("episode")) if episode_match else None
+        )
+    )
+
+    if part_match:
+        special_label = f"S{season_number:02d}P{part_match.group('part')}"
+        show_title, episode_title = _extract_titles(
+            raw, part_match.start(), part_match.end()
+        )
+        result.update({
+            "season_number": season_number,
+            "episode_number": episode_number,
+            "episode_code": f"S{season_number:02d}E{episode_number:02d}",
+            "episode_title": episode_title,
+            "show_title": show_title,
+            "year": year,
+            "confidence": 0.8,
+            "is_special": True,
+            "destination_group": "specials",
+            "special_label": special_label,
+        })
+        return result
+
+    token_match = match or episode_match
+    if token_match:
+        show_title, episode_title = _extract_titles(
+            raw, token_match.start(), token_match.end()
+        )
+    else:
+        show_title = None
+        episode_title = None
+
     episode_code = (
         f"S{season_number:02d}E{episode_number:02d}"
         if season_number is not None and episode_number is not None
         else None
     )
-    return {
-        "show_title": show_title or None,
+    result.update({
+        "show_title": show_title,
         "season_number": season_number,
         "episode_number": episode_number,
         "episode_code": episode_code,
-        "episode_title": episode_title or None,
-        "raw_name": raw,
+        "episode_title": episode_title,
         "year": year,
         "confidence": 0.8 if episode_code else 0.4,
-    }
+    })
+    return result
 
 
 def tv_subtitle_language_suffix(
