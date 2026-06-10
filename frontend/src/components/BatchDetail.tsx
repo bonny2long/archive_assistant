@@ -1,7 +1,7 @@
 import { Fragment, useState } from "react";
 import type { BatchMoveSummary, BatchReview, IngestBatch } from "../types/archive";
 import { formatArchiveTime } from "../utils/archiveTime";
-import { getBatchDisplayTitle, getReleaseCount } from "../utils/batchDisplay";
+import { getBatchDisplayTitle, getReleaseCount, tvCountSummary } from "../utils/batchDisplay";
 
 type Props = {
   batch: IngestBatch;
@@ -12,6 +12,18 @@ type Props = {
 function metadataValue(batch: IngestBatch, key: string): string {
   const value = batch.metadata_json?.[key];
   return value === null || value === undefined || value === "" ? "-" : String(value);
+}
+
+function tvCountLine(batch: IngestBatch): string {
+  const meta = batch.metadata_json ?? {};
+  const episodes = Number(meta.episode_count ?? 0);
+  const specials = Number(meta.special_episode_count ?? 0);
+  const videos = Number(meta.video_file_count ?? 0);
+  const parts: string[] = [];
+  if (episodes > 0) parts.push(`${episodes} episode${episodes === 1 ? "" : "s"}`);
+  if (specials > 0) parts.push(`${specials} special${specials === 1 ? "" : "s"}`);
+  if (videos > 0) parts.push(`${videos} video${videos === 1 ? "" : "s"}`);
+  return parts.join(" · ");
 }
 
 function readableLibraryPath(value?: string | null): string {
@@ -380,10 +392,7 @@ function TvBatchDetail({ batch, moveSummary }: Props) {
         <div>
           <div className="library-status__eyebrow">TV show detected</div>
           <h2>{metadataValue(batch, "show_title")} - {seasonLabel}</h2>
-          <p>
-            {metadataValue(batch, "season_count")} season(s) ·{" "}
-            {metadataValue(batch, "episode_count")} episode(s)
-          </p>
+          <p>{tvCountLine(batch)}</p>
         </div>
         <div className="library-status__facts">
           <span>{Math.round(batch.confidence * 100)}% confidence</span>
@@ -402,9 +411,10 @@ function TvBatchDetail({ batch, moveSummary }: Props) {
             )}
             <div><dt>Year</dt><dd>{metadataValue(batch, "year")}</dd></div>
             <div><dt>Seasons</dt><dd>{metadataValue(batch, "season_count")}</dd></div>
-            <div><dt>Episodes</dt><dd>{metadataValue(batch, "episode_count")}</dd></div>
+            <div><dt>Normal episodes</dt><dd>{metadataValue(batch, "episode_count")}</dd></div>
+            <div><dt>Specials / extras</dt><dd>{metadataValue(batch, "special_episode_count")}</dd></div>
+            <div><dt>Total videos</dt><dd>{metadataValue(batch, "video_file_count")}</dd></div>
             <div><dt>Format</dt><dd>{metadataValue(batch, "format")}</dd></div>
-            <div><dt>Video files</dt><dd>{metadataValue(batch, "video_file_count")}</dd></div>
             <div><dt>Subtitles</dt><dd>{metadataValue(batch, "subtitle_count")}</dd></div>
             <div><dt>Artwork</dt><dd>{metadataValue(batch, "artwork_count")}</dd></div>
             <div><dt>Ignored sidecars</dt><dd>{metadataValue(batch, "ignored_sidecar_count")}</dd></div>
@@ -447,8 +457,8 @@ function TvBatchDetail({ batch, moveSummary }: Props) {
       {episodes.length > 0 && (
         <section className="track-preview">
           <div className="track-preview__header">
-            <h3>Episode preview</h3>
-            <span>{episodes.length} episode(s)</span>
+            <h3>Normal episode preview</h3>
+            <span>{episodes.length} normal episode{episodes.length === 1 ? "" : "s"}</span>
           </div>
           <div className="track-preview__table">
             <table>
@@ -509,16 +519,13 @@ function TvBatchDetail({ batch, moveSummary }: Props) {
             })();
         const specialCount = specials.length;
         if (specialCount === 0) return null;
-        const limit = 10;
-        const showAll = specialCount <= limit;
-        const displayList = showAll ? specials : specials.slice(0, limit);
-        const [expanded, setExpanded] = useState(showAll);
-        const visible = expanded ? specials : displayList;
+        const [showAllSpecials, setShowAllSpecials] = useState(false);
+        const visibleSpecials = showAllSpecials ? specials : specials.slice(0, 5);
         return (
           <section className="track-preview">
             <div className="track-preview__header">
               <h3>Specials / OADs / Extras</h3>
-              <span>{specialCount} video(s)</span>
+              <span>{specialCount} special video{specialCount === 1 ? "" : "s"}</span>
             </div>
             <div className="track-preview__table">
               <table>
@@ -530,9 +537,9 @@ function TvBatchDetail({ batch, moveSummary }: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {visible.map((special, index) => {
+                  {visibleSpecials.map((special, index) => {
                     const code = String(
-                      special.episode_code ?? special.special_label ?? "Special"
+                      special.special_label ?? special.episode_code ?? "Special"
                     );
                     const title = String(
                       special.episode_title ?? special.source_file ?? ""
@@ -540,7 +547,7 @@ function TvBatchDetail({ batch, moveSummary }: Props) {
                     const group = String(special.destination_group ?? "");
                     return (
                       <tr key={`special-${code}-${index}`}>
-                        <td>{code}</td>
+                        <td><code>{code}</code></td>
                         <td>{title}</td>
                         <td>{group}</td>
                       </tr>
@@ -549,13 +556,14 @@ function TvBatchDetail({ batch, moveSummary }: Props) {
                 </tbody>
               </table>
             </div>
-            {!expanded && specialCount > limit && (
+            {specialCount > 5 && (
               <button
+                type="button"
                 className="btn btn--compact"
-                onClick={() => setExpanded(true)}
+                onClick={() => setShowAllSpecials((value) => !value)}
                 style={{ marginTop: "0.5rem" }}
               >
-                Show all {specialCount} specials
+                {showAllSpecials ? "Show fewer specials" : `Show all ${specialCount} specials`}
               </button>
             )}
           </section>

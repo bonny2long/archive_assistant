@@ -21,7 +21,7 @@ sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.services.mover import _lock_metadata_for_move, _tv_special_group_destination, _validate_tv_file_metadata_ready
 from app.services.batch_display import build_batch_display_fields
-from app.services.video_metadata import parse_tv_episode_name
+from app.services.video_metadata import normalize_tv_counts, parse_tv_episode_name
 
 
 def test_tv_count_display():
@@ -109,6 +109,30 @@ def test_parse_big_anime_show():
     print("  PASS: all Big Anime Show files parse correctly")
 
 
+def test_normalize_tv_counts():
+    metadata = {
+        "seasons": [
+            {"season_number": 1, "episode_count": 24, "episodes": [{"episode_number": i} for i in range(1, 25)]},
+            {"season_number": 2, "episode_count": 22, "episodes": [{"episode_number": i} for i in range(1, 23)]},
+            {"season_number": 3, "episode_count": 20, "episodes": [{"episode_number": i} for i in range(1, 21)]},
+            {"season_number": 4, "episode_count": 20, "episodes": [{"episode_number": i} for i in range(1, 21)]},
+        ],
+        "special_episodes": [
+            {"special_label": "OAD01"}, {"special_label": "OAD02"}, {"special_label": "OAD03"},
+            {"special_label": "OAD04"}, {"special_label": "OAD05"}, {"special_label": "OAD06"},
+            {"special_label": "OAD07"}, {"special_label": "OAD08"},
+            {"special_label": "S01E13.5"}, {"special_label": "Special 1"}, {"special_label": "Special 2"},
+        ],
+    }
+    result = normalize_tv_counts(metadata)
+    assert result["episode_count"] == 86
+    assert result["special_episode_count"] == 11
+    assert result["video_file_count"] == 97
+    assert result["video_file_count"] == result["episode_count"] + result["special_episode_count"]
+    assert result["season_count"] == 4
+    print("  PASS: normalize_tv_counts sets correct counts and maintains video_file_count == episode_count + special_episode_count")
+
+
 def test_no_new_dependencies():
     requirements = (PROJECT_ROOT / "backend" / "requirements.txt").read_text(encoding="utf-8")
     blocked = ["mutagen", "pymediainfo", "ffmpeg-python", "tinytag"]
@@ -141,6 +165,7 @@ def main() -> int:
         ("Lock metadata for move", test_lock_metadata_for_move),
         ("Special group destination", test_special_group_destination),
         ("Parse Big Anime Show", test_parse_big_anime_show),
+        ("Normalize TV counts", test_normalize_tv_counts),
         ("No new dependencies", test_no_new_dependencies),
     ]
 

@@ -1,5 +1,6 @@
 from collections import defaultdict
 from app.schemas.archive import TvEpisodeReviewPatch
+from app.services.video_metadata import normalize_tv_counts
 
 
 def _normalize_identity(value: str) -> str:
@@ -220,16 +221,8 @@ def apply_tv_episode_review_patches(
             })
 
     metadata["seasons"] = rebuilt_seasons
-    metadata["season_count"] = len(
-        [s for s in rebuilt_seasons if s.get("season_number") is not None]
-    )
-    metadata["episode_count"] = sum(s.get("episode_count", 0) for s in rebuilt_seasons)
-    metadata["video_file_count"] = (
-        metadata["episode_count"]
-        + sum(1 for s in special_episodes if s.get("include", True))
-    )
     metadata["special_episodes"] = special_episodes
-    metadata["special_episode_count"] = len(special_episodes)
+    metadata = normalize_tv_counts(metadata)
     metadata["unresolved_video_files"] = [
         u for u in unresolved if u.get("include", True)
     ]

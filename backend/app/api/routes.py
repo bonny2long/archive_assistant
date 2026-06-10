@@ -1181,6 +1181,8 @@ def _batch_to_summary(
         show_title=meta.get("show_title"),
         season_count=meta.get("season_count", 0),
         episode_count=meta.get("episode_count", 0),
+        special_episode_count=meta.get("special_episode_count", 0),
+        special_episodes=meta.get("special_episodes", []),
         seasons=meta.get("seasons", []),
         ignored_corrupt_video_count=meta.get("ignored_corrupt_video_count", 0),
         ignored_corrupt_video_files=meta.get("ignored_corrupt_video_files", []),

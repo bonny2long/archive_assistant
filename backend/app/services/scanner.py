@@ -41,6 +41,7 @@ from app.services.video_metadata import (
     folder_looks_like_tv_show,
     looks_like_tv,
     looks_like_tv_episode,
+    normalize_tv_counts,
     parse_movie_name,
     parse_tv_folder_name,
     parse_tv_episode_name,
@@ -511,6 +512,7 @@ def _tv_batch_data(source: Path) -> dict | None:
         ),
     }
     metadata = build_review_state("video_tv_show", metadata)
+    metadata = normalize_tv_counts(metadata)
     return {
         "files": files,
         "metadata": metadata,

@@ -433,3 +433,14 @@ def tv_artwork_scope(path: Path, root: Path) -> dict:
         "artwork_scope": "season" if is_season_artwork else "show",
         "season_number": season_number,
     }
+
+
+def normalize_tv_counts(metadata: dict) -> dict:
+    seasons = metadata.get("seasons") or []
+    normal_count = sum(len(season.get("episodes") or []) for season in seasons)
+    special_count = len(metadata.get("special_episodes") or [])
+    metadata["episode_count"] = normal_count
+    metadata["special_episode_count"] = special_count
+    metadata["video_file_count"] = normal_count + special_count
+    metadata["season_count"] = len(seasons)
+    return metadata
