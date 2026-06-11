@@ -63,7 +63,9 @@ from app.services.book_metadata import (
 from app.services.audiobook_metadata import (
     build_audiobook_metadata,
     collect_audiobook_files,
+    has_explicit_audiobook_signal,
     is_audiobook_audio_file,
+    looks_like_generic_multidisc_audiobook_source,
     looks_like_audiobook_source,
 )
 
@@ -198,8 +200,6 @@ def classify_ingest_item(path: Path) -> str:
         return "unknown_type"
     if book_files and not audio_files and not video_files:
         return "book"
-    if audio_files and not video_files and looks_like_audiobook_source(path):
-        return "audiobook"
     if not audio_files:
         return "unknown_type"
 
@@ -212,12 +212,19 @@ def classify_ingest_item(path: Path) -> str:
             for candidate in child.rglob("*")
         )
     ]
+    if audio_files and not video_files:
+        if has_explicit_audiobook_signal(path):
+            return "audiobook"
+        if looks_like_generic_multidisc_audiobook_source(path):
+            return "audiobook"
     if looks_like_discography_parent(
         path,
         child_audio_folders,
         {str(child): [] for child in child_audio_folders},
     ):
         return "music_discography"
+    if audio_files and not video_files and looks_like_audiobook_source(path):
+        return "audiobook"
     return "music_album"
 
 

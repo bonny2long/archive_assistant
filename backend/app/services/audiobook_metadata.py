@@ -135,6 +135,70 @@ def parse_audiobook_name(value: str) -> dict:
     }
 
 
+def _is_generic_track_name(path: Path) -> bool:
+    stem = path.stem.strip().casefold()
+    return bool(re.match(
+        r"^(?:\d{1,3}\s*[-_. ]*)?(?:track|audio|chapter)?\s*\d{1,3}$",
+        stem,
+    )) or bool(re.match(r"^\d{1,3}\s+track\s+\d{1,3}$", stem))
+
+
+def _disc_like_folder_count(root: Path) -> int:
+    if root.is_file():
+        return 0
+    return sum(
+        1
+        for child in root.iterdir()
+        if child.is_dir()
+        and re.search(
+            r"\b(?:disc|disk|cd)\s*0*\d+\b",
+            child.name.casefold().strip(),
+        )
+    )
+
+
+def has_explicit_audiobook_signal(path: Path) -> bool:
+    candidates = [path] if path.is_file() else [
+        candidate for candidate in path.rglob("*") if candidate.is_file()
+    ]
+    audio_files = [
+        candidate for candidate in candidates
+        if is_audiobook_audio_file(candidate)
+    ]
+    return bool(
+        audio_files
+        and (
+            any(
+                candidate.suffix.casefold() == ".m4b"
+                for candidate in audio_files
+            )
+            or AUDIOBOOK_HINT_RE.search(path.name)
+        )
+    )
+
+
+def looks_like_generic_multidisc_audiobook_source(path: Path) -> bool:
+    candidates = [path] if path.is_file() else [
+        candidate for candidate in path.rglob("*") if candidate.is_file()
+    ]
+    audio_files = [
+        candidate for candidate in candidates
+        if is_audiobook_audio_file(candidate)
+    ]
+    disc_count = _disc_like_folder_count(path)
+    if len(audio_files) < 60 and disc_count < 4:
+        return False
+    generic_count = sum(
+        1 for candidate in audio_files if _is_generic_track_name(candidate)
+    )
+    generic_ratio = generic_count / max(1, len(audio_files))
+    if generic_ratio < 0.60:
+        return False
+    if disc_count >= 4:
+        return True
+    return len(audio_files) >= 80 and generic_ratio >= 0.75
+
+
 def looks_like_audiobook_source(path: Path) -> bool:
     candidates = [path] if path.is_file() else [
         candidate for candidate in path.rglob("*") if candidate.is_file()
@@ -145,9 +209,7 @@ def looks_like_audiobook_source(path: Path) -> bool:
     ]
     if not audio_files:
         return False
-    if any(candidate.suffix.casefold() == ".m4b" for candidate in audio_files):
-        return True
-    if AUDIOBOOK_HINT_RE.search(path.name):
+    if has_explicit_audiobook_signal(path):
         return True
     chapterish = [
         candidate
@@ -163,6 +225,8 @@ def looks_like_audiobook_source(path: Path) -> bool:
     if len(audio_files) >= 2 and len(explicit_chapters) >= max(
         2, len(audio_files) // 2
     ):
+        return True
+    if looks_like_generic_multidisc_audiobook_source(path):
         return True
     parsed = parse_audiobook_name(path.name)
     return (

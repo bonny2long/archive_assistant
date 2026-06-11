@@ -609,6 +609,10 @@ button:focus-visible, input:focus-visible {
   color: var(--text-secondary);
   font-size: 12px;
 }
+.review-state-card--warning-only {
+  border-color: rgba(245, 158, 11, 0.55);
+  background: rgba(245, 158, 11, 0.08);
+}
 .review-state-card p { margin: 0; }
 .review-state-card > small {
   color: var(--accent-blue);

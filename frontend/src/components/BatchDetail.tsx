@@ -144,6 +144,19 @@ function warningLabel(warning: string): string {
     ?? warning.replace(/_/g, " ").replace(/^\w/, (value: string) => value.toUpperCase());
 }
 
+function isFinalStatus(status: string | undefined): boolean {
+  return status === "approved" || status === "moved";
+}
+
+function isMetadataConfirmed(batch: IngestBatch): boolean {
+  const metadata = batch.metadata_json ?? {};
+  return Boolean(
+    batch.metadata_confirmed
+    || metadata.review_confirmed
+    || metadata.metadata_locked_for_move
+  );
+}
+
 function ReviewStateCard({ batch }: { batch: IngestBatch }) {
   const metadata = batch.metadata_json ?? {};
   const blockers = Array.isArray(metadata.blocking_review_items)
@@ -152,19 +165,33 @@ function ReviewStateCard({ batch }: { batch: IngestBatch }) {
   const warnings = Array.isArray(metadata.non_blocking_review_items)
     ? metadata.non_blocking_review_items as Array<{ type?: string; message?: string }>
     : [];
-  if (blockers.length === 0 && warnings.length === 0) return null;
+  if (
+    blockers.length === 0
+    && (
+      warnings.length === 0
+      || (isFinalStatus(batch.status) && isMetadataConfirmed(batch))
+    )
+  ) {
+    return null;
+  }
+  const hasBlockers = blockers.length > 0;
   const action = {
     music_album: "Edit music metadata",
     music_discography: "Edit discography releases",
     video_movie: "Edit movie metadata",
     video_tv_show: "Review TV episodes",
     book: "Edit book metadata",
+    audiobook: "Review audiobook metadata",
   }[batch.detected_type] ?? "Review metadata";
 
   return (
-    <section className="review-state-card">
+    <section className={
+      hasBlockers
+        ? "review-state-card"
+        : "review-state-card review-state-card--warning-only"
+    }>
       <div>
-        <strong>Review required</strong>
+        <strong>{hasBlockers ? "Review required" : "Review available"}</strong>
         <span>{blockers.length} blocking item(s) · {warnings.length} warning(s)</span>
       </div>
       {blockers.map((item, index) => (
