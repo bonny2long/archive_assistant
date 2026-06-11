@@ -156,6 +156,7 @@ function ReviewStateCard({ batch }: { batch: IngestBatch }) {
     music_discography: "Edit discography releases",
     video_movie: "Edit movie metadata",
     video_tv_show: "Review TV episodes",
+    book: "Edit book metadata",
   }[batch.detected_type] ?? "Review metadata";
 
   return (
@@ -744,6 +745,81 @@ function ReviewBatchDetail({ batch, moveSummary, review }: Props) {
   );
 }
 
+function BookBatchDetail({ batch, moveSummary }: Props) {
+  const metadata = batch.metadata_json ?? {};
+  const items = Array.isArray(metadata.book_items)
+    ? metadata.book_items as Array<Record<string, unknown>>
+    : [];
+  const collection = metadata.review_type === "book_collection" || items.length > 0;
+  return (
+    <div className="batch-detail batch-detail--review">
+      <ReviewStateCard batch={batch} />
+      <div className="library-status">
+        <div className="library-status__icon"><i className="ti ti-book-2" /></div>
+        <div>
+          <div className="library-status__eyebrow">
+            {collection ? "Book collection detected" : "Book detected"}
+          </div>
+          <h2>{String(metadata.collection_title ?? metadata.title ?? "Unknown Title")}</h2>
+          <p>{collection ? `${items.length} books` : String(metadata.author ?? "Unknown Author")}</p>
+        </div>
+        <div className="library-status__facts">
+          <span>{Math.round(batch.confidence * 100)}% confidence</span>
+          <span>{batch.status.replace(/_/g, " ")}</span>
+        </div>
+      </div>
+      <div className="library-detail__grid movie-detail__cards">
+        <section className="library-card">
+          <h3>{collection ? "Collection" : "Book"}</h3>
+          <dl className="library-fields">
+            {!collection && <div><dt>Title</dt><dd>{String(metadata.title ?? "-")}</dd></div>}
+            {!collection && <div><dt>Author</dt><dd>{String(metadata.author ?? "-")}</dd></div>}
+            {!collection && <div><dt>Year</dt><dd>{String(metadata.year ?? "-")}</dd></div>}
+            <div><dt>Format</dt><dd>{String(metadata.format ?? "Mixed")}</dd></div>
+            <div><dt>Book files</dt><dd>{String(metadata.book_file_count ?? batch.files.length)}</dd></div>
+            <div><dt>Artwork</dt><dd>{String(metadata.artwork_count ?? 0)}</dd></div>
+          </dl>
+        </section>
+        <section className="library-card">
+          <h3>Source</h3>
+          <dl className="library-fields library-fields--single">
+            <div><dt>Folder</dt><dd className="library-fields__path">{readableSourcePath(batch.source_path)}</dd></div>
+            <div><dt>Status</dt><dd>{batch.status}</dd></div>
+          </dl>
+        </section>
+      </div>
+      {collection && (
+        <section className="track-preview">
+          <div className="track-preview__header">
+            <h3>Books found</h3><span>{items.length} book(s)</span>
+          </div>
+          <div className="track-preview__table">
+            <table>
+              <thead><tr><th>File</th><th>Author</th><th>Title</th><th>Year</th><th>Format</th></tr></thead>
+              <tbody>
+                {items.map((item, index) => (
+                  <tr key={String(item.source_file ?? index)}>
+                    <td>{String(item.source_file ?? "-")}</td>
+                    <td>{String(item.author ?? "-")}</td>
+                    <td>{String(item.title ?? "-")}</td>
+                    <td>{String(item.year ?? "-")}</td>
+                    <td>{String(item.format ?? "-")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+      <section className="library-destination">
+        <span>Destination preview</span>
+        <strong>{collection ? "Each book uses its own Books/<Format>/<Author>/<Year - Title> folder" : readableLibraryPath(batch.suggested_destination)}</strong>
+      </section>
+      <DebugDetails batch={batch} moveSummary={moveSummary} />
+    </div>
+  );
+}
+
 type DiscographyAlbum = {
   year?: string | null;
   album?: string | null;
@@ -997,6 +1073,9 @@ export default function BatchDetail({ batch, moveSummary, review }: Props) {
   }
   if (batch.detected_type === "video_tv_show") {
     return <TvBatchDetail batch={batch} moveSummary={moveSummary} />;
+  }
+  if (batch.detected_type === "book") {
+    return <BookBatchDetail batch={batch} moveSummary={moveSummary} />;
   }
   if (batch.status === "moved") {
     return <MovedBatchDetail batch={batch} moveSummary={moveSummary} />;

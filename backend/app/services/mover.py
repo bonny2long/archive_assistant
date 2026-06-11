@@ -15,6 +15,7 @@ from app.services.music_metadata import (
     sort_music_tracks,
 )
 from app.services.video_metadata import safe_tv_path_part
+from app.services.book_metadata import book_destination
 
 
 def _safe_path_part(value: str) -> str:
@@ -1327,6 +1328,126 @@ def _lock_metadata_for_move(batch: IngestBatch) -> None:
     batch.metadata_confirmed = True
 
 
+def _move_book_batch(
+    db: Session,
+    batch: IngestBatch,
+) -> tuple[list[str], list[str]]:
+    metadata = dict(batch.metadata_json or {})
+    items = [
+        item
+        for item in (metadata.get("book_items") or [])
+        if isinstance(item, dict) and item.get("include", True)
+    ]
+    collection = metadata.get("review_type") == "book_collection" or bool(items)
+    item_by_source = {
+        str(item.get("source_file") or "").casefold(): item
+        for item in items
+        if item.get("source_file")
+    }
+    moved_files: list[str] = []
+    failed_files: list[str] = []
+    planned: list[tuple[object, Path]] = []
+    reserved: set[str] = set()
+
+    for ingest_file in batch.files:
+        source = Path(ingest_file.file_path)
+        completed = _completed_move_destination(db, batch.id, source)
+        if not source.exists() and completed:
+            moved_files.append(str(completed))
+            reserved.add(_path_key(completed))
+            continue
+
+        if collection:
+            if ingest_file.detected_role != "book_file":
+                continue
+            item = item_by_source.get(ingest_file.file_name.casefold())
+            if not item:
+                continue
+            destination = book_destination(
+                str(item.get("format") or source.suffix.lstrip(".") or "EPUB"),
+                str(item.get("author") or "Unknown Author"),
+                str(item.get("title") or "Unknown Title"),
+                str(item.get("year") or "")[:4] or None,
+                settings.books_dir,
+            )
+        else:
+            destination = book_destination(
+                str(metadata.get("format") or source.suffix.lstrip(".") or "EPUB"),
+                str(metadata.get("author") or "Unknown Author"),
+                str(metadata.get("title") or "Unknown Title"),
+                str(metadata.get("year") or "")[:4] or None,
+                settings.books_dir,
+            )
+
+        destination_file = destination / ingest_file.file_name
+        if _path_key(destination_file) in reserved or destination_file.exists():
+            failed_files.append(f"Destination file conflict: {destination_file}")
+            continue
+        reserved.add(_path_key(destination_file))
+        planned.append((ingest_file, destination_file))
+
+    if failed_files:
+        warnings = list(metadata.get("metadata_warnings") or [])
+        warnings.append("book_destination_conflict")
+        metadata["metadata_warnings"] = list(dict.fromkeys(warnings))
+        batch.metadata_json = metadata
+        batch.status = "needs_metadata_review"
+        batch.updated_at = now_utc()
+        db.commit()
+        return [], failed_files
+
+    for ingest_file, destination_file in planned:
+        source = Path(ingest_file.file_path)
+        if not source.exists():
+            failed_files.append(f"Source not found: {source}")
+            continue
+        destination_file.parent.mkdir(parents=True, exist_ok=True)
+        action = MoveAction(
+            batch_id=batch.id,
+            source_path=str(source),
+            destination_path=str(destination_file),
+            status="running",
+        )
+        db.add(action)
+        db.flush()
+        try:
+            shutil.move(str(source), str(destination_file))
+            action.status = "completed"
+            action.completed_at = now_utc()
+            moved_files.append(str(destination_file))
+        except Exception as exc:
+            action.status = "failed"
+            action.error_message = str(exc)
+            failed_files.append(f"Failed to move {source}: {exc}")
+
+    destinations = sorted({str(Path(path).parent) for path in moved_files})
+    for destination_value in destinations:
+        destination = Path(destination_value)
+        metadata_dir = destination / "metadata"
+        metadata_dir.mkdir(parents=True, exist_ok=True)
+        (metadata_dir / f"batch-{batch.id}-book-move-log.json").write_text(
+            json.dumps(
+                {
+                    "batch_id": batch.id,
+                    "media_type": "book_collection" if collection else "book",
+                    "source_path": batch.source_path,
+                    "destination_path": str(destination),
+                    "moved_files": [
+                        path
+                        for path in moved_files
+                        if Path(path).parent == destination
+                    ],
+                    "failed_files": failed_files,
+                    "metadata": metadata,
+                    "moved_at": serialize_utc(now_utc()),
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+    return moved_files, failed_files
+
+
 def move_approved_batches(db: Session) -> tuple[int, list[str]]:
     approved = (
         db.query(IngestBatch)
@@ -1435,6 +1556,59 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                             metadata_status="basic",
                         )
                     )
+                db.commit()
+                moved += 1
+                if failed_files:
+                    errors.extend(
+                        f"Batch {batch.id}: {error}" for error in failed_files
+                    )
+                continue
+
+            if batch.detected_type == "book":
+                moved_files, failed_files = _move_book_batch(db, batch)
+                if not moved_files:
+                    if batch.status != "needs_metadata_review":
+                        batch.status = "move_failed"
+                    batch.updated_at = now_utc()
+                    db.commit()
+                    errors.extend(
+                        f"Batch {batch.id}: {error}" for error in failed_files
+                    )
+                    continue
+                batch.status = "move_failed" if failed_files else "moved"
+                batch.updated_at = now_utc()
+                if batch.status == "moved":
+                    _lock_metadata_for_move(batch)
+                metadata = batch.metadata_json or {}
+                book_items = {
+                    str(item.get("source_file") or "").casefold(): item
+                    for item in (metadata.get("book_items") or [])
+                    if isinstance(item, dict)
+                }
+                for moved_path in moved_files:
+                    path = Path(moved_path)
+                    if path.suffix.casefold() not in {".epub", ".pdf"}:
+                        continue
+                    item = book_items.get(path.name.casefold(), {})
+                    if (
+                        db.query(ArchiveItem)
+                        .filter(ArchiveItem.final_path == str(path))
+                        .first()
+                    ):
+                        continue
+                    db.add(ArchiveItem(
+                        media_type="book",
+                        title=item.get("title") or metadata.get("title") or path.stem,
+                        creator=item.get("author") or metadata.get("author"),
+                        year=item.get("year") or metadata.get("year"),
+                        source_kind=batch.source_kind,
+                        final_path=str(path),
+                        metadata_status=(
+                            "collection"
+                            if metadata.get("review_type") == "book_collection"
+                            else "basic"
+                        ),
+                    ))
                 db.commit()
                 moved += 1
                 if failed_files:

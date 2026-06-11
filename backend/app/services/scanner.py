@@ -52,6 +52,14 @@ from app.services.video_metadata import (
     useful_movie_name,
 )
 from app.services.review_state import build_review_state
+from app.services.book_metadata import (
+    book_destination,
+    book_format_for,
+    build_single_book_metadata,
+    collect_book_files,
+    is_book_file,
+    parse_book_name,
+)
 
 
 @dataclass(frozen=True)
@@ -69,6 +77,8 @@ class ScanMusicResult:
     tv_shows_found: int = 0
     tv_episodes_found: int = 0
     subtitle_files_found: int = 0
+    book_batches_found: int = 0
+    book_files_found: int = 0
 
 
 IGNORED_INGEST_NAMES = {
@@ -98,6 +108,7 @@ RECOGNIZED_MEDIA_TYPES = {
     "music_discography",
     "video_movie",
     "video_tv_show",
+    "book",
 }
 
 QUARANTINE_TYPES = {"unknown_type", "unsupported_file"}
@@ -147,6 +158,8 @@ def classify_ingest_item(path: Path) -> str:
             return "music_album"
         if is_video_file(path):
             return "video_movie"
+        if is_book_file(path):
+            return "book"
         return "unsupported_file"
     if not path.is_dir():
         return "unknown_type"
@@ -161,12 +174,19 @@ def classify_ingest_item(path: Path) -> str:
         for candidate in path.rglob("*")
         if candidate.is_file() and is_video_file(candidate)
     ]
+    book_files = [
+        candidate
+        for candidate in path.rglob("*")
+        if candidate.is_file() and is_book_file(candidate)
+    ]
     if video_files and not audio_files:
         if folder_looks_like_tv_show(path, video_files):
             return "video_tv_show"
         if len(video_files) >= 1:
             return "video_movie"
         return "unknown_type"
+    if book_files and not audio_files and not video_files:
+        return "book"
     if not audio_files:
         return "unknown_type"
 
@@ -841,6 +861,113 @@ def _create_movie_batch(db: Session, source: Path) -> IngestBatch | None:
     return batch
 
 
+def _create_book_batch(db: Session, source: Path) -> IngestBatch | None:
+    files = collect_book_files(source)
+    book_files = files["books"]
+    if not book_files:
+        return None
+    checksums = {file_sha256(path) for path in book_files}
+    existing_checksums = {
+        row.checksum
+        for row in db.query(IngestFile)
+        .filter(IngestFile.checksum.in_(checksums))
+        .all()
+        if row.checksum
+    }
+    if checksums and checksums.issubset(existing_checksums):
+        return None
+
+    metadata = build_single_book_metadata(source, settings.books_dir)
+    parsed = [parse_book_name(path.name) for path in book_files]
+    identities = {
+        (
+            item["author"].casefold(),
+            item["title"].casefold(),
+            item.get("year"),
+        )
+        for item in parsed
+    }
+    if len(identities) > 1:
+        items = []
+        for path, item in sorted(
+            zip(book_files, parsed),
+            key=lambda pair: pair[0].name.casefold(),
+        ):
+            fmt = book_format_for(path)
+            destination = book_destination(
+                fmt,
+                item["author"],
+                item["title"],
+                item.get("year"),
+                settings.books_dir,
+            )
+            items.append({
+                "item_kind": "book",
+                "source_key": path.name,
+                "source_file": path.name,
+                "include": True,
+                "author": item["author"],
+                "title": item["title"],
+                "year": item.get("year"),
+                "format": fmt,
+                "destination_preview": str(destination.relative_to(settings.data_root)),
+            })
+        metadata.update({
+            "review_type": "book_collection",
+            "review_mode": "item_list",
+            "book_items": items,
+            "metadata_quality": "weak",
+            "metadata_warnings": list(dict.fromkeys([
+                *metadata.get("metadata_warnings", []),
+                "multiple_book_candidates",
+            ])),
+            "confidence": min(float(metadata.get("confidence") or 0.65), 0.75),
+        })
+    metadata = build_review_state("book", metadata)
+    destination = metadata.get("suggested_destination_preview")
+    batch = IngestBatch(
+        source_kind="manual-drop",
+        source_path=str(source),
+        detected_type="book",
+        status=(
+            "needs_metadata_review"
+            if metadata.get("blocking_review_items")
+            else "pending_review"
+        ),
+        confidence=float(metadata.get("confidence") or 0.65),
+        suggested_destination=str(destination) if destination else None,
+        suggested_metadata={
+            "author": metadata.get("author"),
+            "title": metadata.get("title"),
+            "year": metadata.get("year"),
+            "format": metadata.get("format"),
+        },
+        metadata_json=metadata,
+    )
+    db.add(batch)
+    db.flush()
+    roles = (
+        [(path, "book_file") for path in files["books"]]
+        + [(path, "book_artwork") for path in files["artwork"]]
+        + [(path, "book_sidecar") for path in files["sidecars"]]
+    )
+    for path, role in roles:
+        db.add(IngestFile(
+            batch_id=batch.id,
+            file_path=str(path),
+            file_name=path.name,
+            extension=path.suffix.lower(),
+            size_bytes=path.stat().st_size,
+            checksum=file_sha256(path),
+            detected_role=role,
+            metadata_json=None,
+        ))
+    db.commit()
+    db.refresh(batch)
+    write_json_report(settings.reports_dir, batch.id, metadata)
+    return batch
+
+
 def _merge_active_quarantine_rows_for_source(
     db: Session,
     source: Path,
@@ -889,6 +1016,10 @@ def repair_stale_media_batches(
                     repaired.append(batch)
             elif classification == "video_movie":
                 batch = _create_movie_batch(db, source)
+                if batch:
+                    repaired.append(batch)
+            elif classification == "book":
+                batch = _create_book_batch(db, source)
                 if batch:
                     repaired.append(batch)
             continue
@@ -1508,6 +1639,16 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
         if batch:
             movie_batches.append(batch)
             batches.append(batch)
+    book_batches = [
+        batch for batch in repaired_batches if batch.detected_type == "book"
+    ]
+    for item, classification in classifications.items():
+        if classification != "book":
+            continue
+        batch = _create_book_batch(db, item)
+        if batch:
+            book_batches.append(batch)
+            batches.append(batch)
 
     unknown_batches = []
     for item, classification in classifications.items():
@@ -1578,6 +1719,11 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
                 len(_tv_files(item)["artwork"])
                 for item, classification in classifications.items()
                 if classification == "video_tv_show"
+            ),
+            book_batches_found=len(book_batches),
+            book_files_found=sum(
+                int((batch.metadata_json or {}).get("book_file_count") or 0)
+                for batch in book_batches
             ),
         )
 
@@ -1883,5 +2029,10 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
             len(_tv_files(item)["subtitles"])
             for item, classification in classifications.items()
             if classification == "video_tv_show"
+        ),
+        book_batches_found=len(book_batches),
+        book_files_found=sum(
+            int((batch.metadata_json or {}).get("book_file_count") or 0)
+            for batch in book_batches
         ),
     )

@@ -20,6 +20,16 @@ export function getReleaseCount(batch: DisplayBatch): number {
 }
 
 export function getBatchDisplayTitle(batch: DisplayBatch): string {
+  if (batch.detected_type === "book") {
+    const title = ("title" in batch ? batch.title : null)
+      ?? metadataValue(batch, "title")
+      ?? "Unknown Title";
+    const author = ("author" in batch ? batch.author : null)
+      ?? batch.suggested_metadata?.author
+      ?? metadataValue(batch, "author")
+      ?? "Unknown Author";
+    return `${String(author)} - ${String(title)}`;
+  }
   if (batch.detected_type === "video_tv_show") {
     return String(
       ("show_title" in batch ? batch.show_title : null)
@@ -75,6 +85,7 @@ export function getBatchMediaLabel(batch: DisplayBatch): string {
   if (batch.detected_type === "music_discography") return "Discography";
   if (batch.detected_type === "video_movie") return "Movie";
   if (batch.detected_type === "video_tv_show") return "TV Show";
+  if (batch.detected_type === "book") return "Book";
   return "Quarantine Review";
 }
 
@@ -127,6 +138,17 @@ export function getBatchPrimaryName(batch: DisplayBatch): string {
       ?? "Unknown TV Show",
     );
   }
+  if (batch.detected_type === "book") {
+    const collectionTitle = metadataValue(batch, "collection_title");
+    if (metadataValue(batch, "review_type") === "book_collection") {
+      return String(collectionTitle ?? "Book Collection");
+    }
+    return String(
+      ("title" in batch ? batch.title : null)
+      ?? metadataValue(batch, "title")
+      ?? "Unknown Title",
+    );
+  }
   if (batch.detected_type === "unknown_type" || batch.detected_type === "unsupported_file") {
     return String(
       ("name" in batch ? batch.name : null)
@@ -155,6 +177,21 @@ export function getBatchSecondaryName(batch: DisplayBatch): string {
   }
   if (batch.detected_type === "video_tv_show") {
     return tvCountSummary(batch);
+  }
+  if (batch.detected_type === "book") {
+    const itemCount = Number(
+      ("book_items" in batch ? batch.book_items?.length : 0)
+      ?? 0,
+    );
+    if (metadataValue(batch, "review_type") === "book_collection") {
+      return `${itemCount} books`;
+    }
+    const author = ("author" in batch ? batch.author : null)
+      ?? batch.suggested_metadata?.author
+      ?? metadataValue(batch, "author")
+      ?? "Unknown Author";
+    const year = ("year" in batch ? batch.year : null) ?? metadataValue(batch, "year");
+    return year ? `${String(author)} · ${String(year)}` : String(author);
   }
   if (batch.detected_type === "unknown_type" || batch.detected_type === "unsupported_file") {
     const fileCount = "file_count" in batch ? batch.file_count : metadataValue(batch, "file_count");
@@ -198,6 +235,12 @@ export function getBatchItemText(batch: DisplayBatch): string {
     const label = videoCount && videoCount !== episodeCount ? "video" : "episode";
     return `${count} ${count === 1 ? label : label + "s"}`;
   }
+  if (batch.detected_type === "book") {
+    const count = "book_file_count" in batch
+      ? Number(batch.book_file_count ?? 0)
+      : Number(metadataValue(batch, "book_file_count") ?? 0);
+    return `${count} ${count === 1 ? "book file" : "book files"}`;
+  }
   if (batch.detected_type === "unknown_type" || batch.detected_type === "unsupported_file") {
     const count = "file_count" in batch
       ? batch.file_count
@@ -216,5 +259,8 @@ export function getBatchEditKind(batch: BatchSummary): string | null {
   if (batch.detected_type === "video_tv_show") return "tv_show";
   if (batch.detected_type === "music_discography") return "music_discography";
   if (batch.detected_type === "music_album") return "music_album";
+  if (batch.detected_type === "book") {
+    return batch.review_type === "book_collection" ? "book_collection" : "book";
+  }
   return null;
 }

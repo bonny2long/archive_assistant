@@ -14,6 +14,8 @@ from app.schemas.archive import (
     BatchReview,
     BatchReviewTrack,
     BatchSummary, 
+    BookCollectionReviewUpdate,
+    BookMetadataUpdate,
     DiscographyMetadataUpdate,
     DevResetResponse,
     IngestBatchOut, 
@@ -60,6 +62,7 @@ from app.services.review_items import (
     build_review_items_for_movie_collection,
 )
 from app.services.review_state import build_review_state
+from app.services.book_metadata import book_destination
 from app.core.config import settings
 from app.core.time import configured_timezone, now_local, now_utc, serialize_utc
 
@@ -103,6 +106,8 @@ def scan_music(db: Session = Depends(get_db)):
         tv_shows_found=result.tv_shows_found,
         tv_episodes_found=result.tv_episodes_found,
         subtitle_files_found=result.subtitle_files_found,
+        book_batches_found=result.book_batches_found,
+        book_files_found=result.book_files_found,
     )
 
 
@@ -650,6 +655,172 @@ def update_movie_collection_review(
     batch.updated_at = now_utc()
     db.commit()
     return _batch_to_summary(batch, action_message="Movie collection review saved.")
+
+
+@router.patch("/batches/{batch_id}/book-metadata", response_model=BatchSummary)
+def update_book_metadata(
+    batch_id: int,
+    update: BookMetadataUpdate,
+    db: Session = Depends(get_db),
+):
+    batch = db.get(IngestBatch, batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    if batch.detected_type != "book":
+        raise HTTPException(status_code=400, detail="Batch is not a book")
+    if batch.status in {"moved", "merged"}:
+        raise HTTPException(status_code=400, detail="Moved batches cannot be edited")
+
+    title = update.title.strip()
+    author = update.author.strip()
+    year = update.year.strip() if update.year else None
+    metadata = dict(batch.metadata_json or {})
+    book_format = (
+        update.format.strip().upper()
+        if update.format
+        else str(metadata.get("format") or "EPUB").upper()
+    )
+    destination = book_destination(
+        book_format,
+        author,
+        title,
+        year,
+        settings.books_dir,
+    )
+    warnings = [
+        warning
+        for warning in metadata.get("metadata_warnings", [])
+        if warning not in {
+            "book_author_missing",
+            "book_title_missing",
+            "book_year_missing",
+            "book_year_invalid",
+        }
+    ]
+    if not year:
+        warnings.append("book_year_missing")
+    metadata.update({
+        "review_type": "book",
+        "review_mode": "single_item",
+        "author": author,
+        "title": title,
+        "year": year,
+        "format": book_format,
+        "book_format": book_format,
+        "note": update.note.strip() if update.note else None,
+        "suggested_destination_preview": str(destination),
+        "metadata_quality": "good",
+        "metadata_warnings": list(dict.fromkeys(warnings)),
+        "confidence": 1.0,
+        "review_confirmed": True,
+    })
+    metadata = build_review_state("book", metadata)
+    batch.metadata_json = metadata
+    batch.suggested_metadata = {
+        "author": author,
+        "title": title,
+        "year": year,
+        "format": book_format,
+        "sources": {
+            "author": "manual correction",
+            "title": "manual correction",
+            "year": "manual correction",
+            "format": "manual correction",
+        },
+    }
+    batch.suggested_destination = str(destination)
+    batch.metadata_confirmed = not bool(metadata["blocking_review_items"])
+    batch.confidence = metadata["confidence"]
+    batch.status = (
+        "needs_metadata_review"
+        if metadata["blocking_review_items"]
+        else "pending_review"
+    )
+    batch.updated_at = now_utc()
+    db.commit()
+    return _batch_to_summary(batch, action_message="Book metadata saved.")
+
+
+@router.patch("/batches/{batch_id}/book-collection-review", response_model=BatchSummary)
+def update_book_collection_review(
+    batch_id: int,
+    update: BookCollectionReviewUpdate,
+    db: Session = Depends(get_db),
+):
+    batch = db.get(IngestBatch, batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    if batch.detected_type != "book":
+        raise HTTPException(status_code=400, detail="Batch is not a book")
+    if batch.status in {"moved", "merged"}:
+        raise HTTPException(status_code=400, detail="Moved batches cannot be edited")
+
+    metadata = dict(batch.metadata_json or {})
+    items = []
+    for item in update.books:
+        title = item.title.strip()
+        author = item.author.strip()
+        year = item.year.strip() if item.year else None
+        book_format = (
+            item.format.strip().upper()
+            if item.format
+            else Path(item.source_file).suffix.lstrip(".").upper() or "EPUB"
+        )
+        destination = book_destination(
+            book_format,
+            author,
+            title,
+            year,
+            settings.books_dir,
+        )
+        items.append({
+            "item_kind": "book",
+            "source_key": item.source_file,
+            "source_file": item.source_file,
+            "include": bool(item.include),
+            "author": author,
+            "title": title,
+            "year": year,
+            "format": book_format,
+            "destination_preview": str(destination) if item.include else None,
+        })
+
+    metadata.update({
+        "review_type": "book_collection",
+        "review_mode": "item_list",
+        "collection_title": (
+            update.collection_title.strip()
+            if update.collection_title
+            else metadata.get("collection_title")
+        ),
+        "book_items": items,
+        "metadata_warnings": [
+            warning
+            for warning in metadata.get("metadata_warnings", [])
+            if warning != "multiple_book_candidates"
+        ],
+        "confidence": 0.8,
+    })
+    if update.confirm_non_blocking_warnings:
+        metadata["review_confirmed"] = True
+    metadata = build_review_state("book", metadata)
+    if metadata["blocking_review_items"]:
+        metadata["metadata_quality"] = "weak"
+        batch.status = "needs_metadata_review"
+    else:
+        metadata["metadata_quality"] = "reviewed"
+        metadata["review_confirmed"] = True
+        metadata["confidence"] = 1.0
+        batch.status = "pending_review"
+    batch.metadata_json = metadata
+    batch.metadata_confirmed = not bool(metadata["blocking_review_items"])
+    batch.confidence = metadata["confidence"]
+    batch.updated_at = now_utc()
+    db.commit()
+    return _batch_to_summary(
+        batch,
+        action_message="Book collection review saved.",
+    )
 
 
 @router.patch("/batches/{batch_id}/discography", response_model=BatchSummary)
@@ -1308,6 +1479,11 @@ def _batch_to_summary(
         review_mode=meta.get("review_mode"),
         movie_items=list(meta.get("movie_items") or []),
         collection_title=meta.get("collection_title"),
+        author=meta.get("author"),
+        book_file_count=meta.get("book_file_count", 0),
+        book_files=list(meta.get("book_files") or []),
+        primary_book_file=meta.get("primary_book_file"),
+        book_items=list(meta.get("book_items") or []),
         suggested_destination=batch.suggested_destination,
         suggested_metadata=batch.suggested_metadata,
         metadata_confirmed=batch.metadata_confirmed,

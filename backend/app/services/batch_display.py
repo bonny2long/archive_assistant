@@ -4,7 +4,7 @@ from app.models.archive import IngestBatch
 MUSIC_TYPES = {"music_album", "music_discography"}
 MOVIE_TYPES = {"video_movie"}
 TV_TYPES = {"video_tv_show", "video_tv_episode"}
-BOOK_TYPES = {"book_epub", "book_pdf"}
+BOOK_TYPES = {"book"}
 AUDIOBOOK_TYPES = {"audiobook"}
 QUARANTINE_TYPES = {"unknown_type", "unsupported_file"}
 
@@ -88,6 +88,31 @@ def build_batch_display_fields(batch: IngestBatch) -> dict:
             "item_label": "videos",
             "item_count": video_count or episode_count,
             "edit_kind": "tv_show",
+        }
+
+    if detected_type in BOOK_TYPES:
+        items = metadata.get("book_items") or []
+        if metadata.get("review_type") == "book_collection" or items:
+            count = len([item for item in items if item.get("include", True)])
+            return {
+                "media_category": "books",
+                "media_label": "Book Collection",
+                "primary_name": metadata.get("collection_title") or "Book Collection",
+                "secondary_name": f"{count} books" if count else "Book collection",
+                "item_label": "book files",
+                "item_count": int(metadata.get("book_file_count") or count or 0),
+                "edit_kind": "book_collection",
+            }
+        year = str(metadata.get("year") or "")[:4]
+        author = metadata.get("author") or "Unknown Author"
+        return {
+            "media_category": "books",
+            "media_label": "Book",
+            "primary_name": metadata.get("title") or "Unknown Title",
+            "secondary_name": f"{author} · {year}" if year else author,
+            "item_label": "book files",
+            "item_count": int(metadata.get("book_file_count") or 0),
+            "edit_kind": "book",
         }
 
     if detected_type in QUARANTINE_TYPES:

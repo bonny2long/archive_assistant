@@ -22,6 +22,7 @@ REVIEW_TYPES = {
     "video_movie": "movie",
     "video_movie_collection": "movie_collection",
     "video_tv_show": "tv_show",
+    "book": "book",
     "unknown_type": "quarantine",
     "unsupported_file": "quarantine",
 }
@@ -291,6 +292,36 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
                     special_label=special_label,
                     file_name=sources[0],
                 ))
+    elif detected_type == "book":
+        items = meta.get("book_items") or []
+        collection = meta.get("review_type") == "book_collection" or bool(items)
+        meta["review_type"] = "book_collection" if collection else "book"
+        if collection:
+            included = 0
+            for item in items:
+                if not isinstance(item, dict) or not item.get("include", True):
+                    continue
+                included += 1
+                source = str(item.get("source_file") or "")
+                if not str(item.get("title") or "").strip():
+                    blocking.append(_item("book_item_missing_title", "Included book is missing a title.", file_name=source))
+                if str(item.get("author") or "").strip().casefold() in {"", "unknown author"}:
+                    blocking.append(_item("book_item_missing_author", "Included book is missing an author.", file_name=source))
+                raw_year = str(item.get("year") or "").strip()
+                if raw_year and (len(raw_year) != 4 or not raw_year.isdigit()):
+                    blocking.append(_item("book_item_invalid_year", "Book year must be four digits when provided.", file_name=source))
+            if items and included == 0:
+                blocking.append(_item("book_collection_no_included_items", "At least one book must be included before approval."))
+        else:
+            if str(meta.get("title") or "").strip().casefold() in {"", "unknown title"}:
+                blocking.append(_item("book_title_missing", "Book title is required before approval."))
+            if str(meta.get("author") or "").strip().casefold() in {"", "unknown author"}:
+                blocking.append(_item("book_author_missing", "Book author is required before approval."))
+            raw_year = str(meta.get("year") or "").strip()
+            if raw_year and (len(raw_year) != 4 or not raw_year.isdigit()):
+                blocking.append(_item("book_year_invalid", "Book year must be four digits when provided."))
+            if not raw_year:
+                non_blocking.append(_item("book_year_missing", "Book year is missing; destination will use Unknown Year."))
     elif detected_type in {"unknown_type", "unsupported_file"}:
         blocking.append(_item(
             "quarantine_review_required",
@@ -333,6 +364,8 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
     elif detected_type in {"music_discography"}:
         review_mode = "item_list"
     elif detected_type == "video_movie" and meta.get("review_type") == "movie_collection":
+        review_mode = "item_list"
+    elif detected_type == "book" and meta.get("review_type") == "book_collection":
         review_mode = "item_list"
     elif detected_type in {"unknown_type", "unsupported_file"}:
         review_mode = "quarantine_review"

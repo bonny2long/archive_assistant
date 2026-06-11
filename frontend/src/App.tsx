@@ -4,6 +4,8 @@ import type {
   BatchMoveSummary,
   BatchReview,
   BatchSummary,
+  BookCollectionReviewUpdate,
+  BookMetadataUpdate,
   DiscographyMetadataUpdate,
   IngestBatch,
   LibrarySummary as LibrarySummaryData,
@@ -361,6 +363,42 @@ export default function App() {
     }
   };
 
+  const handleBookSave = async (update: BookMetadataUpdate) => {
+    if (!editingBatch) return;
+    setSavingMetadata(true);
+    try {
+      const result = await api.updateBookMetadata(editingBatch.id, update);
+      showToast(result.action_message ?? "Book metadata updated");
+      setEditingBatch(null);
+      await loadBatches();
+    } catch (saveError: unknown) {
+      showToast(
+        saveError instanceof Error ? saveError.message : "Book metadata update failed",
+        "error",
+      );
+    } finally {
+      setSavingMetadata(false);
+    }
+  };
+
+  const handleBookCollectionSave = async (update: BookCollectionReviewUpdate) => {
+    if (!editingBatch) return;
+    setSavingMetadata(true);
+    try {
+      const result = await api.updateBookCollectionReview(editingBatch.id, update);
+      showToast(result.action_message ?? "Book collection review saved");
+      setEditingBatch(null);
+      await loadBatches();
+    } catch (saveError: unknown) {
+      showToast(
+        saveError instanceof Error ? saveError.message : "Book collection review failed",
+        "error",
+      );
+    } finally {
+      setSavingMetadata(false);
+    }
+  };
+
   const handleTvEpisodeReviewSave = async (update: TvEpisodeReviewUpdate) => {
     if (!editingBatch) return;
     setSavingMetadata(true);
@@ -606,6 +644,8 @@ export default function App() {
           onDiscographySave={handleDiscographySave}
           onMovieSave={handleMovieSave}
           onMovieCollectionSave={handleMovieCollectionSave}
+          onBookSave={handleBookSave}
+          onBookCollectionSave={handleBookCollectionSave}
           onTvSave={handleTvSave}
           onTvEpisodeReviewSave={handleTvEpisodeReviewSave}
           onConfirm={handleReviewConfirm}

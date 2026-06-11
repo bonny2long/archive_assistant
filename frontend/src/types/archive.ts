@@ -95,6 +95,11 @@ export type BatchSummary = {
   review_mode?: string | null;
   movie_items?: MovieCollectionItem[];
   collection_title?: string | null;
+  author?: string | null;
+  book_file_count?: number;
+  book_files?: string[];
+  primary_book_file?: string | null;
+  book_items?: BookCollectionItem[];
   suggested_destination?: string | null;
   suggested_metadata?: SuggestedMetadata | null;
   metadata_confirmed: boolean;
@@ -115,6 +120,7 @@ export type SuggestedMetadata = {
   year?: string | null;
   genre?: string | null;
   title?: string | null;
+  author?: string | null;
   edition?: string | null;
   format?: string | null;
   show_title?: string | null;
@@ -122,7 +128,7 @@ export type SuggestedMetadata = {
   season_title?: string | null;
   note?: string | null;
   sources?: Partial<Record<
-    "artist" | "album" | "year" | "genre" | "title" | "edition" | "format" | "show_title" | "season_number" | "season_title",
+    "artist" | "album" | "year" | "genre" | "title" | "author" | "edition" | "format" | "show_title" | "season_number" | "season_title",
     string
   >>;
   compilation?: boolean;
@@ -222,6 +228,41 @@ export type MovieCollectionReviewUpdate = {
   confirm_non_blocking_warnings?: boolean;
 };
 
+export type BookMetadataUpdate = {
+  title: string;
+  author: string;
+  year?: string | null;
+  format?: string | null;
+  note?: string | null;
+};
+
+export type BookCollectionItem = {
+  item_kind: "book";
+  source_key: string;
+  source_file: string;
+  include: boolean;
+  title?: string | null;
+  author?: string | null;
+  year?: string | null;
+  format?: string | null;
+  destination_preview?: string | null;
+};
+
+export type BookCollectionItemUpdate = {
+  source_file: string;
+  include: boolean;
+  title: string;
+  author: string;
+  year?: string | null;
+  format?: string | null;
+};
+
+export type BookCollectionReviewUpdate = {
+  collection_title?: string | null;
+  books: BookCollectionItemUpdate[];
+  confirm_non_blocking_warnings?: boolean;
+};
+
 export type TvMetadataUpdate = {
   show_title: string;
   season_number?: number | null;
@@ -281,6 +322,8 @@ export type ScanMusicResponse = {
   tv_shows_found: number;
   tv_episodes_found: number;
   subtitle_files_found: number;
+  book_batches_found: number;
+  book_files_found: number;
 };
 
 export type DevResetResponse = {

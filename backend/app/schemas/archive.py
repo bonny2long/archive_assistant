@@ -67,6 +67,11 @@ class BatchSummary(BaseModel):
     review_mode: str | None = None
     movie_items: list[dict] = Field(default_factory=list)
     collection_title: str | None = None
+    author: str | None = None
+    book_file_count: int = 0
+    book_files: list[str] = Field(default_factory=list)
+    primary_book_file: str | None = None
+    book_items: list[dict] = Field(default_factory=list)
     suggested_destination: str | None = None
     suggested_metadata: dict | None = None
     metadata_confirmed: bool = False
@@ -174,6 +179,29 @@ class MovieCollectionReviewUpdate(BaseModel):
     confirm_non_blocking_warnings: bool = False
 
 
+class BookMetadataUpdate(BaseModel):
+    title: str = Field(min_length=1)
+    author: str = Field(min_length=1)
+    year: str | None = Field(default=None, pattern=r"^(19|20)\d{2}$")
+    format: str | None = None
+    note: str | None = None
+
+
+class BookCollectionItemUpdate(BaseModel):
+    source_file: str = Field(min_length=1)
+    include: bool = True
+    title: str = Field(min_length=1)
+    author: str = Field(min_length=1)
+    year: str | None = Field(default=None, pattern=r"^(19|20)\d{2}$")
+    format: str | None = None
+
+
+class BookCollectionReviewUpdate(BaseModel):
+    collection_title: str | None = None
+    books: list[BookCollectionItemUpdate] = Field(min_length=1)
+    confirm_non_blocking_warnings: bool = False
+
+
 class ReviewConfirmationUpdate(BaseModel):
     confirmed: bool
     accept_non_blocking_warnings: bool = False
@@ -249,6 +277,8 @@ class ScanMusicResponse(BaseModel):
     tv_shows_found: int = 0
     tv_episodes_found: int = 0
     subtitle_files_found: int = 0
+    book_batches_found: int = 0
+    book_files_found: int = 0
 
 
 class DevResetResponse(BaseModel):
