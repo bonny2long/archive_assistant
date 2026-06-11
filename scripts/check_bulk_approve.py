@@ -77,7 +77,7 @@ def main() -> int:
         )
         failures += check(
             "blocking review item batch is skipped",
-            reasons.get(blocked.id) == "blocking_review_item",
+            reasons.get(blocked.id) == "blocking_review_items",
         )
         failures += check("missing batch is reported", reasons.get(999) == "not_found")
 
