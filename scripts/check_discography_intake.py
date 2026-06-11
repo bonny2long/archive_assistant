@@ -60,18 +60,60 @@ def main() -> int:
     checks_root.mkdir(parents=True, exist_ok=True)
     root = Path(mkdtemp(prefix="archive-discography-", dir=checks_root))
     original_paths = {
+        "data_root": settings.data_root,
         "ingest_root": settings.ingest_root,
         "reports_dir": settings.reports_dir,
+        "move_logs_dir": settings.move_logs_dir,
+        "music_flac_dir": settings.music_flac_dir,
+        "music_mp3_dir": settings.music_mp3_dir,
         "music_discographies_dir": settings.music_discographies_dir,
+        "music_metadata_dir": settings.music_metadata_dir,
+        "movies_dir": settings.movies_dir,
+        "movies_metadata_dir": settings.movies_metadata_dir,
+        "tv_dir": settings.tv_dir,
+        "tv_metadata_dir": settings.tv_metadata_dir,
+        "books_dir": settings.books_dir,
+        "books_metadata_dir": settings.books_metadata_dir,
+        "audiobooks_dir": settings.audiobooks_dir,
+        "audiobooks_metadata_dir": settings.audiobooks_metadata_dir,
+        "quarantine_discography_dir": settings.quarantine_discography_dir,
+        "quarantine_unknown_dir": settings.quarantine_unknown_dir,
+        "quarantine_unsupported_dir": settings.quarantine_unsupported_dir,
+        "quarantine_reports_dir": settings.quarantine_reports_dir,
     }
 
     try:
         ingest = root / "_INGEST"
         reports = root / "_REPORTS" / "ingest-reports"
         discographies = root / "Music" / "Discographies"
+        settings.data_root = root
         settings.ingest_root = ingest
         settings.reports_dir = reports
+        settings.move_logs_dir = root / "_REPORTS" / "move-logs"
+        settings.music_flac_dir = root / "Music" / "Library" / "FLAC"
+        settings.music_mp3_dir = root / "Music" / "Library" / "MP3"
         settings.music_discographies_dir = discographies
+        settings.music_metadata_dir = root / "Music" / "Metadata"
+        settings.movies_dir = root / "Movies" / "Library"
+        settings.movies_metadata_dir = root / "Movies" / "Metadata"
+        settings.tv_dir = root / "TV" / "Library"
+        settings.tv_metadata_dir = root / "TV" / "Metadata"
+        settings.books_dir = root / "Books"
+        settings.books_metadata_dir = root / "Books" / "Metadata"
+        settings.audiobooks_dir = root / "Audiobooks" / "Library"
+        settings.audiobooks_metadata_dir = root / "Audiobooks" / "Metadata"
+        settings.quarantine_discography_dir = (
+            root / "_QUARANTINE" / "music" / "discography-excluded"
+        )
+        settings.quarantine_unknown_dir = (
+            root / "_QUARANTINE" / "unknown-type"
+        )
+        settings.quarantine_unsupported_dir = (
+            root / "_QUARANTINE" / "unsupported-file"
+        )
+        settings.quarantine_reports_dir = (
+            root / "_REPORTS" / "quarantine-reports"
+        )
 
         parent = ingest / "Nas Discography"
         album_one = parent / "1994 - Illmatic"

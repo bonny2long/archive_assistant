@@ -425,6 +425,23 @@ npm run dev
 bash scripts/create_sample_tree.sh
 ```
 
+## Core v1 regression
+
+Run this before major future changes:
+
+```bash
+python scripts/check_core_v1_regression.py
+```
+
+This validates the Archive Assistant v1 contracts for music, discographies,
+movies, movie collections, TV, books, book collections, audiobooks, bulk
+approval, and manifest integration markers. Each check has a bounded timeout
+and does not use the real ingest or library folders.
+
+Manual UI testing is still recommended for large real media drops.
+Filesystem move/manifest checks remain targeted manual checks on Windows
+because temporary-directory cleanup can stall on some systems.
+
 ### Troubleshooting
 
 | Issue | Likely fix |
