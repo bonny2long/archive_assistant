@@ -909,12 +909,17 @@ def _create_book_batch(db: Session, source: Path) -> IngestBatch | None:
                 "author": item["author"],
                 "title": item["title"],
                 "year": item.get("year"),
+                "series": item.get("series"),
+                "series_index": item.get("series_index"),
                 "format": fmt,
                 "destination_preview": str(destination.relative_to(settings.data_root)),
             })
         metadata.update({
             "review_type": "book_collection",
             "review_mode": "item_list",
+            "author": "Mixed Authors",
+            "title": source.name,
+            "year": None,
             "book_items": items,
             "metadata_quality": "weak",
             "metadata_warnings": list(dict.fromkeys([

@@ -194,6 +194,8 @@ class BookCollectionItemUpdate(BaseModel):
     author: str = Field(min_length=1)
     year: str | None = Field(default=None, pattern=r"^(19|20)\d{2}$")
     format: str | None = None
+    series: str | None = None
+    series_index: str | None = None
 
 
 class BookCollectionReviewUpdate(BaseModel):

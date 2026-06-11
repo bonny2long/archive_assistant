@@ -245,6 +245,8 @@ export type BookCollectionItem = {
   author?: string | null;
   year?: string | null;
   format?: string | null;
+  series?: string | null;
+  series_index?: string | null;
   destination_preview?: string | null;
 };
 
@@ -255,6 +257,8 @@ export type BookCollectionItemUpdate = {
   author: string;
   year?: string | null;
   format?: string | null;
+  series?: string | null;
+  series_index?: string | null;
 };
 
 export type BookCollectionReviewUpdate = {

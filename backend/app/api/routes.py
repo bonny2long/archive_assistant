@@ -781,6 +781,10 @@ def update_book_collection_review(
             "author": author,
             "title": title,
             "year": year,
+            "series": item.series.strip() if item.series else None,
+            "series_index": (
+                item.series_index.strip() if item.series_index else None
+            ),
             "format": book_format,
             "destination_preview": str(destination) if item.include else None,
         })

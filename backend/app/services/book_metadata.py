@@ -10,6 +10,23 @@ BOOK_ARTWORK_NAMES = {
 }
 BOOK_ARTWORK_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 UNKNOWN_BOOK_VALUES = {"", "unknown", "unknown author", "unknown title", "unkn"}
+BOOK_SERIES_PREFIX_RE = re.compile(
+    r"^(?P<series>.+?)\s+(?P<index>\d+(?:\.\d+)?)\s*-\s*(?P<title>.+)$",
+    re.I,
+)
+LEADING_INDEX_RE = re.compile(
+    r"^(?P<index>\d+(?:\.\d+)?)\s*-\s*(?P<rest>.+)$",
+    re.I,
+)
+YEAR_RE = re.compile(r"(?:\(|\[|\b)((?:19|20)\d{2})(?:\)|\]|\b)")
+AUTHOR_HINT_RE = re.compile(
+    r"\b(?:by|author)\s+(?P<author>[A-Z][A-Za-z0-9 .,&'\u2019\-]+)$",
+    re.I,
+)
+KNOWN_AUTHORISH_RE = re.compile(
+    r"\b(?:Herbert|Anderson|Allen|Clear|King|Tolkien|Martin|Asimov|Butler|Le Guin)\b",
+    re.I,
+)
 
 
 def is_book_file(path: Path) -> bool:
@@ -17,10 +34,13 @@ def is_book_file(path: Path) -> bool:
 
 
 def is_book_artwork(path: Path) -> bool:
-    return (
-        path.is_file()
-        and path.suffix.casefold() in BOOK_ARTWORK_EXTENSIONS
-        and path.stem.casefold() in BOOK_ARTWORK_NAMES
+    if path.suffix.casefold() not in BOOK_ARTWORK_EXTENSIONS:
+        return False
+    if path.stem.casefold() in BOOK_ARTWORK_NAMES:
+        return True
+    return any(
+        part.casefold() in {"cover", "covers", "artwork", "images"}
+        for part in path.parts
     )
 
 
@@ -49,29 +69,124 @@ def _strip_release_noise(value: str) -> str:
         flags=re.I,
     )
     text = re.sub(r"\b(?:epub|pdf|ebook|retail|scan|ocr)\b", " ", text, flags=re.I)
-    text = re.sub(r"[_\.]+", " ", text)
+    text = re.sub(r"_+", " ", text)
     return re.sub(r"\s+", " ", text).strip(" -_.")
 
 
+def _clean_person_name(value: str) -> str:
+    text = re.sub(r"\s+", " ", value.strip(" -_."))
+    return text or "Unknown Author"
+
+
+def _clean_book_title(value: str) -> str:
+    text = re.sub(r"\s+", " ", value.strip(" -_."))
+    return text or "Unknown Title"
+
+
+def _looks_like_author(value: str) -> bool:
+    text = value.strip()
+    if not text:
+        return False
+    if re.search(r"\b[A-Z]\.?\s*[A-Z][a-z]+", text):
+        return True
+    if (
+        re.search(r"\b(?:et al|and|&)\b", text, flags=re.I)
+        and len(text.split()) <= 8
+    ):
+        return True
+    if KNOWN_AUTHORISH_RE.search(text):
+        return True
+    words = re.findall(r"[A-Za-z][A-Za-z.'\u2019\-]*", text)
+    capitalized = [word for word in words if word[:1].isupper()]
+    return 1 <= len(words) <= 4 and len(capitalized) == len(words)
+
+
+def _extract_year(text: str) -> tuple[str, str | None]:
+    match = YEAR_RE.search(text)
+    if not match:
+        return text.strip(" -_."), None
+    year = match.group(1)
+    cleaned = (text[:match.start()] + text[match.end():]).strip(" -_.")
+    return re.sub(r"\s+", " ", cleaned), year
+
+
 def parse_book_name(value: str) -> dict:
-    raw = Path(value).stem if Path(value).suffix else value
+    """Parse conservative book metadata from a filename or folder name."""
+    candidate = Path(value)
+    raw = (
+        candidate.stem
+        if candidate.suffix.casefold() in BOOK_EXTENSIONS
+        else value
+    )
     text = _strip_release_noise(raw)
-    year = None
-    match = re.search(r"(?:\(|\[|\b)((?:19|20)\d{2})(?:\)|\]|\b)", text)
-    if match:
-        year = match.group(1)
-        text = (text[:match.start()] + text[match.end():]).strip(" -_.")
-    author = None
-    title = text.strip()
-    if " - " in text:
-        left, right = [part.strip() for part in text.split(" - ", 1)]
-        if left and right:
-            author, title = left, right
+    text, year = _extract_year(text)
+    series = None
+    series_index = None
+
+    leading = LEADING_INDEX_RE.match(text)
+    if leading:
+        series_index = leading.group("index")
+        rest = leading.group("rest").strip()
+        parts = [part.strip() for part in rest.split(" - ") if part.strip()]
+        if len(parts) >= 2 and _looks_like_author(parts[-1]):
+            return {
+                "author": _clean_person_name(parts[-1]),
+                "title": _clean_book_title(" - ".join(parts[:-1])),
+                "year": year,
+                "raw_name": raw,
+                "series": series,
+                "series_index": series_index,
+            }
+        return {
+            "author": "Unknown Author",
+            "title": _clean_book_title(rest),
+            "year": year,
+            "raw_name": raw,
+            "series": series,
+            "series_index": series_index,
+        }
+
+    series_match = BOOK_SERIES_PREFIX_RE.match(text)
+    if series_match:
+        return {
+            "author": "Unknown Author",
+            "title": _clean_book_title(series_match.group("title")),
+            "year": year,
+            "raw_name": raw,
+            "series": _clean_book_title(series_match.group("series")),
+            "series_index": series_match.group("index"),
+        }
+
+    by_match = AUTHOR_HINT_RE.search(text)
+    if by_match:
+        return {
+            "author": _clean_person_name(by_match.group("author")),
+            "title": _clean_book_title(text[:by_match.start()]),
+            "year": year,
+            "raw_name": raw,
+            "series": series,
+            "series_index": series_index,
+        }
+
+    parts = [part.strip() for part in text.split(" - ") if part.strip()]
+    if len(parts) >= 2:
+        right = parts[-1]
+        left = " - ".join(parts[:-1])
+        if _looks_like_author(right):
+            author, title = right, left
+        elif _looks_like_author(parts[0]) and len(parts) == 2:
+            author, title = parts[0], parts[1]
+        else:
+            author, title = "Unknown Author", text
+    else:
+        author, title = "Unknown Author", text
     return {
-        "author": author or "Unknown Author",
-        "title": title or "Unknown Title",
+        "author": _clean_person_name(author),
+        "title": _clean_book_title(title),
         "year": year,
         "raw_name": raw,
+        "series": series,
+        "series_index": series_index,
     }
 
 
@@ -143,7 +258,10 @@ def build_single_book_metadata(source: Path, books_dir: Path) -> dict:
         "book_files": [path.name for path in files["books"]],
         "primary_book_file": primary.name,
         "artwork_count": len(files["artwork"]),
-        "artwork_files": [path.name for path in files["artwork"]],
+        "artwork_files": [
+            str(path.relative_to(source)) if source.is_dir() else path.name
+            for path in files["artwork"]
+        ],
         "ignored_sidecar_count": len(files["sidecars"]) + len(files["other"]),
         "ignored_sidecar_files": [
             str(path.relative_to(source)) if source.is_dir() else path.name

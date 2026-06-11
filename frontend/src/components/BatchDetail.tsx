@@ -791,19 +791,23 @@ function BookBatchDetail({ batch, moveSummary }: Props) {
       {collection && (
         <section className="track-preview">
           <div className="track-preview__header">
-            <h3>Books found</h3><span>{items.length} book(s)</span>
+            <h3>Book Collection</h3>
+            <span>
+              Showing {Math.min(items.length, 10)} of {items.length} book(s)
+            </span>
           </div>
           <div className="track-preview__table">
             <table>
-              <thead><tr><th>File</th><th>Author</th><th>Title</th><th>Year</th><th>Format</th></tr></thead>
+              <thead><tr><th>Format</th><th>Author</th><th>Title</th><th>Year</th><th>Series</th><th>Destination</th></tr></thead>
               <tbody>
-                {items.map((item, index) => (
+                {items.slice(0, 10).map((item, index) => (
                   <tr key={String(item.source_file ?? index)}>
-                    <td>{String(item.source_file ?? "-")}</td>
+                    <td>{String(item.format ?? "-")}</td>
                     <td>{String(item.author ?? "-")}</td>
                     <td>{String(item.title ?? "-")}</td>
                     <td>{String(item.year ?? "-")}</td>
-                    <td>{String(item.format ?? "-")}</td>
+                    <td>{String(item.series ?? "-")}</td>
+                    <td>{String(item.destination_preview ?? "-")}</td>
                   </tr>
                 ))}
               </tbody>
