@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.archive import ArchiveItem, IngestBatch, IngestFile, MoveAction
+from app.services.music_metadata import is_audio_file
+from app.services.video_metadata import is_video_file
 
 
 @dataclass(frozen=True)
@@ -113,7 +115,58 @@ def _validate_moves(moves: list[MoveAction]) -> list[str]:
         seen_sources.add(source)
         if source.exists() and destination.exists():
             errors.append(f"Both restore paths exist; refusing to overwrite: {source}")
+        elif not source.exists() and not destination.exists():
+            errors.append(
+                "Neither restore path exists; keeping database records for "
+                f"manual recovery: {source} <- {destination}"
+            )
 
+    return errors
+
+
+def _untracked_library_media(moves: list[MoveAction]) -> list[Path]:
+    tracked_destinations = {
+        Path(move.destination_path).resolve()
+        for move in moves
+        if move.status == "completed"
+    }
+    untracked = []
+    for root in _media_roots():
+        if not root.exists():
+            continue
+        for path in root.rglob("*"):
+            if (
+                path.is_file()
+                and (is_audio_file(path) or is_video_file(path))
+                and path.resolve() not in tracked_destinations
+            ):
+                untracked.append(path)
+    return sorted(set(untracked))
+
+
+def _validate_restore_completion(
+    moves: list[MoveAction],
+    quarantine_plan: list[tuple[Path, Path]],
+) -> list[str]:
+    errors = []
+    for move in moves:
+        if move.status != "completed":
+            continue
+        source = Path(move.source_path)
+        destination = Path(move.destination_path)
+        if not source.exists():
+            errors.append(f"Restored source is missing: {source}")
+        if destination.exists():
+            errors.append(f"Library destination still exists after restore: {destination}")
+
+    for quarantine_source, original in quarantine_plan:
+        if not original.exists():
+            errors.append(f"Restored quarantine source is missing: {original}")
+        if quarantine_source.exists():
+            errors.append(
+                "Quarantine source still exists after restore: "
+                f"{quarantine_source}"
+            )
     return errors
 
 
@@ -166,7 +219,12 @@ def _quarantine_restore_plan(
         if not _is_within(original, settings.ingest_root):
             errors.append(f"Restore destination is outside ingest: {original}")
         if original.exists():
-            errors.append(f"Restore destination already exists: {original}")
+            empty_directory = (
+                original.is_dir()
+                and not any(path.is_file() for path in original.rglob("*"))
+            )
+            if not empty_directory:
+                errors.append(f"Restore destination already exists: {original}")
     return plan, errors
 
 
@@ -196,6 +254,14 @@ def reset_test_data(db: Session, *, apply: bool) -> DevResetSummary:
 
     quarantine_plan, quarantine_errors = _quarantine_restore_plan(batches)
     errors = [*_validate_moves(moves), *quarantine_errors]
+    untracked_media = _untracked_library_media(moves)
+    if untracked_media:
+        sample = ", ".join(str(path) for path in untracked_media[:3])
+        errors.append(
+            f"{len(untracked_media)} managed library media file(s) have no "
+            f"completed move record. Reset will not clear the database. "
+            f"Examples: {sample}"
+        )
     if errors:
         raise DevResetBlockedError(errors)
 
@@ -231,10 +297,25 @@ def reset_test_data(db: Session, *, apply: bool) -> DevResetSummary:
     restored_files = restored_tracks
 
     for quarantine_source, original in quarantine_plan:
+        if original.exists() and original.is_dir():
+            original.rmdir()
         original.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(quarantine_source), str(original))
         restored_files += 1
 
+    completion_errors = _validate_restore_completion(moves, quarantine_plan)
+    remaining_untracked_media = _untracked_library_media(moves)
+    if remaining_untracked_media:
+        sample = ", ".join(str(path) for path in remaining_untracked_media[:3])
+        completion_errors.append(
+            f"{len(remaining_untracked_media)} untracked media file(s) remain "
+            f"in managed libraries after restore. Examples: {sample}"
+        )
+    if completion_errors:
+        db.rollback()
+        raise DevResetBlockedError(completion_errors)
+
+    # Destructive cleanup happens only after every file restore is verified.
     removed_reports = (
         _remove_batch_reports(batch_ids)
         + _remove_quarantine_reports(batch_ids)

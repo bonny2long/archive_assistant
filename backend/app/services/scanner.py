@@ -92,6 +92,53 @@ IGNORED_INGEST_NAMES = {
     "desktop.ini",
     "__macosx",
 }
+
+RECOGNIZED_MEDIA_TYPES = {
+    "music_album",
+    "music_discography",
+    "video_movie",
+    "video_tv_show",
+}
+
+QUARANTINE_TYPES = {"unknown_type", "unsupported_file"}
+
+ACTIVE_REVIEW_STATUSES = {
+    "needs_quarantine_review",
+    "quarantined",
+    "needs_metadata_review",
+    "pending_review",
+    "approved",
+}
+
+
+def _all_files(path: Path) -> list[Path]:
+    if path.is_file():
+        return [path]
+    if path.is_dir():
+        return sorted(
+            candidate
+            for candidate in path.rglob("*")
+            if candidate.is_file()
+        )
+    return []
+
+
+def _has_supported_audio_or_video(path: Path) -> bool:
+    return any(
+        is_audio_file(candidate) or is_video_file(candidate)
+        for candidate in _all_files(path)
+    )
+
+
+def _has_any_real_files(path: Path) -> bool:
+    return bool(_all_files(path))
+
+
+def _is_empty_source_leftover(path: Path) -> bool:
+    """Return True only when a source directory contains no files."""
+    return path.is_dir() and not _has_any_real_files(path)
+
+
 def classify_ingest_item(path: Path) -> str:
     if path.name.casefold() in IGNORED_INGEST_NAMES:
         return "ignored_system_folder"
@@ -794,40 +841,95 @@ def _create_movie_batch(db: Session, source: Path) -> IngestBatch | None:
     return batch
 
 
+def _merge_active_quarantine_rows_for_source(
+    db: Session,
+    source: Path,
+    *,
+    reason: str,
+) -> int:
+    """Retire obsolete quarantine rows for one exact source path."""
+    stale_rows = (
+        db.query(IngestBatch)
+        .filter(
+            IngestBatch.source_path == str(source),
+            IngestBatch.detected_type.in_(QUARANTINE_TYPES),
+            IngestBatch.status.in_(ACTIVE_REVIEW_STATUSES),
+        )
+        .all()
+    )
+    merged = 0
+    for batch in stale_rows:
+        metadata = dict(batch.metadata_json or {})
+        metadata["stale_quarantine_merged"] = True
+        metadata["stale_quarantine_merge_reason"] = reason
+        batch.metadata_json = metadata
+        batch.status = "merged"
+        merged += 1
+    return merged
+
+
 def repair_stale_media_batches(
     db: Session,
     classifications: dict[Path, str],
 ) -> list[IngestBatch]:
-    repaired = []
-    stale = (
+    """Repair obsolete quarantine rows without suppressing active media."""
+    repaired: list[IngestBatch] = []
+
+    for source, classification in classifications.items():
+        if classification in RECOGNIZED_MEDIA_TYPES:
+            _merge_active_quarantine_rows_for_source(
+                db,
+                source,
+                reason=f"current_scan_classified_as_{classification}",
+            )
+
+            if classification == "video_tv_show":
+                batch = _create_tv_batch(db, source)
+                if batch:
+                    repaired.append(batch)
+            elif classification == "video_movie":
+                batch = _create_movie_batch(db, source)
+                if batch:
+                    repaired.append(batch)
+            continue
+
+        if (
+            classification == "unknown_type"
+            and source.is_dir()
+            and _is_empty_source_leftover(source)
+        ):
+            _merge_active_quarantine_rows_for_source(
+                db,
+                source,
+                reason="empty_source_leftover",
+            )
+
+    stale_rows = (
         db.query(IngestBatch)
         .filter(
-            IngestBatch.detected_type.in_(
-                ["unknown_type", "unsupported_file"]
-            ),
-            IngestBatch.status.in_(
-                [
-                    "needs_quarantine_review",
-                    "quarantined",
-                    "needs_metadata_review",
-                    "pending_review",
-                ]
-            ),
+            IngestBatch.detected_type.in_(QUARANTINE_TYPES),
+            IngestBatch.status.in_(ACTIVE_REVIEW_STATUSES),
         )
         .all()
     )
-    stale_paths = {batch.source_path for batch in stale}
-    for source, classification in classifications.items():
-        if str(source) not in stale_paths:
-            continue
-        if classification == "video_tv_show":
-            batch = _create_tv_batch(db, source)
-        elif classification == "video_movie":
-            batch = _create_movie_batch(db, source)
-        else:
-            batch = None
-        if batch:
-            repaired.append(batch)
+    for batch in stale_rows:
+        source = Path(batch.source_path)
+        if not source.exists():
+            metadata = dict(batch.metadata_json or {})
+            quarantine_destination = Path(
+                metadata.get("quarantine_destination") or ""
+            )
+            if (
+                batch.status == "quarantined"
+                and quarantine_destination.exists()
+            ):
+                continue
+            metadata["stale_quarantine_merged"] = True
+            metadata["stale_quarantine_merge_reason"] = "source_path_missing"
+            batch.metadata_json = metadata
+            batch.status = "merged"
+
+    db.commit()
     return repaired
 
 
@@ -897,11 +999,23 @@ def _create_unknown_batch(
     *,
     music_parent: Path | None = None,
 ) -> IngestBatch | None:
+    if path.is_dir() and _is_empty_source_leftover(path):
+        _merge_active_quarantine_rows_for_source(
+            db,
+            path,
+            reason="empty_source_leftover_no_new_unknown_batch",
+        )
+        db.commit()
+        return None
+
+    if path.is_dir() and _has_supported_audio_or_video(path):
+        return None
+
     if path.is_dir():
         video_files = _movie_files(path)
         if folder_looks_like_tv_show(path, video_files["video"]):
             return None
-        if len(video_files["video"]) == 1:
+        if len(video_files["video"]) >= 1:
             return None
         if any(
             candidate.is_file() and is_audio_file(candidate)
