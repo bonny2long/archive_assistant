@@ -67,6 +67,8 @@ class BatchSummary(BaseModel):
     review_mode: str | None = None
     movie_items: list[dict] = Field(default_factory=list)
     collection_title: str | None = None
+    keep_collection_together: bool | None = None
+    collection_destination_root: str | None = None
     author: str | None = None
     book_file_count: int = 0
     book_files: list[str] = Field(default_factory=list)
@@ -190,8 +192,8 @@ class BookMetadataUpdate(BaseModel):
 class BookCollectionItemUpdate(BaseModel):
     source_file: str = Field(min_length=1)
     include: bool = True
-    title: str = Field(min_length=1)
-    author: str = Field(min_length=1)
+    title: str = ""
+    author: str = ""
     year: str | None = Field(default=None, pattern=r"^(19|20)\d{2}$")
     format: str | None = None
     series: str | None = None
@@ -200,6 +202,7 @@ class BookCollectionItemUpdate(BaseModel):
 
 class BookCollectionReviewUpdate(BaseModel):
     collection_title: str | None = None
+    keep_collection_together: bool = False
     books: list[BookCollectionItemUpdate] = Field(min_length=1)
     confirm_non_blocking_warnings: bool = False
 

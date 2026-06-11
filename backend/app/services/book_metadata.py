@@ -222,6 +222,30 @@ def book_destination(
     )
 
 
+def build_book_item_destination(
+    *,
+    books_root: Path,
+    item: dict,
+    collection_title: str | None = None,
+    keep_collection_together: bool = False,
+) -> Path:
+    fmt = str(
+        item.get("format") or item.get("book_format") or "EPUB"
+    ).upper()
+    title = safe_book_path_part(str(item.get("title") or "Unknown Title"))
+    author = safe_book_path_part(str(item.get("author") or "Unknown Author"))
+    year = str(item.get("year") or "").strip()
+    year_title = safe_book_path_part(
+        f"{year or 'Unknown Year'} - {title}"
+    )
+    if keep_collection_together:
+        collection = safe_book_path_part(
+            collection_title or "Unknown Collection"
+        )
+        return books_root / fmt / "Collections" / collection / year_title
+    return books_root / fmt / author / year_title
+
+
 def build_single_book_metadata(source: Path, books_dir: Path) -> dict:
     files = collect_book_files(source)
     primary = choose_primary_book_file(files["books"])

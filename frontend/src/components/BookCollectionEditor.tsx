@@ -45,13 +45,26 @@ function itemNeedsRepair(item: BookCollectionItemUpdate): boolean {
   return itemRepairReasons(item).length > 0;
 }
 
-function destinationForBookItem(item: BookCollectionItemUpdate): string {
+function cleanPathPart(value: string): string {
+  return value.replace(/[<>:"/\\|?*]/g, "_").trim() || "Unknown";
+}
+
+function buildBookDestinationPreview(
+  item: BookCollectionItemUpdate,
+  collectionTitle: string,
+  keepTogether: boolean,
+): string {
   if (!item.include) return "Excluded - will not be moved";
-  const format = normalized(item.format || "EPUB").toUpperCase() || "EPUB";
-  const author = normalized(item.author) || "Unknown Author";
-  const title = normalized(item.title) || "Unknown Title";
-  const year = normalized(item.year) || "Unknown Year";
-  return `Books/${format}/${author}/${year} - ${title}`;
+  const format = cleanPathPart(
+    normalized(item.format || "EPUB").toUpperCase() || "EPUB",
+  );
+  const author = cleanPathPart(normalized(item.author) || "Unknown Author");
+  const title = cleanPathPart(normalized(item.title) || "Unknown Title");
+  const yearTitle = `${normalized(item.year) || "Unknown Year"} - ${title}`;
+  if (keepTogether) {
+    return `Books/${format}/Collections/${cleanPathPart(collectionTitle || "Unknown Collection")}/${yearTitle}`;
+  }
+  return `Books/${format}/${author}/${yearTitle}`;
 }
 
 function reasonLabel(reason: string): string {
@@ -106,6 +119,8 @@ type BookRepairCardProps = {
   item: BookCollectionItemUpdate;
   index: number;
   reasons: string[];
+  collectionTitle: string;
+  keepCollectionTogether: boolean;
   onChange: (index: number, patch: Partial<BookCollectionItemUpdate>) => void;
 };
 
@@ -113,6 +128,8 @@ function BookRepairCard({
   item,
   index,
   reasons,
+  collectionTitle,
+  keepCollectionTogether,
   onChange,
 }: BookRepairCardProps) {
   return (
@@ -192,7 +209,13 @@ function BookRepairCard({
       </details>
       <div className="book-repair-card__dest">
         <span>Destination</span>
-        <code>{destinationForBookItem(item)}</code>
+        <code>
+          {buildBookDestinationPreview(
+            item,
+            collectionTitle,
+            keepCollectionTogether,
+          )}
+        </code>
       </div>
     </div>
   );
@@ -206,6 +229,10 @@ export default function BookCollectionEditor({
   onClose,
 }: Props) {
   const [collectionTitle, setCollectionTitle] = useState(batch.collection_title ?? "");
+  const [keepCollectionTogether, setKeepCollectionTogether] = useState(
+    Boolean(batch.keep_collection_together ?? batch.collection_title?.trim()),
+  );
+  const [keepTogetherTouched, setKeepTogetherTouched] = useState(false);
   const [items, setItems] = useState(() => initialItems(batch));
   const [showAllBooks, setShowAllBooks] = useState(false);
   const [showCleanPreview, setShowCleanPreview] = useState(false);
@@ -219,7 +246,14 @@ export default function BookCollectionEditor({
   const repairCount = repairItems.length;
   const cleanCount = cleanItems.length;
   const excludedCount = excludedItems.length;
-  const valid = includedCount > 0 && repairCount === 0;
+  const collectionRoutingValid = (
+    !keepCollectionTogether || collectionTitle.trim() !== ""
+  );
+  const valid = (
+    includedCount > 0
+    && repairCount === 0
+    && collectionRoutingValid
+  );
   const warningMessages = (batch.non_blocking_review_items ?? []).map((item) => item.message);
 
   const updateItem = (index: number, patch: Partial<BookCollectionItemUpdate>) => {
@@ -249,6 +283,13 @@ export default function BookCollectionEditor({
     setItems((current) => current.map((item) => ({ ...item, include: true })));
   };
 
+  const handleCollectionTitleChange = (value: string) => {
+    setCollectionTitle(value);
+    if (!keepTogetherTouched && value.trim()) {
+      setKeepCollectionTogether(true);
+    }
+  };
+
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <form
@@ -259,6 +300,7 @@ export default function BookCollectionEditor({
           if (!valid) return;
           void onSave({
             collection_title: collectionTitle.trim() || null,
+            keep_collection_together: keepCollectionTogether,
             books: items,
           });
         }}
@@ -279,10 +321,34 @@ export default function BookCollectionEditor({
         <div className="editor-shell__body">
           <BookCollectionIssueSummary repairCount={repairCount} warnings={warningMessages} />
 
-          <label className="editor-grid editor-grid--full">
-            <span>Collection label optional</span>
-            <input value={collectionTitle} onChange={(event) => setCollectionTitle(event.target.value)} />
-          </label>
+          <section className="collection-routing-card">
+            <label>
+              <span>Collection label optional</span>
+              <input
+                value={collectionTitle}
+                placeholder="e.g. Dune Series"
+                onChange={(event) => handleCollectionTitleChange(event.target.value)}
+              />
+            </label>
+            <label className="inline-toggle">
+              <input
+                type="checkbox"
+                checked={keepCollectionTogether}
+                onChange={(event) => {
+                  setKeepTogetherTouched(true);
+                  setKeepCollectionTogether(event.target.checked);
+                }}
+              />
+              <span>
+                Keep collection together under Books/&lt;Format&gt;/Collections/&lt;Collection label&gt;
+              </span>
+            </label>
+            {!collectionRoutingValid && (
+              <p className="validation-note">
+                Collection label required when keeping collection together.
+              </p>
+            )}
+          </section>
 
           <section className="book-review-panel">
             <div className="book-review-panel__header">
@@ -342,6 +408,8 @@ export default function BookCollectionEditor({
                     item={item}
                     index={index}
                     reasons={itemRepairReasons(item)}
+                    collectionTitle={collectionTitle}
+                    keepCollectionTogether={keepCollectionTogether}
                     onChange={updateItem}
                   />
                 ))}
@@ -367,7 +435,15 @@ export default function BookCollectionEditor({
                         <td>{item.author}</td>
                         <td>{item.title}</td>
                         <td>{item.year || "Unknown Year"}</td>
-                        <td><code>{destinationForBookItem(item)}</code></td>
+                        <td>
+                          <code>
+                            {buildBookDestinationPreview(
+                              item,
+                              collectionTitle,
+                              keepCollectionTogether,
+                            )}
+                          </code>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -392,6 +468,8 @@ export default function BookCollectionEditor({
                     item={item}
                     index={index}
                     reasons={itemRepairReasons(item)}
+                    collectionTitle={collectionTitle}
+                    keepCollectionTogether={keepCollectionTogether}
                     onChange={updateItem}
                   />
                 ))}
@@ -403,7 +481,9 @@ export default function BookCollectionEditor({
         <div className="editor-shell__footer">
           <button type="button" className="btn" disabled={saving} onClick={onClose}>Cancel</button>
           <button type="submit" className="btn btn--green" disabled={saving || !valid}>
-            {repairCount > 0
+            {!collectionRoutingValid
+              ? "Add collection label first"
+              : repairCount > 0
               ? `Fix ${repairCount} book${repairCount === 1 ? "" : "s"} first`
               : "Save book collection"}
           </button>

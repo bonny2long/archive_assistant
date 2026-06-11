@@ -53,8 +53,8 @@ from app.services.video_metadata import (
 )
 from app.services.review_state import build_review_state
 from app.services.book_metadata import (
-    book_destination,
     book_format_for,
+    build_book_item_destination,
     build_single_book_metadata,
     collect_book_files,
     is_book_file,
@@ -894,14 +894,7 @@ def _create_book_batch(db: Session, source: Path) -> IngestBatch | None:
             key=lambda pair: pair[0].name.casefold(),
         ):
             fmt = book_format_for(path)
-            destination = book_destination(
-                fmt,
-                item["author"],
-                item["title"],
-                item.get("year"),
-                settings.books_dir,
-            )
-            items.append({
+            item_metadata = {
                 "item_kind": "book",
                 "source_key": path.name,
                 "source_file": path.name,
@@ -912,14 +905,25 @@ def _create_book_batch(db: Session, source: Path) -> IngestBatch | None:
                 "series": item.get("series"),
                 "series_index": item.get("series_index"),
                 "format": fmt,
-                "destination_preview": str(destination.relative_to(settings.data_root)),
-            })
+            }
+            destination = build_book_item_destination(
+                books_root=settings.books_dir,
+                item=item_metadata,
+            )
+            item_metadata["destination_path"] = str(destination)
+            item_metadata["destination_preview"] = (
+                destination.relative_to(settings.data_root).as_posix()
+            )
+            items.append(item_metadata)
         metadata.update({
             "review_type": "book_collection",
             "review_mode": "item_list",
             "author": "Mixed Authors",
             "title": source.name,
             "year": None,
+            "collection_title": None,
+            "keep_collection_together": False,
+            "collection_destination_root": None,
             "book_items": items,
             "metadata_quality": "weak",
             "metadata_warnings": list(dict.fromkeys([

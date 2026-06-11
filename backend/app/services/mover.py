@@ -15,7 +15,10 @@ from app.services.music_metadata import (
     sort_music_tracks,
 )
 from app.services.video_metadata import safe_tv_path_part
-from app.services.book_metadata import book_destination
+from app.services.book_metadata import (
+    book_destination,
+    build_book_item_destination,
+)
 
 
 def _safe_path_part(value: str) -> str:
@@ -1339,6 +1342,8 @@ def _move_book_batch(
         if isinstance(item, dict) and item.get("include", True)
     ]
     collection = metadata.get("review_type") == "book_collection" or bool(items)
+    collection_title = metadata.get("collection_title")
+    keep_together = bool(metadata.get("keep_collection_together"))
     item_by_source = {
         str(item.get("source_file") or "").casefold(): item
         for item in items
@@ -1348,6 +1353,38 @@ def _move_book_batch(
     failed_files: list[str] = []
     planned: list[tuple[object, Path]] = []
     reserved: set[str] = set()
+    collection_destinations: dict[str, str] = {}
+
+    if collection:
+        for item in items:
+            destination = build_book_item_destination(
+                books_root=settings.books_dir,
+                item=item,
+                collection_title=(
+                    str(collection_title) if collection_title else None
+                ),
+                keep_collection_together=keep_together,
+            )
+            destination_key = _path_key(destination)
+            source_file = str(item.get("source_file") or "")
+            previous = collection_destinations.get(destination_key)
+            if previous:
+                failed_files.append(
+                    "Two included books resolve to the same destination: "
+                    f"{destination} ({previous}, {source_file})"
+                )
+            else:
+                collection_destinations[destination_key] = source_file
+
+    if failed_files:
+        warnings = list(metadata.get("metadata_warnings") or [])
+        warnings.append("book_collection_duplicate_destination")
+        metadata["metadata_warnings"] = list(dict.fromkeys(warnings))
+        batch.metadata_json = metadata
+        batch.status = "needs_metadata_review"
+        batch.updated_at = now_utc()
+        db.commit()
+        return [], failed_files
 
     for ingest_file in batch.files:
         source = Path(ingest_file.file_path)
@@ -1363,12 +1400,13 @@ def _move_book_batch(
             item = item_by_source.get(ingest_file.file_name.casefold())
             if not item:
                 continue
-            destination = book_destination(
-                str(item.get("format") or source.suffix.lstrip(".") or "EPUB"),
-                str(item.get("author") or "Unknown Author"),
-                str(item.get("title") or "Unknown Title"),
-                str(item.get("year") or "")[:4] or None,
-                settings.books_dir,
+            destination = build_book_item_destination(
+                books_root=settings.books_dir,
+                item=item,
+                collection_title=(
+                    str(collection_title) if collection_title else None
+                ),
+                keep_collection_together=keep_together,
             )
         else:
             destination = book_destination(

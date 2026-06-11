@@ -31,6 +31,7 @@ function readableLibraryPath(value?: string | null): string {
   const normalized = value.replace(/\\/g, "/");
   const lower = normalized.toLowerCase();
   for (const marker of [
+    "books/",
     "tv/library/",
     "movies/library/",
     "music/discographies/",
@@ -751,6 +752,12 @@ function BookBatchDetail({ batch, moveSummary }: Props) {
     ? metadata.book_items as Array<Record<string, unknown>>
     : [];
   const collection = metadata.review_type === "book_collection" || items.length > 0;
+  const keepTogether = Boolean(metadata.keep_collection_together);
+  const collectionDestination = String(
+    metadata.collection_destination_root
+    ?? items.find((item) => item.include !== false)?.destination_preview
+    ?? "-",
+  );
   return (
     <div className="batch-detail batch-detail--review">
       <ReviewStateCard batch={batch} />
@@ -775,6 +782,8 @@ function BookBatchDetail({ batch, moveSummary }: Props) {
             {!collection && <div><dt>Title</dt><dd>{String(metadata.title ?? "-")}</dd></div>}
             {!collection && <div><dt>Author</dt><dd>{String(metadata.author ?? "-")}</dd></div>}
             {!collection && <div><dt>Year</dt><dd>{String(metadata.year ?? "-")}</dd></div>}
+            {collection && <div><dt>Collection</dt><dd>{String(metadata.collection_title ?? "-")}</dd></div>}
+            {collection && <div><dt>Routing</dt><dd>{keepTogether ? "Collection folder" : "Author folders"}</dd></div>}
             <div><dt>Format</dt><dd>{String(metadata.format ?? "Mixed")}</dd></div>
             <div><dt>Book files</dt><dd>{String(metadata.book_file_count ?? batch.files.length)}</dd></div>
             <div><dt>Artwork</dt><dd>{String(metadata.artwork_count ?? 0)}</dd></div>
@@ -816,8 +825,12 @@ function BookBatchDetail({ batch, moveSummary }: Props) {
         </section>
       )}
       <section className="library-destination">
-        <span>Destination preview</span>
-        <strong>{collection ? "Each book uses its own Books/<Format>/<Author>/<Year - Title> folder" : readableLibraryPath(batch.suggested_destination)}</strong>
+        <span>{batch.status === "moved" ? "Final destination" : "Destination preview"}</span>
+        <strong>
+          {collection
+            ? readableLibraryPath(collectionDestination)
+            : readableLibraryPath(batch.suggested_destination)}
+        </strong>
       </section>
       <DebugDetails batch={batch} moveSummary={moveSummary} />
     </div>

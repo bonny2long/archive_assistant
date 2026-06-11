@@ -4,7 +4,11 @@ import sys
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "backend"))
 
-from app.services.book_metadata import is_book_artwork, parse_book_name
+from app.services.book_metadata import (
+    build_book_item_destination,
+    is_book_artwork,
+    parse_book_name,
+)
 
 
 def assert_subset(actual: dict, expected: dict, source: str) -> None:
@@ -81,6 +85,23 @@ def main() -> None:
     assert is_book_artwork(Path("Covers/Dune.jpg"))
     assert is_book_artwork(Path("cover.jpg"))
     assert not is_book_artwork(Path("notes.txt"))
+
+    item = {
+        "format": "EPUB",
+        "author": "Frank Herbert",
+        "title": "Dune",
+        "year": "1965",
+    }
+    assert build_book_item_destination(
+        books_root=Path("Books"),
+        item=item,
+    ) == Path("Books/EPUB/Frank Herbert/1965 - Dune")
+    assert build_book_item_destination(
+        books_root=Path("Books"),
+        item=item,
+        collection_title="Dune Series",
+        keep_collection_together=True,
+    ) == Path("Books/EPUB/Collections/Dune Series/1965 - Dune")
     print("books parse and collection review checks passed")
 
 

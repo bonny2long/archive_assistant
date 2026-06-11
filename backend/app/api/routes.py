@@ -62,7 +62,10 @@ from app.services.review_items import (
     build_review_items_for_movie_collection,
 )
 from app.services.review_state import build_review_state
-from app.services.book_metadata import book_destination
+from app.services.book_metadata import (
+    book_destination,
+    build_book_item_destination,
+)
 from app.core.config import settings
 from app.core.time import configured_timezone, now_local, now_utc, serialize_utc
 
@@ -756,6 +759,17 @@ def update_book_collection_review(
         raise HTTPException(status_code=400, detail="Moved batches cannot be edited")
 
     metadata = dict(batch.metadata_json or {})
+    collection_title = (
+        update.collection_title.strip()
+        if update.collection_title
+        else None
+    )
+    keep_together = bool(update.keep_collection_together)
+    if keep_together and not collection_title:
+        raise HTTPException(
+            status_code=400,
+            detail="Collection label is required when keeping a collection together.",
+        )
     items = []
     for item in update.books:
         title = item.title.strip()
@@ -766,14 +780,7 @@ def update_book_collection_review(
             if item.format
             else Path(item.source_file).suffix.lstrip(".").upper() or "EPUB"
         )
-        destination = book_destination(
-            book_format,
-            author,
-            title,
-            year,
-            settings.books_dir,
-        )
-        items.append({
+        item_metadata = {
             "item_kind": "book",
             "source_key": item.source_file,
             "source_file": item.source_file,
@@ -786,17 +793,44 @@ def update_book_collection_review(
                 item.series_index.strip() if item.series_index else None
             ),
             "format": book_format,
-            "destination_preview": str(destination) if item.include else None,
-        })
+        }
+        destination = build_book_item_destination(
+            books_root=settings.books_dir,
+            item=item_metadata,
+            collection_title=collection_title,
+            keep_collection_together=keep_together,
+        )
+        item_metadata["destination_path"] = (
+            str(destination) if item.include else None
+        )
+        item_metadata["destination_preview"] = (
+            destination.relative_to(settings.data_root).as_posix()
+            if item.include
+            else None
+        )
+        items.append(item_metadata)
 
+    collection_root = None
+    first_included = next(
+        (item for item in items if item.get("include", True)),
+        None,
+    )
+    if keep_together and first_included:
+        first_destination = build_book_item_destination(
+            books_root=settings.books_dir,
+            item=first_included,
+            collection_title=collection_title,
+            keep_collection_together=True,
+        )
+        collection_root = (
+            first_destination.parent.relative_to(settings.data_root).as_posix()
+        )
     metadata.update({
         "review_type": "book_collection",
         "review_mode": "item_list",
-        "collection_title": (
-            update.collection_title.strip()
-            if update.collection_title
-            else metadata.get("collection_title")
-        ),
+        "collection_title": collection_title,
+        "keep_collection_together": keep_together,
+        "collection_destination_root": collection_root,
         "book_items": items,
         "metadata_warnings": [
             warning
@@ -1483,6 +1517,10 @@ def _batch_to_summary(
         review_mode=meta.get("review_mode"),
         movie_items=list(meta.get("movie_items") or []),
         collection_title=meta.get("collection_title"),
+        keep_collection_together=meta.get("keep_collection_together"),
+        collection_destination_root=meta.get(
+            "collection_destination_root"
+        ),
         author=meta.get("author"),
         book_file_count=meta.get("book_file_count", 0),
         book_files=list(meta.get("book_files") or []),

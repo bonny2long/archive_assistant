@@ -40,6 +40,7 @@ BLOCKING_WARNING_TYPES = {
     "tv_review_file_sync_unmatched",
     "tv_review_count_mismatch",
     "tv_file_metadata_not_ready",
+    "book_collection_duplicate_destination",
 }
 
 
@@ -298,6 +299,7 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
         meta["review_type"] = "book_collection" if collection else "book"
         if collection:
             included = 0
+            destinations: dict[str, str] = {}
             for item in items:
                 if not isinstance(item, dict) or not item.get("include", True):
                     continue
@@ -310,6 +312,24 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
                 raw_year = str(item.get("year") or "").strip()
                 if raw_year and (len(raw_year) != 4 or not raw_year.isdigit()):
                     blocking.append(_item("book_item_invalid_year", "Book year must be four digits when provided.", file_name=source))
+                destination = str(
+                    item.get("destination_preview")
+                    or item.get("destination_path")
+                    or ""
+                ).strip()
+                if destination:
+                    destination_key = destination.replace("\\", "/").casefold()
+                    existing_source = destinations.get(destination_key)
+                    if existing_source:
+                        blocking.append(_item(
+                            "book_collection_duplicate_destination",
+                            "Two included books resolve to the same destination.",
+                            destination=destination.replace("\\", "/"),
+                            file_name=source,
+                            other_file_name=existing_source,
+                        ))
+                    else:
+                        destinations[destination_key] = source
             if items and included == 0:
                 blocking.append(_item("book_collection_no_included_items", "At least one book must be included before approval."))
         else:

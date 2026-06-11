@@ -95,6 +95,8 @@ export type BatchSummary = {
   review_mode?: string | null;
   movie_items?: MovieCollectionItem[];
   collection_title?: string | null;
+  keep_collection_together?: boolean | null;
+  collection_destination_root?: string | null;
   author?: string | null;
   book_file_count?: number;
   book_files?: string[];
@@ -263,6 +265,7 @@ export type BookCollectionItemUpdate = {
 
 export type BookCollectionReviewUpdate = {
   collection_title?: string | null;
+  keep_collection_together?: boolean;
   books: BookCollectionItemUpdate[];
   confirm_non_blocking_warnings?: boolean;
 };
