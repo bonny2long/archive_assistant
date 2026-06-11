@@ -1434,6 +1434,223 @@ button:focus-visible, input:focus-visible {
   font-size: 10px;
 }
 
+/* Book collection guided review */
+.review-summary {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 0.85rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  background: rgba(15, 23, 42, 0.55);
+}
+.review-summary p {
+  margin: 0.25rem 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.review-summary > span {
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.review-summary--warning { border-color: rgba(245, 158, 11, 0.45); }
+.review-summary--clean { border-color: rgba(34, 197, 94, 0.4); }
+
+.book-review-panel,
+.book-clean-preview,
+.book-all-editor {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 0.85rem;
+  background: rgba(15, 23, 42, 0.35);
+}
+.book-review-panel__header,
+.book-clean-preview__header,
+.book-repair-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+.book-review-panel__header p {
+  margin: 0.25rem 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.book-review-panel__actions,
+.book-bulk-tools {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  align-items: end;
+}
+.book-review-panel .btn-sm,
+.book-clean-state .btn-sm {
+  min-height: 32px;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-raised);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.book-review-panel .btn-sm:hover,
+.book-clean-state .btn-sm:hover {
+  border-color: rgba(59, 130, 246, 0.55);
+  background: var(--bg-hover);
+  color: #fff;
+}
+.book-review-panel .btn-sm:disabled,
+.book-clean-state .btn-sm:disabled {
+  border-color: var(--border);
+  background: rgba(30, 37, 53, 0.55);
+  color: var(--text-secondary);
+  opacity: 0.65;
+}
+.book-bulk-tools .btn-sm:last-child {
+  border-color: rgba(245, 158, 11, 0.45);
+  color: var(--accent-amber);
+}
+.book-bulk-tools {
+  margin-top: 0.85rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: rgba(2, 6, 23, 0.35);
+}
+.book-bulk-tools label {
+  min-width: 280px;
+  flex: 1;
+}
+.book-bulk-tools input { margin-top: 0.3rem; }
+
+.book-repair-list {
+  margin-top: 0.85rem;
+  display: grid;
+  gap: 0.75rem;
+}
+.book-repair-card {
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: rgba(2, 6, 23, 0.5);
+}
+.book-repair-card__header {
+  padding: 0.75rem;
+  background: rgba(30, 41, 59, 0.8);
+}
+.book-repair-card__header code {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--text-secondary);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.book-repair-card__fields {
+  padding: 0.75rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+.book-repair-card__fields label {
+  display: grid;
+  gap: 0.3rem;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.book-repair-card__fields input,
+.book-repair-card__fields select {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  color: var(--text-primary);
+}
+.book-repair-card__fields input:disabled,
+.book-repair-card__fields select:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.optional-metadata-fields {
+  border-top: 1px solid var(--border);
+}
+.optional-metadata-fields summary {
+  padding: 0.65rem 0.75rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+}
+.book-repair-card__dest {
+  border-top: 1px solid var(--border);
+  padding: 0.65rem 0.75rem;
+  background: rgba(30, 41, 59, 0.7);
+}
+.book-repair-card__dest span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.25rem;
+}
+.book-repair-card__dest code {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+}
+.book-clean-state {
+  margin-top: 0.85rem;
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.3rem;
+}
+.book-clean-state span { color: var(--text-secondary); }
+.book-clean-state .btn-sm {
+  justify-self: start;
+  margin-top: 0.35rem;
+}
+.book-clean-preview__header span { color: var(--text-secondary); }
+.book-clean-preview__table {
+  overflow-x: auto;
+  margin-top: 0.75rem;
+}
+.book-clean-preview table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.book-clean-preview th,
+.book-clean-preview td {
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+  font-size: 12px;
+}
+.book-clean-preview td code {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .book-repair-card__fields { grid-template-columns: 1fr; }
+  .review-summary,
+  .book-review-panel__header,
+  .book-clean-preview__header,
+  .book-repair-card__header {
+    flex-direction: column;
+  }
+  .review-summary > span { white-space: normal; }
+  .book-bulk-tools label { min-width: 100%; }
+}
+
 .tv-season-preview {
   display: flex;
   flex-direction: column;
