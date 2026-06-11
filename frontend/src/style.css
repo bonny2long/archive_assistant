@@ -1259,6 +1259,9 @@ button:focus-visible, input:focus-visible {
 .tv-repair-card--duplicate {
   border-color: var(--accent-amber);
 }
+.tv-repair-card--special {
+  border-color: var(--border-strong);
+}
 .tv-repair-card__header {
   display: flex;
   align-items: center;
@@ -1273,6 +1276,13 @@ button:focus-visible, input:focus-visible {
 .tv-repair-card--duplicate .tv-repair-card__header {
   background: rgba(245,158,11,0.06);
   color: var(--accent-amber);
+}
+.tv-repair-card--special .tv-repair-card__header {
+  background: rgba(59, 130, 246, 0.08);
+  color: var(--accent-blue);
+}
+.tv-repair-card--special .tv-repair-card__header i {
+  color: var(--accent-blue);
 }
 .tv-repair-card__body {
   padding: 0.85rem;

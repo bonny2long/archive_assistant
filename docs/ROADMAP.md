@@ -31,3 +31,8 @@
 - Books
 - Audiobooks
 - Internet Archive imports
+
+## Future metadata assist phase
+- Books: read EPUB/PDF metadata using EbookLib / pypdf / optional Calibre CLI.
+- Audiobooks: optional read-only metadata/chapter helpers using mutagen and/or external lookup.
+- All suggestions remain review-first. No automatic rename or move without user approval.

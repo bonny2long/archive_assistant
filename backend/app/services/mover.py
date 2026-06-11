@@ -20,6 +20,11 @@ from app.services.book_metadata import (
     build_book_item_destination,
 )
 from app.services.audiobook_metadata import audiobook_destination
+from app.services.library_manifest import (
+    _relative_library_path,
+    append_library_index_entry,
+    write_library_manifest,
+)
 
 
 def _safe_path_part(value: str) -> str:
@@ -28,6 +33,27 @@ def _safe_path_part(value: str) -> str:
 
 def _path_key(path: Path) -> str:
     return str(path.resolve()).casefold()
+
+
+def _safe_write_library_metadata(
+    destination: Path,
+    filename: str,
+    payload: dict,
+    index_dir: Path,
+    index_entry: dict,
+) -> None:
+    library_path = _relative_library_path(destination)
+    try:
+        write_library_manifest(destination, filename, payload)
+    except Exception as exc:
+        print(f"Failed to write library manifest for {destination}: {exc}")
+    try:
+        append_library_index_entry(
+            index_dir,
+            {"library_path": library_path, **index_entry},
+        )
+    except Exception as exc:
+        print(f"Failed to update library index for {destination}: {exc}")
 
 
 def _unique_artwork_destination(
@@ -182,6 +208,10 @@ def _move_movie_batch(
         role_by_source.get(action.source_path)
         for action in completed_actions
     ]
+    role_by_destination = {
+        action.destination_path: role_by_source.get(action.source_path)
+        for action in completed_actions
+    }
     (metadata_dir / f"batch-{batch.id}-movie-move-log.json").write_text(
         json.dumps(
             {
@@ -218,6 +248,51 @@ def _move_movie_batch(
         ),
         encoding="utf-8",
     )
+    if moved_files and not failed_files:
+        video_files = [
+            path
+            for path in moved_files
+            if role_by_destination.get(path) == "video_file"
+        ]
+        _safe_write_library_metadata(
+            destination,
+            "movie.json",
+            {
+                "media_kind": "movie",
+                "title": metadata.get("title") or title,
+                "year": metadata.get("year") or year or None,
+                "edition": metadata.get("edition") or None,
+                "format": metadata.get("format"),
+                "source_path": batch.source_path,
+                "primary_video_file": (
+                    Path(video_files[0]).name if video_files else None
+                ),
+                "video_file_count": sum(
+                    role == "video_file" for role in completed_roles
+                ),
+                "artwork_count": sum(
+                    role == "movie_artwork" for role in completed_roles
+                ),
+                "subtitle_count": sum(
+                    role == "subtitle" for role in completed_roles
+                ),
+                "metadata_quality": metadata.get("metadata_quality", "reviewed"),
+                "review_confirmed": bool(
+                    batch.metadata_confirmed
+                    or metadata.get("review_confirmed")
+                ),
+                "batch_id": batch.id,
+            },
+            settings.movies_metadata_dir,
+            {
+                "media_kind": "movie",
+                "title": metadata.get("title") or title,
+                "year": metadata.get("year") or year or None,
+                "edition": metadata.get("edition") or None,
+                "format": metadata.get("format"),
+                "batch_id": batch.id,
+            },
+        )
     return moved_files, failed_files
 
 
@@ -333,6 +408,40 @@ def _move_movie_collection_batch(
                     indent=2,
                 ),
                 encoding="utf-8",
+            )
+            _safe_write_library_metadata(
+                movie_folder,
+                "movie.json",
+                {
+                    "media_kind": "movie",
+                    "title": title,
+                    "year": year,
+                    "edition": edition or None,
+                    "format": item.get("format"),
+                    "source_path": str(source),
+                    "primary_video_file": destination_file.name,
+                    "video_file_count": 1,
+                    "artwork_count": 0,
+                    "subtitle_count": 0,
+                    "metadata_quality": item.get(
+                        "metadata_quality",
+                        metadata.get("metadata_quality", "reviewed"),
+                    ),
+                    "review_confirmed": bool(
+                        batch.metadata_confirmed
+                        or metadata.get("review_confirmed")
+                    ),
+                    "batch_id": batch.id,
+                },
+                settings.movies_metadata_dir,
+                {
+                    "media_kind": "movie",
+                    "title": title,
+                    "year": year,
+                    "edition": edition or None,
+                    "format": item.get("format"),
+                    "batch_id": batch.id,
+                },
             )
         except Exception as exc:
             action.status = "failed"
@@ -790,6 +899,49 @@ def _move_tv_batch(
         ),
         encoding="utf-8",
     )
+    if moved_files and not failed_files:
+        _safe_write_library_metadata(
+            destination,
+            "tv-show.json",
+            {
+                "media_kind": "tv_show",
+                "show_title": show_title,
+                "year": metadata.get("year"),
+                "season_count": metadata.get("season_count", 0),
+                "episode_count": metadata.get("episode_count", 0),
+                "special_episode_count": metadata.get(
+                    "special_episode_count",
+                    0,
+                ),
+                "video_file_count": metadata.get(
+                    "video_file_count",
+                    sum(role == "tv_episode" for role in completed_roles),
+                ),
+                "format": metadata.get("format"),
+                "metadata_quality": metadata.get(
+                    "metadata_quality",
+                    "reviewed",
+                ),
+                "review_confirmed": bool(
+                    batch.metadata_confirmed
+                    or metadata.get("review_confirmed")
+                ),
+                "batch_id": batch.id,
+            },
+            settings.tv_metadata_dir,
+            {
+                "media_kind": "tv_show",
+                "show_title": show_title,
+                "year": metadata.get("year"),
+                "season_count": metadata.get("season_count", 0),
+                "episode_count": metadata.get("episode_count", 0),
+                "special_episode_count": metadata.get(
+                    "special_episode_count",
+                    0,
+                ),
+                "batch_id": batch.id,
+            },
+        )
     return moved_files, failed_files
 
 
@@ -1085,6 +1237,46 @@ def _move_discography_batch(
         ),
         encoding="utf-8",
     )
+    if moved_files and not failed_files:
+        track_count = sum(
+            not is_artwork_file(Path(path)) for path in moved_files
+        )
+        _safe_write_library_metadata(
+            destination,
+            "discography.json",
+            {
+                "media_kind": "music_discography",
+                "artist": metadata.get("artist"),
+                "release_count": metadata.get(
+                    "release_count",
+                    sum(release_type_counts.values()),
+                ),
+                "track_count": metadata.get("track_count", track_count),
+                "albums_completed": release_type_counts.get("album", 0),
+                "singles_completed": release_type_counts.get("single", 0),
+                "eps_completed": release_type_counts.get("ep", 0),
+                "metadata_quality": metadata.get(
+                    "metadata_quality",
+                    "reviewed",
+                ),
+                "review_confirmed": bool(
+                    batch.metadata_confirmed
+                    or metadata.get("review_confirmed")
+                ),
+                "batch_id": batch.id,
+            },
+            settings.music_metadata_dir,
+            {
+                "media_kind": "music_discography",
+                "artist": metadata.get("artist"),
+                "release_count": metadata.get(
+                    "release_count",
+                    sum(release_type_counts.values()),
+                ),
+                "track_count": metadata.get("track_count", track_count),
+                "batch_id": batch.id,
+            },
+        )
     return moved_files, quarantined_files, failed_files
 
 
@@ -1429,6 +1621,51 @@ def _move_audiobook_batch(
             ),
             encoding="utf-8",
         )
+        if not failed_files:
+            audio_file_count = metadata.get(
+                "audiobook_file_count",
+                sum(
+                    ingest_file.detected_role == "audiobook_audio"
+                    for ingest_file in batch.files
+                ),
+            )
+            _safe_write_library_metadata(
+                destination,
+                "audiobook.json",
+                {
+                    "media_kind": "audiobook",
+                    "author": metadata.get("author"),
+                    "title": metadata.get("title"),
+                    "year": metadata.get("year"),
+                    "narrator": metadata.get("narrator"),
+                    "series": metadata.get("series"),
+                    "series_index": metadata.get("series_index"),
+                    "format": metadata.get("format"),
+                    "audio_file_count": audio_file_count,
+                    "chapter_count": metadata.get(
+                        "chapter_count",
+                        audio_file_count,
+                    ),
+                    "metadata_quality": metadata.get(
+                        "metadata_quality",
+                        "reviewed",
+                    ),
+                    "review_confirmed": bool(
+                        batch.metadata_confirmed
+                        or metadata.get("review_confirmed")
+                    ),
+                    "batch_id": batch.id,
+                },
+                settings.audiobooks_metadata_dir,
+                {
+                    "media_kind": "audiobook",
+                    "author": metadata.get("author"),
+                    "title": metadata.get("title"),
+                    "year": metadata.get("year"),
+                    "narrator": metadata.get("narrator"),
+                    "batch_id": batch.id,
+                },
+            )
     return moved_files, failed_files
 
 
@@ -1583,6 +1820,63 @@ def _move_book_batch(
                 indent=2,
             ),
             encoding="utf-8",
+        )
+        destination_files = [
+            Path(path)
+            for path in moved_files
+            if Path(path).parent == destination
+        ]
+        primary_file = destination_files[0] if destination_files else None
+        item = (
+            item_by_source.get(primary_file.name.casefold(), {})
+            if primary_file
+            else {}
+        )
+        _safe_write_library_metadata(
+            destination,
+            "book.json",
+            {
+                "media_kind": "book",
+                "title": item.get("title") or metadata.get("title"),
+                "author": item.get("author") or metadata.get("author"),
+                "year": item.get("year") or metadata.get("year"),
+                "format": (
+                    item.get("format")
+                    or metadata.get("format")
+                    or (
+                        primary_file.suffix.lstrip(".").upper()
+                        if primary_file
+                        else None
+                    )
+                ),
+                "source_path": batch.source_path,
+                "metadata_quality": item.get(
+                    "metadata_quality",
+                    metadata.get("metadata_quality", "reviewed"),
+                ),
+                "review_confirmed": bool(
+                    batch.metadata_confirmed
+                    or metadata.get("review_confirmed")
+                ),
+                "batch_id": batch.id,
+            },
+            settings.books_metadata_dir,
+            {
+                "media_kind": "book",
+                "title": item.get("title") or metadata.get("title"),
+                "author": item.get("author") or metadata.get("author"),
+                "year": item.get("year") or metadata.get("year"),
+                "format": (
+                    item.get("format")
+                    or metadata.get("format")
+                    or (
+                        primary_file.suffix.lstrip(".").upper()
+                        if primary_file
+                        else None
+                    )
+                ),
+                "batch_id": batch.id,
+            },
         )
     return moved_files, failed_files
 
@@ -1989,6 +2283,65 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
             db.flush()
 
             _write_move_log(batch, album_meta, moved_files, failed_files)
+            if moved_files and not failed_files:
+                track_count = sum(
+                    not is_artwork_file(Path(path)) for path in moved_files
+                )
+                artwork_count = sum(
+                    is_artwork_file(Path(path)) for path in moved_files
+                )
+                _safe_write_library_metadata(
+                    destination_dir,
+                    "music-album.json",
+                    {
+                        "media_kind": "music_album",
+                        "artist": (
+                            album_meta.get("artist")
+                            or album_meta.get("album_artist")
+                        ),
+                        "album": album_meta.get("album"),
+                        "year": album_meta.get("year"),
+                        "genre": album_meta.get("genre"),
+                        "format": album_meta.get(
+                            "format",
+                            _format_bucket_for_path(destination_dir),
+                        ),
+                        "track_count": album_meta.get(
+                            "track_count",
+                            track_count,
+                        ),
+                        "disc_count": album_meta.get("disc_count", 1),
+                        "artwork_count": album_meta.get(
+                            "artwork_count",
+                            artwork_count,
+                        ),
+                        "metadata_quality": album_meta.get(
+                            "metadata_quality",
+                            "reviewed",
+                        ),
+                        "review_confirmed": bool(
+                            batch.metadata_confirmed
+                            or album_meta.get("review_confirmed")
+                        ),
+                        "batch_id": batch.id,
+                    },
+                    settings.music_metadata_dir,
+                    {
+                        "media_kind": "music_album",
+                        "artist": (
+                            album_meta.get("artist")
+                            or album_meta.get("album_artist")
+                        ),
+                        "album": album_meta.get("album"),
+                        "year": album_meta.get("year"),
+                        "genre": album_meta.get("genre"),
+                        "format": album_meta.get(
+                            "format",
+                            _format_bucket_for_path(destination_dir),
+                        ),
+                        "batch_id": batch.id,
+                    },
+                )
 
             for dest_path in moved_files:
                 dest = Path(dest_path)
