@@ -1,0 +1,288 @@
+from __future__ import annotations
+
+from pathlib import Path
+import re
+
+AUDIOBOOK_EXTENSIONS = {
+    ".mp3", ".m4b", ".m4a", ".aac", ".flac", ".wav", ".ogg", ".opus",
+}
+AUDIOBOOK_SIDECAR_EXTENSIONS = {
+    ".cue", ".m3u", ".m3u8", ".nfo", ".json", ".xml", ".txt", ".log",
+}
+AUDIOBOOK_ARTWORK_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+AUDIOBOOK_HINT_RE = re.compile(
+    r"\b(audio\s*book|audiobook|unabridged|abridged|audible|"
+    r"narrated|narrator|read\s+by)\b",
+    re.I,
+)
+CHAPTER_HINT_RE = re.compile(
+    r"\b(chapter|chap|ch\.?|part|pt\.?|disc|disk|cd)\s*0*\d+\b",
+    re.I,
+)
+YEAR_RE = re.compile(r"(?:\(|\[|\b)((?:19|20)\d{2})(?:\)|\]|\b)")
+BY_AUTHOR_RE = re.compile(
+    r"\bby\s+(?P<author>[A-Z][A-Za-z0-9 .,&'\u2019\-]+)$",
+    re.I,
+)
+READ_BY_RE = re.compile(
+    r"\b(?:read|narrated)\s+by\s+"
+    r"(?P<narrator>[A-Z][A-Za-z0-9 .,&'\u2019\-]+)$",
+    re.I,
+)
+UNKNOWN_AUDIOBOOK_VALUES = {
+    "", "unknown", "unknown author", "unknown title", "unkn",
+}
+
+
+def is_audiobook_audio_file(path: Path) -> bool:
+    return path.is_file() and path.suffix.casefold() in AUDIOBOOK_EXTENSIONS
+
+
+def is_audiobook_artwork(path: Path) -> bool:
+    if path.suffix.casefold() not in AUDIOBOOK_ARTWORK_EXTENSIONS:
+        return False
+    if path.stem.casefold() in {
+        "cover", "folder", "front", "audiobook", "book",
+    }:
+        return True
+    return any(
+        part.casefold() in {"cover", "covers", "artwork", "images"}
+        for part in path.parts
+    )
+
+
+def is_audiobook_sidecar(path: Path) -> bool:
+    return path.is_file() and path.suffix.casefold() in AUDIOBOOK_SIDECAR_EXTENSIONS
+
+
+def audiobook_format_for(paths: list[Path]) -> str:
+    extensions = {path.suffix.casefold() for path in paths}
+    if ".m4b" in extensions:
+        return "M4B"
+    if len(extensions) == 1:
+        return next(iter(extensions)).lstrip(".").upper()
+    return "Mixed"
+
+
+def safe_audiobook_path_part(value: str) -> str:
+    cleaned = "".join(c if c not in '<>:"/\\|?*' else "_" for c in value)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" .")
+    return cleaned or "Unknown"
+
+
+def _strip_audio_noise(value: str) -> str:
+    text = re.sub(
+        r"\[(?:audiobook|audio\s*book|unabridged|abridged|audible|"
+        r"mp3|m4b|m4a|flac)\]",
+        " ",
+        value,
+        flags=re.I,
+    )
+    text = re.sub(
+        r"\b(?:audiobook|audio\s*book|unabridged|abridged|audible|"
+        r"mp3|m4b|m4a|flac)\b",
+        " ",
+        text,
+        flags=re.I,
+    )
+    return re.sub(r"\s+", " ", text).strip(" -_.")
+
+
+def _extract_year(text: str) -> tuple[str, str | None]:
+    match = YEAR_RE.search(text)
+    if not match:
+        return text.strip(" -_."), None
+    year = match.group(1)
+    cleaned = (text[:match.start()] + text[match.end():]).strip(" -_.")
+    return re.sub(r"\s+", " ", cleaned), year
+
+
+def parse_audiobook_name(value: str) -> dict:
+    candidate = Path(value)
+    raw = (
+        candidate.stem
+        if candidate.suffix.casefold() in AUDIOBOOK_EXTENSIONS
+        else value
+    )
+    text = _strip_audio_noise(raw)
+    narrator = None
+    read_by = READ_BY_RE.search(text)
+    if read_by:
+        narrator = read_by.group("narrator").strip()
+        text = text[:read_by.start()].strip(" -_.")
+    text, year = _extract_year(text)
+
+    by_match = BY_AUTHOR_RE.search(text)
+    if by_match:
+        author = by_match.group("author").strip()
+        title = text[:by_match.start()].strip(" -_.") or "Unknown Title"
+    else:
+        parts = [part.strip() for part in text.split(" - ") if part.strip()]
+        if len(parts) >= 2:
+            author = parts[-1]
+            title = " - ".join(parts[:-1])
+        else:
+            author = "Unknown Author"
+            title = text or "Unknown Title"
+    return {
+        "author": author or "Unknown Author",
+        "title": title or "Unknown Title",
+        "year": year,
+        "narrator": narrator,
+        "series": None,
+        "series_index": None,
+        "raw_name": raw,
+    }
+
+
+def looks_like_audiobook_source(path: Path) -> bool:
+    candidates = [path] if path.is_file() else [
+        candidate for candidate in path.rglob("*") if candidate.is_file()
+    ]
+    audio_files = [
+        candidate for candidate in candidates
+        if is_audiobook_audio_file(candidate)
+    ]
+    if not audio_files:
+        return False
+    if any(candidate.suffix.casefold() == ".m4b" for candidate in audio_files):
+        return True
+    if AUDIOBOOK_HINT_RE.search(path.name):
+        return True
+    chapterish = [
+        candidate
+        for candidate in audio_files
+        if CHAPTER_HINT_RE.search(candidate.stem)
+    ]
+    explicit_chapters = [
+        candidate
+        for candidate in chapterish
+        if re.search(r"\b(chapter|chap|ch\.?|part|pt\.?)\s*0*\d+\b",
+                     candidate.stem, flags=re.I)
+    ]
+    if len(audio_files) >= 2 and len(explicit_chapters) >= max(
+        2, len(audio_files) // 2
+    ):
+        return True
+    parsed = parse_audiobook_name(path.name)
+    return (
+        len(audio_files) >= 3
+        and len(chapterish) >= max(2, len(audio_files) // 2)
+        and parsed["author"] != "Unknown Author"
+    )
+
+
+def collect_audiobook_files(root: Path) -> dict[str, list[Path]]:
+    candidates = [root] if root.is_file() else [
+        path for path in root.rglob("*") if path.is_file()
+    ]
+    audio = sorted(path for path in candidates if is_audiobook_audio_file(path))
+    artwork = sorted(path for path in candidates if is_audiobook_artwork(path))
+    sidecars = sorted(path for path in candidates if is_audiobook_sidecar(path))
+    recognized = {path.resolve() for path in [*audio, *artwork, *sidecars]}
+    other = sorted(path for path in candidates if path.resolve() not in recognized)
+    return {
+        "audio": audio,
+        "artwork": artwork,
+        "sidecars": sidecars,
+        "other": other,
+    }
+
+
+def audiobook_destination(
+    *,
+    audiobooks_root: Path,
+    author: str,
+    title: str,
+    year: str | None,
+) -> Path:
+    return (
+        audiobooks_root
+        / safe_audiobook_path_part(author)
+        / safe_audiobook_path_part(f"{year or 'Unknown Year'} - {title}")
+    )
+
+
+def build_audiobook_metadata(source: Path, audiobooks_root: Path) -> dict:
+    files = collect_audiobook_files(source)
+    audio = files["audio"]
+    primary = sorted(audio, key=lambda path: path.name.casefold())[0]
+    source_guess = parse_audiobook_name(
+        source.name if source.is_dir() else primary.name
+    )
+    file_guess = parse_audiobook_name(primary.name)
+    author = (
+        source_guess["author"]
+        if source_guess["author"] != "Unknown Author"
+        else file_guess["author"]
+    )
+    title = (
+        source_guess["title"]
+        if source_guess["title"] != "Unknown Title"
+        else file_guess["title"]
+    )
+    year = source_guess.get("year") or file_guess.get("year")
+    narrator = source_guess.get("narrator") or file_guess.get("narrator")
+    fmt = audiobook_format_for(audio)
+    destination = audiobook_destination(
+        audiobooks_root=audiobooks_root,
+        author=author,
+        title=title,
+        year=year,
+    )
+    warnings = []
+    if author.strip().casefold() in UNKNOWN_AUDIOBOOK_VALUES:
+        warnings.append("audiobook_author_missing")
+    if title.strip().casefold() in UNKNOWN_AUDIOBOOK_VALUES:
+        warnings.append("audiobook_title_missing")
+    if not year:
+        warnings.append("audiobook_year_missing")
+    if not narrator:
+        warnings.append("audiobook_narrator_missing")
+    if files["other"]:
+        warnings.append("audiobook_ignored_sidecars_present")
+    return {
+        "media_kind": "audiobook",
+        "review_type": "audiobook",
+        "review_mode": "single_item",
+        "author": author,
+        "title": title,
+        "year": year,
+        "narrator": narrator,
+        "series": source_guess.get("series") or file_guess.get("series"),
+        "series_index": (
+            source_guess.get("series_index")
+            or file_guess.get("series_index")
+        ),
+        "format": fmt,
+        "audiobook_file_count": len(audio),
+        "chapter_count": len(audio),
+        "audio_files": [
+            str(path.relative_to(source)) if source.is_dir() else path.name
+            for path in audio
+        ],
+        "primary_audio_file": primary.name,
+        "artwork_count": len(files["artwork"]),
+        "artwork_files": [
+            str(path.relative_to(source)) if source.is_dir() else path.name
+            for path in files["artwork"]
+        ],
+        "ignored_sidecar_count": len(files["sidecars"]) + len(files["other"]),
+        "ignored_sidecar_files": [
+            str(path.relative_to(source)) if source.is_dir() else path.name
+            for path in [*files["sidecars"], *files["other"]]
+        ],
+        "original_release_name": source.name,
+        "suggested_destination_preview": str(destination),
+        "metadata_quality": (
+            "good"
+            if author != "Unknown Author" and title != "Unknown Title"
+            else "weak"
+        ),
+        "metadata_warnings": warnings,
+        "confidence": (
+            0.85
+            if author != "Unknown Author" and title != "Unknown Title"
+            else 0.65
+        ),
+    }

@@ -20,6 +20,16 @@ export function getReleaseCount(batch: DisplayBatch): number {
 }
 
 export function getBatchDisplayTitle(batch: DisplayBatch): string {
+  if (batch.detected_type === "audiobook") {
+    const author = ("author" in batch ? batch.author : null)
+      ?? batch.suggested_metadata?.author
+      ?? metadataValue(batch, "author")
+      ?? "Unknown Author";
+    const title = ("title" in batch ? batch.title : null)
+      ?? metadataValue(batch, "title")
+      ?? "Unknown Title";
+    return `${String(author)} - ${String(title)}`;
+  }
   if (batch.detected_type === "book") {
     const title = ("title" in batch ? batch.title : null)
       ?? metadataValue(batch, "title")
@@ -86,6 +96,7 @@ export function getBatchMediaLabel(batch: DisplayBatch): string {
   if (batch.detected_type === "video_movie") return "Movie";
   if (batch.detected_type === "video_tv_show") return "TV Show";
   if (batch.detected_type === "book") return "Book";
+  if (batch.detected_type === "audiobook") return "Audiobook";
   return "Quarantine Review";
 }
 
@@ -149,6 +160,14 @@ export function getBatchPrimaryName(batch: DisplayBatch): string {
       ?? "Unknown Title",
     );
   }
+  if (batch.detected_type === "audiobook") {
+    return String(
+      ("author" in batch ? batch.author : null)
+      ?? batch.suggested_metadata?.author
+      ?? metadataValue(batch, "author")
+      ?? "Unknown Author",
+    );
+  }
   if (batch.detected_type === "unknown_type" || batch.detected_type === "unsupported_file") {
     return String(
       ("name" in batch ? batch.name : null)
@@ -192,6 +211,20 @@ export function getBatchSecondaryName(batch: DisplayBatch): string {
       ?? "Unknown Author";
     const year = ("year" in batch ? batch.year : null) ?? metadataValue(batch, "year");
     return year ? `${String(author)} · ${String(year)}` : String(author);
+  }
+  if (batch.detected_type === "audiobook") {
+    const title = ("title" in batch ? batch.title : null)
+      ?? metadataValue(batch, "title")
+      ?? "Unknown Title";
+    const narrator = ("narrator" in batch ? batch.narrator : null)
+      ?? metadataValue(batch, "narrator");
+    const year = ("year" in batch ? batch.year : null)
+      ?? metadataValue(batch, "year");
+    return [
+      String(title),
+      narrator ? `Narrated by ${String(narrator)}` : null,
+      year ? String(year) : null,
+    ].filter(Boolean).join(" · ");
   }
   if (batch.detected_type === "unknown_type" || batch.detected_type === "unsupported_file") {
     const fileCount = "file_count" in batch ? batch.file_count : metadataValue(batch, "file_count");
@@ -241,6 +274,12 @@ export function getBatchItemText(batch: DisplayBatch): string {
       : Number(metadataValue(batch, "book_file_count") ?? 0);
     return `${count} ${count === 1 ? "book file" : "book files"}`;
   }
+  if (batch.detected_type === "audiobook") {
+    const count = "audiobook_file_count" in batch
+      ? Number(batch.audiobook_file_count ?? 0)
+      : Number(metadataValue(batch, "audiobook_file_count") ?? 0);
+    return `${count} ${count === 1 ? "audio file" : "audio files"}`;
+  }
   if (batch.detected_type === "unknown_type" || batch.detected_type === "unsupported_file") {
     const count = "file_count" in batch
       ? batch.file_count
@@ -262,5 +301,6 @@ export function getBatchEditKind(batch: BatchSummary): string | null {
   if (batch.detected_type === "book") {
     return batch.review_type === "book_collection" ? "book_collection" : "book";
   }
+  if (batch.detected_type === "audiobook") return "audiobook";
   return null;
 }

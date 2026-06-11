@@ -1,5 +1,6 @@
 import type {
   BatchSummary,
+  AudiobookMetadataUpdate,
   BatchMetadataUpdate,
   BookCollectionReviewUpdate,
   BookMetadataUpdate,
@@ -16,6 +17,7 @@ import MovieCollectionEditor from "./MovieCollectionEditor";
 import TvMetadataEditor from "./TvMetadataEditor";
 import BookMetadataEditor from "./BookMetadataEditor";
 import BookCollectionEditor from "./BookCollectionEditor";
+import AudiobookMetadataEditor from "./AudiobookMetadataEditor";
 
 type Props = {
   batch: BatchSummary;
@@ -26,6 +28,7 @@ type Props = {
   onMovieCollectionSave: (update: MovieCollectionReviewUpdate) => Promise<void>;
   onBookSave: (update: BookMetadataUpdate) => Promise<void>;
   onBookCollectionSave: (update: BookCollectionReviewUpdate) => Promise<void>;
+  onAudiobookSave: (update: AudiobookMetadataUpdate) => Promise<void>;
   onTvSave: (update: TvMetadataUpdate) => Promise<void>;
   onTvEpisodeReviewSave: (update: TvEpisodeReviewUpdate) => Promise<void>;
   onConfirm: () => Promise<void>;
@@ -41,6 +44,7 @@ export default function MediaReviewRouter({
   onMovieCollectionSave,
   onBookSave,
   onBookCollectionSave,
+  onAudiobookSave,
   onTvSave,
   onTvEpisodeReviewSave,
   onConfirm,
@@ -136,6 +140,18 @@ export default function MediaReviewRouter({
         batch={batch}
         saving={saving}
         onSave={onBookSave}
+        onConfirm={onConfirm}
+        onClose={onClose}
+      />
+    );
+  }
+
+  if (detected_type === "audiobook") {
+    return (
+      <AudiobookMetadataEditor
+        batch={batch}
+        saving={saving}
+        onSave={onAudiobookSave}
         onConfirm={onConfirm}
         onClose={onClose}
       />

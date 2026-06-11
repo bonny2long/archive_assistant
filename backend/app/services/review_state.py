@@ -23,6 +23,7 @@ REVIEW_TYPES = {
     "video_movie_collection": "movie_collection",
     "video_tv_show": "tv_show",
     "book": "book",
+    "audiobook": "audiobook",
     "unknown_type": "quarantine",
     "unsupported_file": "quarantine",
 }
@@ -342,6 +343,37 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
                 blocking.append(_item("book_year_invalid", "Book year must be four digits when provided."))
             if not raw_year:
                 non_blocking.append(_item("book_year_missing", "Book year is missing; destination will use Unknown Year."))
+    elif detected_type == "audiobook":
+        meta["review_type"] = "audiobook"
+        meta["review_mode"] = "single_item"
+        author = str(meta.get("author") or "").strip().casefold()
+        title = str(meta.get("title") or "").strip().casefold()
+        raw_year = str(meta.get("year") or "").strip()
+        if author in {"", "unknown author", "unknown", "unkn"}:
+            blocking.append(_item(
+                "audiobook_author_missing",
+                "Audiobook author is required before approval.",
+            ))
+        if title in {"", "unknown title", "unknown", "unkn"}:
+            blocking.append(_item(
+                "audiobook_title_missing",
+                "Audiobook title is required before approval.",
+            ))
+        if raw_year and (len(raw_year) != 4 or not raw_year.isdigit()):
+            blocking.append(_item(
+                "audiobook_year_invalid",
+                "Audiobook year must be four digits when provided.",
+            ))
+        if not raw_year:
+            non_blocking.append(_item(
+                "audiobook_year_missing",
+                "Audiobook year is missing; destination will use Unknown Year.",
+            ))
+        if not str(meta.get("narrator") or "").strip():
+            non_blocking.append(_item(
+                "audiobook_narrator_missing",
+                "Narrator is missing.",
+            ))
     elif detected_type in {"unknown_type", "unsupported_file"}:
         blocking.append(_item(
             "quarantine_review_required",

@@ -14,6 +14,7 @@ from app.schemas.archive import (
     BatchReview,
     BatchReviewTrack,
     BatchSummary, 
+    AudiobookMetadataUpdate,
     BookCollectionReviewUpdate,
     BookMetadataUpdate,
     DiscographyMetadataUpdate,
@@ -66,6 +67,7 @@ from app.services.book_metadata import (
     book_destination,
     build_book_item_destination,
 )
+from app.services.audiobook_metadata import audiobook_destination
 from app.core.config import settings
 from app.core.time import configured_timezone, now_local, now_utc, serialize_utc
 
@@ -111,6 +113,8 @@ def scan_music(db: Session = Depends(get_db)):
         subtitle_files_found=result.subtitle_files_found,
         book_batches_found=result.book_batches_found,
         book_files_found=result.book_files_found,
+        audiobook_batches_found=result.audiobook_batches_found,
+        audiobook_files_found=result.audiobook_files_found,
     )
 
 
@@ -861,6 +865,109 @@ def update_book_collection_review(
     )
 
 
+@router.patch("/batches/{batch_id}/audiobook-metadata", response_model=BatchSummary)
+def update_audiobook_metadata(
+    batch_id: int,
+    update: AudiobookMetadataUpdate,
+    db: Session = Depends(get_db),
+):
+    batch = db.get(IngestBatch, batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    if batch.detected_type != "audiobook":
+        raise HTTPException(status_code=400, detail="Batch is not an audiobook")
+    if batch.status in {"moved", "merged"}:
+        raise HTTPException(status_code=400, detail="Moved batches cannot be edited")
+
+    author = update.author.strip()
+    title = update.title.strip()
+    year = update.year.strip() if update.year else None
+    narrator = update.narrator.strip() if update.narrator else None
+    series = update.series.strip() if update.series else None
+    series_index = (
+        update.series_index.strip() if update.series_index else None
+    )
+    metadata = dict(batch.metadata_json or {})
+    audio_format = (
+        update.format.strip().upper()
+        if update.format
+        else str(metadata.get("format") or "MP3").upper()
+    )
+    destination = audiobook_destination(
+        audiobooks_root=settings.audiobooks_dir,
+        author=author,
+        title=title,
+        year=year,
+    )
+    warnings = [
+        warning
+        for warning in metadata.get("metadata_warnings", [])
+        if warning not in {
+            "audiobook_author_missing",
+            "audiobook_title_missing",
+            "audiobook_year_missing",
+            "audiobook_year_invalid",
+            "audiobook_narrator_missing",
+        }
+    ]
+    if not year:
+        warnings.append("audiobook_year_missing")
+    if not narrator:
+        warnings.append("audiobook_narrator_missing")
+    metadata.update({
+        "media_kind": "audiobook",
+        "review_type": "audiobook",
+        "review_mode": "single_item",
+        "author": author,
+        "title": title,
+        "year": year,
+        "narrator": narrator,
+        "series": series,
+        "series_index": series_index,
+        "format": audio_format,
+        "note": update.note.strip() if update.note else None,
+        "suggested_destination_preview": str(destination),
+        "metadata_quality": "good",
+        "metadata_warnings": list(dict.fromkeys(warnings)),
+        "confidence": 1.0,
+        "review_confirmed": True,
+    })
+    metadata = build_review_state("audiobook", metadata)
+    batch.metadata_json = metadata
+    batch.suggested_metadata = {
+        "author": author,
+        "title": title,
+        "year": year,
+        "narrator": narrator,
+        "series": series,
+        "series_index": series_index,
+        "format": audio_format,
+        "sources": {
+            "author": "manual correction",
+            "title": "manual correction",
+            "year": "manual correction",
+            "narrator": "manual correction",
+            "series": "manual correction",
+            "series_index": "manual correction",
+            "format": "manual correction",
+        },
+    }
+    batch.suggested_destination = str(destination)
+    batch.metadata_confirmed = not bool(metadata["blocking_review_items"])
+    batch.confidence = metadata["confidence"]
+    batch.status = (
+        "needs_metadata_review"
+        if metadata["blocking_review_items"]
+        else "pending_review"
+    )
+    batch.updated_at = now_utc()
+    db.commit()
+    return _batch_to_summary(
+        batch,
+        action_message="Audiobook metadata saved.",
+    )
+
+
 @router.patch("/batches/{batch_id}/discography", response_model=BatchSummary)
 def update_discography_metadata(
     batch_id: int,
@@ -1526,6 +1633,13 @@ def _batch_to_summary(
         book_files=list(meta.get("book_files") or []),
         primary_book_file=meta.get("primary_book_file"),
         book_items=list(meta.get("book_items") or []),
+        narrator=meta.get("narrator"),
+        series=meta.get("series"),
+        series_index=meta.get("series_index"),
+        audiobook_file_count=meta.get("audiobook_file_count", 0),
+        audio_files=list(meta.get("audio_files") or []),
+        primary_audio_file=meta.get("primary_audio_file"),
+        chapter_count=meta.get("chapter_count", 0),
         suggested_destination=batch.suggested_destination,
         suggested_metadata=batch.suggested_metadata,
         metadata_confirmed=batch.metadata_confirmed,

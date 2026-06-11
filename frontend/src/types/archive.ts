@@ -102,6 +102,13 @@ export type BatchSummary = {
   book_files?: string[];
   primary_book_file?: string | null;
   book_items?: BookCollectionItem[];
+  narrator?: string | null;
+  series?: string | null;
+  series_index?: string | null;
+  audiobook_file_count?: number;
+  audio_files?: string[];
+  primary_audio_file?: string | null;
+  chapter_count?: number;
   suggested_destination?: string | null;
   suggested_metadata?: SuggestedMetadata | null;
   metadata_confirmed: boolean;
@@ -123,6 +130,9 @@ export type SuggestedMetadata = {
   genre?: string | null;
   title?: string | null;
   author?: string | null;
+  narrator?: string | null;
+  series?: string | null;
+  series_index?: string | null;
   edition?: string | null;
   format?: string | null;
   show_title?: string | null;
@@ -130,7 +140,7 @@ export type SuggestedMetadata = {
   season_title?: string | null;
   note?: string | null;
   sources?: Partial<Record<
-    "artist" | "album" | "year" | "genre" | "title" | "author" | "edition" | "format" | "show_title" | "season_number" | "season_title",
+    "artist" | "album" | "year" | "genre" | "title" | "author" | "narrator" | "series" | "series_index" | "edition" | "format" | "show_title" | "season_number" | "season_title",
     string
   >>;
   compilation?: boolean;
@@ -270,6 +280,17 @@ export type BookCollectionReviewUpdate = {
   confirm_non_blocking_warnings?: boolean;
 };
 
+export type AudiobookMetadataUpdate = {
+  author: string;
+  title: string;
+  year?: string | null;
+  narrator?: string | null;
+  series?: string | null;
+  series_index?: string | null;
+  format?: string | null;
+  note?: string | null;
+};
+
 export type TvMetadataUpdate = {
   show_title: string;
   season_number?: number | null;
@@ -331,6 +352,8 @@ export type ScanMusicResponse = {
   subtitle_files_found: number;
   book_batches_found: number;
   book_files_found: number;
+  audiobook_batches_found: number;
+  audiobook_files_found: number;
 };
 
 export type DevResetResponse = {

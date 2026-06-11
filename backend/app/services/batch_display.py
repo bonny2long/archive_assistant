@@ -115,6 +115,26 @@ def build_batch_display_fields(batch: IngestBatch) -> dict:
             "edit_kind": "book",
         }
 
+    if detected_type in AUDIOBOOK_TYPES:
+        author = metadata.get("author") or "Unknown Author"
+        title = metadata.get("title") or "Unknown Title"
+        year = str(metadata.get("year") or "")[:4]
+        narrator = str(metadata.get("narrator") or "").strip()
+        details = [title]
+        if narrator:
+            details.append(f"Narrated by {narrator}")
+        if year:
+            details.append(year)
+        return {
+            "media_category": "audiobooks",
+            "media_label": "Audiobook",
+            "primary_name": author,
+            "secondary_name": " · ".join(details),
+            "item_label": "audio files",
+            "item_count": int(metadata.get("audiobook_file_count") or 0),
+            "edit_kind": "audiobook",
+        }
+
     if detected_type in QUARANTINE_TYPES:
         file_count = int(metadata.get("file_count") or 0)
         return {

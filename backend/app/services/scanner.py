@@ -60,6 +60,12 @@ from app.services.book_metadata import (
     is_book_file,
     parse_book_name,
 )
+from app.services.audiobook_metadata import (
+    build_audiobook_metadata,
+    collect_audiobook_files,
+    is_audiobook_audio_file,
+    looks_like_audiobook_source,
+)
 
 
 @dataclass(frozen=True)
@@ -79,6 +85,8 @@ class ScanMusicResult:
     subtitle_files_found: int = 0
     book_batches_found: int = 0
     book_files_found: int = 0
+    audiobook_batches_found: int = 0
+    audiobook_files_found: int = 0
 
 
 IGNORED_INGEST_NAMES = {
@@ -109,6 +117,7 @@ RECOGNIZED_MEDIA_TYPES = {
     "video_movie",
     "video_tv_show",
     "book",
+    "audiobook",
 }
 
 QUARANTINE_TYPES = {"unknown_type", "unsupported_file"}
@@ -154,6 +163,8 @@ def classify_ingest_item(path: Path) -> str:
     if path.name.casefold() in IGNORED_INGEST_NAMES:
         return "ignored_system_folder"
     if path.is_file():
+        if is_audiobook_audio_file(path) and looks_like_audiobook_source(path):
+            return "audiobook"
         if is_audio_file(path):
             return "music_album"
         if is_video_file(path):
@@ -187,6 +198,8 @@ def classify_ingest_item(path: Path) -> str:
         return "unknown_type"
     if book_files and not audio_files and not video_files:
         return "book"
+    if audio_files and not video_files and looks_like_audiobook_source(path):
+        return "audiobook"
     if not audio_files:
         return "unknown_type"
 
@@ -977,6 +990,69 @@ def _create_book_batch(db: Session, source: Path) -> IngestBatch | None:
     return batch
 
 
+def _create_audiobook_batch(db: Session, source: Path) -> IngestBatch | None:
+    files = collect_audiobook_files(source)
+    audio_files = files["audio"]
+    if not audio_files:
+        return None
+    checksums = {file_sha256(path) for path in audio_files}
+    existing_checksums = {
+        row.checksum
+        for row in db.query(IngestFile)
+        .filter(IngestFile.checksum.in_(checksums))
+        .all()
+        if row.checksum
+    }
+    if checksums and checksums.issubset(existing_checksums):
+        return None
+
+    metadata = build_audiobook_metadata(source, settings.audiobooks_dir)
+    metadata = build_review_state("audiobook", metadata)
+    destination = metadata.get("suggested_destination_preview")
+    batch = IngestBatch(
+        source_kind="manual-drop",
+        source_path=str(source),
+        detected_type="audiobook",
+        status=(
+            "needs_metadata_review"
+            if metadata.get("blocking_review_items")
+            else "pending_review"
+        ),
+        confidence=float(metadata.get("confidence") or 0.65),
+        suggested_destination=str(destination) if destination else None,
+        suggested_metadata={
+            "author": metadata.get("author"),
+            "title": metadata.get("title"),
+            "year": metadata.get("year"),
+            "narrator": metadata.get("narrator"),
+            "format": metadata.get("format"),
+        },
+        metadata_json=metadata,
+    )
+    db.add(batch)
+    db.flush()
+    roles = (
+        [(path, "audiobook_audio") for path in files["audio"]]
+        + [(path, "audiobook_artwork") for path in files["artwork"]]
+        + [(path, "audiobook_sidecar") for path in files["sidecars"]]
+    )
+    for path, role in roles:
+        db.add(IngestFile(
+            batch_id=batch.id,
+            file_path=str(path),
+            file_name=path.name,
+            extension=path.suffix.lower(),
+            size_bytes=path.stat().st_size,
+            checksum=file_sha256(path),
+            detected_role=role,
+            metadata_json=None,
+        ))
+    db.commit()
+    db.refresh(batch)
+    write_json_report(settings.reports_dir, batch.id, metadata)
+    return batch
+
+
 def _merge_active_quarantine_rows_for_source(
     db: Session,
     source: Path,
@@ -1029,6 +1105,10 @@ def repair_stale_media_batches(
                     repaired.append(batch)
             elif classification == "book":
                 batch = _create_book_batch(db, source)
+                if batch:
+                    repaired.append(batch)
+            elif classification == "audiobook":
+                batch = _create_audiobook_batch(db, source)
                 if batch:
                     repaired.append(batch)
             continue
@@ -1658,6 +1738,18 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
         if batch:
             book_batches.append(batch)
             batches.append(batch)
+    audiobook_batches = [
+        batch
+        for batch in repaired_batches
+        if batch.detected_type == "audiobook"
+    ]
+    for item, classification in classifications.items():
+        if classification != "audiobook":
+            continue
+        batch = _create_audiobook_batch(db, item)
+        if batch:
+            audiobook_batches.append(batch)
+            batches.append(batch)
 
     unknown_batches = []
     for item, classification in classifications.items():
@@ -1733,6 +1825,15 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
             book_files_found=sum(
                 int((batch.metadata_json or {}).get("book_file_count") or 0)
                 for batch in book_batches
+            ),
+            audiobook_batches_found=len(audiobook_batches),
+            audiobook_files_found=sum(
+                int(
+                    (batch.metadata_json or {}).get(
+                        "audiobook_file_count"
+                    ) or 0
+                )
+                for batch in audiobook_batches
             ),
         )
 
@@ -2043,5 +2144,13 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
         book_files_found=sum(
             int((batch.metadata_json or {}).get("book_file_count") or 0)
             for batch in book_batches
+        ),
+        audiobook_batches_found=len(audiobook_batches),
+        audiobook_files_found=sum(
+            int(
+                (batch.metadata_json or {}).get("audiobook_file_count")
+                or 0
+            )
+            for batch in audiobook_batches
         ),
     )

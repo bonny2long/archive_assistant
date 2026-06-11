@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type {
   BatchMetadataUpdate,
+  AudiobookMetadataUpdate,
   BatchMoveSummary,
   BatchReview,
   BatchSummary,
@@ -399,6 +400,26 @@ export default function App() {
     }
   };
 
+  const handleAudiobookSave = async (update: AudiobookMetadataUpdate) => {
+    if (!editingBatch) return;
+    setSavingMetadata(true);
+    try {
+      const result = await api.updateAudiobookMetadata(editingBatch.id, update);
+      showToast(result.action_message ?? "Audiobook metadata updated");
+      setEditingBatch(null);
+      await loadBatches();
+    } catch (saveError: unknown) {
+      showToast(
+        saveError instanceof Error
+          ? saveError.message
+          : "Audiobook metadata update failed",
+        "error",
+      );
+    } finally {
+      setSavingMetadata(false);
+    }
+  };
+
   const handleTvEpisodeReviewSave = async (update: TvEpisodeReviewUpdate) => {
     if (!editingBatch) return;
     setSavingMetadata(true);
@@ -509,8 +530,8 @@ export default function App() {
         : "";
       setQaSummary({
         title: "Scan summary",
-        text: `Movies found: ${result.movie_batches_found}${tvCounts} | Music albums found: ${result.music_albums_found} | Discographies found: ${result.discographies_found} | Unknown items: ${result.unknown_items} | Unsupported files: ${result.unsupported_files}`,
-        warnings: `Ignored system files: ${result.ignored_system_files} | Artwork files found: ${result.artwork_files_found} | Subtitle files found: ${result.subtitle_files_found} | ${warnings.filter((warning) => warning === "release_folder_grouping_used").length} release-folder grouping used`,
+        text: `Movies found: ${result.movie_batches_found}${tvCounts} | Audiobooks found: ${result.audiobook_batches_found} | Music albums found: ${result.music_albums_found} | Discographies found: ${result.discographies_found} | Unknown items: ${result.unknown_items} | Unsupported files: ${result.unsupported_files}`,
+        warnings: `Audiobook files found: ${result.audiobook_files_found} | Ignored system files: ${result.ignored_system_files} | Artwork files found: ${result.artwork_files_found} | Subtitle files found: ${result.subtitle_files_found} | ${warnings.filter((warning) => warning === "release_folder_grouping_used").length} release-folder grouping used`,
       });
       showToast(`Scan complete - ${result.created} new, ${result.skipped_duplicates} skipped duplicate(s)`);
     } catch {
@@ -646,6 +667,7 @@ export default function App() {
           onMovieCollectionSave={handleMovieCollectionSave}
           onBookSave={handleBookSave}
           onBookCollectionSave={handleBookCollectionSave}
+          onAudiobookSave={handleAudiobookSave}
           onTvSave={handleTvSave}
           onTvEpisodeReviewSave={handleTvEpisodeReviewSave}
           onConfirm={handleReviewConfirm}

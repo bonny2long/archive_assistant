@@ -19,6 +19,7 @@ from app.services.book_metadata import (
     book_destination,
     build_book_item_destination,
 )
+from app.services.audiobook_metadata import audiobook_destination
 
 
 def _safe_path_part(value: str) -> str:
@@ -1331,6 +1332,106 @@ def _lock_metadata_for_move(batch: IngestBatch) -> None:
     batch.metadata_confirmed = True
 
 
+def _move_audiobook_batch(
+    db: Session,
+    batch: IngestBatch,
+) -> tuple[list[str], list[str]]:
+    metadata = dict(batch.metadata_json or {})
+    destination = audiobook_destination(
+        audiobooks_root=settings.audiobooks_dir,
+        author=str(metadata.get("author") or "Unknown Author"),
+        title=str(metadata.get("title") or "Unknown Title"),
+        year=str(metadata.get("year") or "").strip()[:4] or None,
+    )
+    batch.suggested_destination = str(destination)
+    moved_files: list[str] = []
+    failed_files: list[str] = []
+    planned: list[tuple[object, Path]] = []
+    source_root = Path(batch.source_path)
+    reserved: set[str] = set()
+
+    for ingest_file in batch.files:
+        if ingest_file.detected_role not in {
+            "audiobook_audio",
+            "audiobook_artwork",
+            "audiobook_sidecar",
+        }:
+            continue
+        source = Path(ingest_file.file_path)
+        completed = _completed_move_destination(db, batch.id, source)
+        if not source.exists() and completed:
+            moved_files.append(str(completed))
+            reserved.add(_path_key(completed))
+            continue
+        relative_name = Path(ingest_file.file_name)
+        if source_root.is_dir():
+            try:
+                relative_name = source.relative_to(source_root)
+            except ValueError:
+                relative_name = Path(ingest_file.file_name)
+        destination_file = destination / relative_name
+        if _path_key(destination_file) in reserved or destination_file.exists():
+            failed_files.append(f"Destination file conflict: {destination_file}")
+            continue
+        reserved.add(_path_key(destination_file))
+        planned.append((ingest_file, destination_file))
+
+    if failed_files:
+        warnings = list(metadata.get("metadata_warnings") or [])
+        warnings.append("audiobook_destination_conflict")
+        metadata["metadata_warnings"] = list(dict.fromkeys(warnings))
+        batch.metadata_json = metadata
+        batch.status = "needs_metadata_review"
+        batch.updated_at = now_utc()
+        db.commit()
+        return [], failed_files
+
+    for ingest_file, destination_file in planned:
+        source = Path(ingest_file.file_path)
+        if not source.exists():
+            failed_files.append(f"Source not found: {source}")
+            continue
+        destination_file.parent.mkdir(parents=True, exist_ok=True)
+        action = MoveAction(
+            batch_id=batch.id,
+            source_path=str(source),
+            destination_path=str(destination_file),
+            status="running",
+        )
+        db.add(action)
+        db.flush()
+        try:
+            shutil.move(str(source), str(destination_file))
+            action.status = "completed"
+            action.completed_at = now_utc()
+            moved_files.append(str(destination_file))
+        except Exception as exc:
+            action.status = "failed"
+            action.error_message = str(exc)
+            failed_files.append(f"Failed to move {source}: {exc}")
+
+    if moved_files:
+        metadata_dir = destination / "metadata"
+        metadata_dir.mkdir(parents=True, exist_ok=True)
+        (metadata_dir / f"batch-{batch.id}-audiobook-move-log.json").write_text(
+            json.dumps(
+                {
+                    "batch_id": batch.id,
+                    "media_type": "audiobook",
+                    "source_path": batch.source_path,
+                    "destination_path": str(destination),
+                    "moved_files": moved_files,
+                    "failed_files": failed_files,
+                    "metadata": metadata,
+                    "moved_at": serialize_utc(now_utc()),
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+    return moved_files, failed_files
+
+
 def _move_book_batch(
     db: Session,
     batch: IngestBatch,
@@ -1646,6 +1747,57 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                             if metadata.get("review_type") == "book_collection"
                             else "basic"
                         ),
+                    ))
+                db.commit()
+                moved += 1
+                if failed_files:
+                    errors.extend(
+                        f"Batch {batch.id}: {error}" for error in failed_files
+                    )
+                continue
+
+            if batch.detected_type == "audiobook":
+                moved_files, failed_files = _move_audiobook_batch(db, batch)
+                if not moved_files:
+                    if batch.status != "needs_metadata_review":
+                        batch.status = "move_failed"
+                    batch.updated_at = now_utc()
+                    db.commit()
+                    errors.extend(
+                        f"Batch {batch.id}: {error}" for error in failed_files
+                    )
+                    continue
+                batch.status = "move_failed" if failed_files else "moved"
+                batch.updated_at = now_utc()
+                if batch.status == "moved":
+                    _lock_metadata_for_move(batch)
+                metadata = batch.metadata_json or {}
+                destination = str(
+                    audiobook_destination(
+                        audiobooks_root=settings.audiobooks_dir,
+                        author=str(
+                            metadata.get("author") or "Unknown Author"
+                        ),
+                        title=str(metadata.get("title") or "Unknown Title"),
+                        year=(
+                            str(metadata.get("year") or "").strip()[:4]
+                            or None
+                        ),
+                    )
+                )
+                if not (
+                    db.query(ArchiveItem)
+                    .filter(ArchiveItem.final_path == destination)
+                    .first()
+                ):
+                    db.add(ArchiveItem(
+                        media_type="audiobook",
+                        title=metadata.get("title") or "Unknown Title",
+                        creator=metadata.get("author"),
+                        year=metadata.get("year"),
+                        source_kind=batch.source_kind,
+                        final_path=destination,
+                        metadata_status="basic",
                     ))
                 db.commit()
                 moved += 1

@@ -74,6 +74,13 @@ class BatchSummary(BaseModel):
     book_files: list[str] = Field(default_factory=list)
     primary_book_file: str | None = None
     book_items: list[dict] = Field(default_factory=list)
+    narrator: str | None = None
+    series: str | None = None
+    series_index: str | None = None
+    audiobook_file_count: int = 0
+    audio_files: list[str] = Field(default_factory=list)
+    primary_audio_file: str | None = None
+    chapter_count: int = 0
     suggested_destination: str | None = None
     suggested_metadata: dict | None = None
     metadata_confirmed: bool = False
@@ -207,6 +214,17 @@ class BookCollectionReviewUpdate(BaseModel):
     confirm_non_blocking_warnings: bool = False
 
 
+class AudiobookMetadataUpdate(BaseModel):
+    author: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    year: str | None = Field(default=None, pattern=r"^(19|20)\d{2}$")
+    narrator: str | None = None
+    series: str | None = None
+    series_index: str | None = None
+    format: str | None = None
+    note: str | None = None
+
+
 class ReviewConfirmationUpdate(BaseModel):
     confirmed: bool
     accept_non_blocking_warnings: bool = False
@@ -284,6 +302,8 @@ class ScanMusicResponse(BaseModel):
     subtitle_files_found: int = 0
     book_batches_found: int = 0
     book_files_found: int = 0
+    audiobook_batches_found: int = 0
+    audiobook_files_found: int = 0
 
 
 class DevResetResponse(BaseModel):

@@ -31,6 +31,7 @@ function readableLibraryPath(value?: string | null): string {
   const normalized = value.replace(/\\/g, "/");
   const lower = normalized.toLowerCase();
   for (const marker of [
+    "audiobooks/library/",
     "books/",
     "tv/library/",
     "movies/library/",
@@ -837,6 +838,81 @@ function BookBatchDetail({ batch, moveSummary }: Props) {
   );
 }
 
+function AudiobookBatchDetail({ batch, moveSummary }: Props) {
+  const metadata = batch.metadata_json ?? {};
+  const audioFiles = Array.isArray(metadata.audio_files)
+    ? metadata.audio_files.map(String)
+    : [];
+  return (
+    <div className="batch-detail batch-detail--review">
+      <ReviewStateCard batch={batch} />
+      <div className="library-status">
+        <div className="library-status__icon"><i className="ti ti-headphones" /></div>
+        <div>
+          <div className="library-status__eyebrow">Audiobook detected</div>
+          <h2>{String(metadata.title ?? "Unknown Title")}</h2>
+          <p>
+            {String(metadata.author ?? "Unknown Author")} · {String(metadata.year ?? "Unknown Year")}
+          </p>
+        </div>
+        <div className="library-status__facts">
+          <span>{Math.round(batch.confidence * 100)}% confidence</span>
+          <span>{batch.status.replace(/_/g, " ")}</span>
+        </div>
+      </div>
+      <div className="library-detail__grid movie-detail__cards">
+        <section className="library-card">
+          <h3>Audiobook</h3>
+          <dl className="library-fields">
+            <div><dt>Title</dt><dd>{String(metadata.title ?? "-")}</dd></div>
+            <div><dt>Author</dt><dd>{String(metadata.author ?? "-")}</dd></div>
+            <div><dt>Year</dt><dd>{String(metadata.year ?? "Unknown Year")}</dd></div>
+            <div><dt>Narrator</dt><dd>{String(metadata.narrator ?? "-")}</dd></div>
+            <div><dt>Series</dt><dd>{String(metadata.series ?? "-")}</dd></div>
+            <div><dt>Series index</dt><dd>{String(metadata.series_index ?? "-")}</dd></div>
+            <div><dt>Format</dt><dd>{String(metadata.format ?? "-")}</dd></div>
+            <div><dt>Audio files</dt><dd>{String(metadata.audiobook_file_count ?? audioFiles.length)}</dd></div>
+            <div><dt>Artwork</dt><dd>{String(metadata.artwork_count ?? 0)}</dd></div>
+          </dl>
+        </section>
+        <section className="library-card">
+          <h3>Source</h3>
+          <dl className="library-fields library-fields--single">
+            <div>
+              <dt>Folder</dt>
+              <dd className="library-fields__path">{readableSourcePath(batch.source_path)}</dd>
+            </div>
+            <div><dt>Status</dt><dd>{batch.status}</dd></div>
+          </dl>
+        </section>
+      </div>
+      <section className="library-destination">
+        <span>{batch.status === "moved" ? "Final destination" : "Destination preview"}</span>
+        <strong>{readableLibraryPath(batch.suggested_destination)}</strong>
+      </section>
+      {audioFiles.length > 0 && (
+        <section className="track-preview">
+          <div className="track-preview__header">
+            <h3>Audio preview</h3>
+            <span>Showing {Math.min(audioFiles.length, 10)} of {audioFiles.length}</span>
+          </div>
+          <div className="track-preview__table">
+            <table>
+              <thead><tr><th>#</th><th>Audio file</th></tr></thead>
+              <tbody>
+                {audioFiles.slice(0, 10).map((file, index) => (
+                  <tr key={file}><td>{index + 1}</td><td><code>{file}</code></td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+      <DebugDetails batch={batch} moveSummary={moveSummary} />
+    </div>
+  );
+}
+
 type DiscographyAlbum = {
   year?: string | null;
   album?: string | null;
@@ -1093,6 +1169,9 @@ export default function BatchDetail({ batch, moveSummary, review }: Props) {
   }
   if (batch.detected_type === "book") {
     return <BookBatchDetail batch={batch} moveSummary={moveSummary} />;
+  }
+  if (batch.detected_type === "audiobook") {
+    return <AudiobookBatchDetail batch={batch} moveSummary={moveSummary} />;
   }
   if (batch.status === "moved") {
     return <MovedBatchDetail batch={batch} moveSummary={moveSummary} />;
