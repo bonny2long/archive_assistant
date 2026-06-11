@@ -53,7 +53,6 @@ export default function MediaReviewRouter({
         batch={batch}
         saving={saving}
         onSave={onMetadataSave}
-        onConfirm={onConfirm}
         onClose={onClose}
       />
     );

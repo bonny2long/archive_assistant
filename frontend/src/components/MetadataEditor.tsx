@@ -1,12 +1,10 @@
 import { useMemo, useState } from "react";
 import type { BatchMetadataUpdate, BatchSummary } from "../types/archive";
-import ReviewIssuesPanel from "./ReviewIssuesPanel";
 
 type Props = {
   batch: BatchSummary;
   saving: boolean;
   onSave: (update: BatchMetadataUpdate) => Promise<void>;
-  onConfirm: () => Promise<void>;
   onClose: () => void;
 };
 
@@ -57,11 +55,51 @@ function readableWarning(value: string): string {
     ?? value.replace(/_/g, " ").replace(/^\w/, (letter: string) => letter.toUpperCase());
 }
 
+function isUnknown(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return normalized === ""
+    || normalized === "unknown"
+    || normalized === "unknown artist"
+    || normalized === "unknown album"
+    || normalized === "unkn";
+}
+
+function buildLiveMusicIssues(params: {
+  artist: string;
+  album: string;
+  year: string;
+  genre: string;
+  originalWarnings: string[];
+}) {
+  const blockers: string[] = [];
+  const warnings: string[] = [];
+
+  if (isUnknown(params.artist)) warnings.push("artist_missing");
+  if (isUnknown(params.album)) blockers.push("album_missing");
+  if (!/^(19|20)\d{2}$/.test(params.year.trim())) blockers.push("year_missing");
+  if (isUnknown(params.genre)) warnings.push("genre_missing");
+
+  const liveFieldWarnings = new Set([
+    "artist_missing",
+    "album_missing",
+    "year_missing",
+    "year_invalid",
+    "genre_missing",
+  ]);
+  for (const warning of params.originalWarnings) {
+    if (!liveFieldWarnings.has(warning)) warnings.push(warning);
+  }
+
+  return {
+    blockers: Array.from(new Set(blockers)),
+    warnings: Array.from(new Set(warnings)),
+  };
+}
+
 export default function MusicAlbumReviewEditor({
   batch,
   saving,
   onSave,
-  onConfirm,
   onClose,
 }: Props) {
   const [artist, setArtist] = useState(() => metadataValue(batch, "artist"));
@@ -85,8 +123,19 @@ export default function MusicAlbumReviewEditor({
     };
   }, [album, artist, batch.suggested_destination, year]);
 
-  const valid = artist.trim() !== ""
-    && album.trim() !== ""
+  const liveIssues = useMemo(
+    () => buildLiveMusicIssues({
+      artist,
+      album,
+      year,
+      genre,
+      originalWarnings: batch.metadata_warnings ?? [],
+    }),
+    [artist, album, year, genre, batch.metadata_warnings],
+  );
+
+  const valid = !isUnknown(artist)
+    && !isUnknown(album)
     && /^(19|20)\d{2}$/.test(year.trim());
 
   return (
@@ -120,19 +169,38 @@ export default function MusicAlbumReviewEditor({
 
         {/* ── Body ── */}
         <div className="editor-shell__body">
-          {batch.metadata_warnings.length > 0 && (
-            <div className="metadata-editor__warnings">
-              {batch.metadata_warnings.map((warning) => (
-                <span key={warning}><i className="ti ti-alert-triangle" />{readableWarning(warning)}</span>
-              ))}
-            </div>
+          {(liveIssues.blockers.length > 0 || liveIssues.warnings.length > 0) && (
+            <section className="review-issues">
+              <div className="review-issues__summary">
+                <strong>{liveIssues.blockers.length > 0 ? "Review required" : "Review available"}</strong>
+                <span>
+                  {liveIssues.blockers.length} blocking item(s) · {liveIssues.warnings.length} warning(s)
+                </span>
+              </div>
+              {liveIssues.blockers.length > 0 && (
+                <div>
+                  <h3>Blocking issues</h3>
+                  {liveIssues.blockers.map((issue) => (
+                    <p key={issue}>
+                      <i className="ti ti-alert-triangle" />
+                      {readableWarning(issue)}
+                    </p>
+                  ))}
+                </div>
+              )}
+              {liveIssues.warnings.length > 0 && (
+                <div>
+                  <h3>Warnings</h3>
+                  {liveIssues.warnings.map((issue) => (
+                    <p key={issue}>
+                      <i className="ti ti-info-circle" />
+                      {readableWarning(issue)}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </section>
           )}
-          <ReviewIssuesPanel
-            batch={batch}
-            saving={saving}
-            confirmLabel="Confirm music metadata"
-            onConfirm={onConfirm}
-          />
 
           <div className="editor-grid">
             <label>
