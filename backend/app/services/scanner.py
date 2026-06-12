@@ -60,6 +60,7 @@ from app.services.title_display import clean_display_title, destination_title
 from app.services.book_metadata import (
     book_format_for,
     build_book_metadata_candidates,
+    build_book_collection_groups,
     build_book_item_destination,
     build_single_book_metadata,
     collect_book_files,
@@ -904,7 +905,12 @@ def _create_book_batch(db: Session, source: Path) -> IngestBatch | None:
         return None
 
     metadata = build_single_book_metadata(source, settings.books_dir)
-    parsed = [parse_book_name(path.name) for path in book_files]
+    collection_groups, collection_summary = build_book_collection_groups(
+        source,
+        files,
+    )
+    primary_book_files = [group["primary"] for group in collection_groups]
+    parsed = [parse_book_name(path.name) for path in primary_book_files]
     identities = {
         (
             item["author"].casefold(),
@@ -915,10 +921,11 @@ def _create_book_batch(db: Session, source: Path) -> IngestBatch | None:
     }
     if len(identities) > 1:
         items = []
-        for path, item in sorted(
-            zip(book_files, parsed),
-            key=lambda pair: pair[0].name.casefold(),
+        for group, item in sorted(
+            zip(collection_groups, parsed),
+            key=lambda pair: pair[0]["primary"].name.casefold(),
         ):
+            path = group["primary"]
             fmt = book_format_for(path)
             item_metadata = {
                 "item_kind": "book",
@@ -936,6 +943,8 @@ def _create_book_batch(db: Session, source: Path) -> IngestBatch | None:
                 "series_index": item.get("series_index"),
                 "format": fmt,
                 "metadata_assist_version": METADATA_ASSIST_VERSION,
+                "matched_artwork": group["matched_artwork"],
+                "alternate_formats": group["alternate_formats"],
             }
             candidate_runtime: dict = {}
             item_candidates, _ = build_book_metadata_candidates(
@@ -980,6 +989,11 @@ def _create_book_batch(db: Session, source: Path) -> IngestBatch | None:
                 destination.relative_to(settings.data_root).as_posix()
             )
             items.append(item_metadata)
+        collection_summary["needs_repair_count"] = sum(
+            item["author"] == "Unknown Author"
+            or item["title"] == "Unknown Title"
+            for item in items
+        )
         metadata.update({
             "review_type": "book_collection",
             "review_mode": "item_list",
@@ -990,6 +1004,7 @@ def _create_book_batch(db: Session, source: Path) -> IngestBatch | None:
             "keep_collection_together": False,
             "collection_destination_root": None,
             "book_items": items,
+            "collection_summary": collection_summary,
             "metadata_quality": "weak",
             "metadata_warnings": list(dict.fromkeys([
                 *metadata.get("metadata_warnings", []),
@@ -1035,6 +1050,10 @@ def _create_book_batch(db: Session, source: Path) -> IngestBatch | None:
     db.flush()
     roles = (
         [(path, "book_file") for path in files["books"]]
+        + [
+            (path, "book_alternate_format")
+            for path in files.get("alternates", [])
+        ]
         + [(path, "book_artwork") for path in files["artwork"]]
         + [(path, "book_sidecar") for path in files["sidecars"]]
     )

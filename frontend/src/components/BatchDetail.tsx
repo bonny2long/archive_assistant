@@ -781,6 +781,13 @@ function BookBatchDetail({ batch, moveSummary }: Props) {
     : [];
   const collection = metadata.review_type === "book_collection" || items.length > 0;
   const keepTogether = Boolean(metadata.keep_collection_together);
+  const collectionSummary = (
+    metadata.collection_summary
+    && typeof metadata.collection_summary === "object"
+  ) ? metadata.collection_summary as Record<string, unknown> : {};
+  const primaryBookCount = Number(
+    collectionSummary.primary_book_count ?? items.length,
+  );
   const collectionDestination = String(
     metadata.collection_destination_root
     ?? items.find((item) => item.include !== false)?.destination_preview
@@ -799,7 +806,7 @@ function BookBatchDetail({ batch, moveSummary }: Props) {
             {collection ? "Book collection detected" : "Book detected"}
           </div>
           <h2>{String(metadata.collection_title ?? metadata.title ?? "Unknown Title")}</h2>
-          <p>{collection ? `${items.length} books` : String(metadata.author ?? "Unknown Author")}</p>
+          <p>{collection ? `${primaryBookCount} books` : String(metadata.author ?? "Unknown Author")}</p>
         </div>
         <div className="library-status__facts">
           <span>{Math.round(batch.confidence * 100)}% confidence</span>
@@ -813,11 +820,28 @@ function BookBatchDetail({ batch, moveSummary }: Props) {
             {!collection && <div><dt>Title</dt><dd title={String(metadata.title ?? "-")}>{String(metadata.title ?? "-")}</dd></div>}
             {!collection && <div><dt>Author</dt><dd>{String(metadata.author ?? "-")}</dd></div>}
             {!collection && <div><dt>Year</dt><dd>{String(metadata.year ?? "-")}</dd></div>}
-            {collection && <div><dt>Collection</dt><dd>{String(metadata.collection_title ?? "-")}</dd></div>}
+            {collection && <div><dt>Books</dt><dd>{primaryBookCount}</dd></div>}
             {collection && <div><dt>Routing</dt><dd>{keepTogether ? "Collection folder" : "Author folders"}</dd></div>}
-            <div><dt>Format</dt><dd>{String(metadata.format ?? "Mixed")}</dd></div>
-            <div><dt>Book files</dt><dd>{String(metadata.book_file_count ?? batch.files.length)}</dd></div>
-            <div><dt>Artwork</dt><dd>{String(metadata.artwork_count ?? 0)}</dd></div>
+            {collection ? (
+              <>
+                <div><dt>EPUB</dt><dd>{String(collectionSummary.epub_count ?? 0)}</dd></div>
+                <div><dt>PDF</dt><dd>{String(collectionSummary.pdf_count ?? 0)}</dd></div>
+                <div>
+                  <dt>Artwork matched</dt>
+                  <dd>
+                    {String(collectionSummary.matched_artwork_count ?? 0)}
+                    /{String(collectionSummary.primary_book_count ?? items.length)}
+                  </dd>
+                </div>
+                <div><dt>Sidecars ignored</dt><dd>{String(collectionSummary.ignored_sidecar_count ?? 0)}</dd></div>
+              </>
+            ) : (
+              <>
+                <div><dt>Format</dt><dd>{String(metadata.format ?? "Mixed")}</dd></div>
+                <div><dt>Book files</dt><dd>{String(metadata.book_file_count ?? batch.files.length)}</dd></div>
+                <div><dt>Artwork</dt><dd>{String(metadata.artwork_count ?? 0)}</dd></div>
+              </>
+            )}
           </dl>
         </section>
         <section className="library-card">

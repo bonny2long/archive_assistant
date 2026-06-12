@@ -74,6 +74,7 @@ class BatchSummary(BaseModel):
     book_files: list[str] = Field(default_factory=list)
     primary_book_file: str | None = None
     book_items: list[dict] = Field(default_factory=list)
+    collection_summary: dict = Field(default_factory=dict)
     narrator: str | None = None
     series: str | None = None
     series_index: str | None = None

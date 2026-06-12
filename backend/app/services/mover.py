@@ -1687,6 +1687,18 @@ def _move_book_batch(
         for item in items
         if item.get("source_file")
     }
+    associated_item_by_path: dict[str, dict] = {}
+    for item in items:
+        for alternate in item.get("alternate_formats") or []:
+            if isinstance(alternate, dict) and alternate.get("file"):
+                associated_item_by_path[
+                    str(alternate["file"]).replace("\\", "/").casefold()
+                ] = item
+        artwork = item.get("matched_artwork")
+        if isinstance(artwork, dict) and artwork.get("file"):
+            associated_item_by_path[
+                str(artwork["file"]).replace("\\", "/").casefold()
+            ] = item
     moved_files: list[str] = []
     failed_files: list[str] = []
     planned: list[tuple[object, Path]] = []
@@ -1733,9 +1745,15 @@ def _move_book_batch(
             continue
 
         if collection:
-            if ingest_file.detected_role != "book_file":
-                continue
             item = item_by_source.get(ingest_file.file_name.casefold())
+            if not item:
+                try:
+                    relative_source = source.relative_to(
+                        Path(batch.source_path)
+                    ).as_posix().casefold()
+                except ValueError:
+                    relative_source = ingest_file.file_name.casefold()
+                item = associated_item_by_path.get(relative_source)
             if not item:
                 continue
             destination = build_book_item_destination(
@@ -1826,7 +1844,14 @@ def _move_book_batch(
             for path in moved_files
             if Path(path).parent == destination
         ]
-        primary_file = destination_files[0] if destination_files else None
+        primary_file = next(
+            (
+                path
+                for path in destination_files
+                if path.name.casefold() in item_by_source
+            ),
+            destination_files[0] if destination_files else None,
+        )
         item = (
             item_by_source.get(primary_file.name.casefold(), {})
             if primary_file
@@ -2023,6 +2048,8 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                     if path.suffix.casefold() not in {".epub", ".pdf"}:
                         continue
                     item = book_items.get(path.name.casefold(), {})
+                    if not item:
+                        continue
                     if (
                         db.query(ArchiveItem)
                         .filter(ArchiveItem.final_path == str(path))

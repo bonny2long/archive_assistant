@@ -147,6 +147,8 @@ function initialItems(batch: BatchSummary): BookCollectionItemUpdate[] {
     metadata_candidates: item.metadata_candidates ?? {},
     candidate_notes: item.candidate_notes ?? [],
     candidate_runtime: item.candidate_runtime ?? {},
+    matched_artwork: item.matched_artwork ?? null,
+    alternate_formats: item.alternate_formats ?? [],
   }));
 }
 
@@ -209,6 +211,16 @@ function BookRepairCard({
             <span className="book-repair-card__manual">Author still needs manual lookup</span>
           )}
           <code>{item.source_file}</code>
+          <span className={item.matched_artwork ? "book-repair-card__cover" : "book-repair-card__cover book-repair-card__cover--missing"}>
+            {item.matched_artwork
+              ? `Cover matched: ${item.matched_artwork.file}`
+              : "No cover matched"}
+          </span>
+          {(item.alternate_formats ?? []).length > 0 && (
+            <span className="book-repair-card__alternate">
+              Alternate formats: {(item.alternate_formats ?? []).map((entry) => entry.format).join(", ")}
+            </span>
+          )}
         </div>
         <label className="collection-item-card__include">
           <input
@@ -346,17 +358,24 @@ export default function BookCollectionEditor({
   );
   const [keepTogetherTouched, setKeepTogetherTouched] = useState(false);
   const [items, setItems] = useState(() => initialItems(batch));
-  const [showAllBooks, setShowAllBooks] = useState(false);
   const [showCleanPreview, setShowCleanPreview] = useState(false);
   const [bulkAuthor, setBulkAuthor] = useState("");
   const [bulkYear, setBulkYear] = useState("");
-  const [repairFormat, setRepairFormat] = useState<"ALL" | "PDF" | "EPUB">("ALL");
+  const [reviewFilter, setReviewFilter] = useState<
+    "ALL" | "NEEDS_REPAIR" | "MISSING_COVER" | "DUPLICATES" | "PDF" | "EPUB"
+  >("NEEDS_REPAIR");
 
   const indexedItems = items.map((item, index) => ({ item, index }));
   const repairItems = indexedItems.filter(({ item }) => itemNeedsRepair(item));
-  const visibleRepairItems = repairItems.filter(
-    ({ item }) => repairFormat === "ALL" || itemFormat(item) === repairFormat,
-  );
+  const visibleItems = indexedItems.filter(({ item }) => {
+    if (reviewFilter === "ALL") return true;
+    if (reviewFilter === "NEEDS_REPAIR") return itemNeedsRepair(item);
+    if (reviewFilter === "MISSING_COVER") return !item.matched_artwork;
+    if (reviewFilter === "DUPLICATES") {
+      return (item.alternate_formats ?? []).length > 0;
+    }
+    return itemFormat(item) === reviewFilter;
+  });
   const cleanItems = indexedItems.filter(({ item }) => item.include && !itemNeedsRepair(item));
   const excludedItems = indexedItems.filter(({ item }) => !item.include);
   const includedCount = items.filter((item) => item.include).length;
@@ -382,7 +401,9 @@ export default function BookCollectionEditor({
   );
   const warningMessages = (batch.non_blocking_review_items ?? []).map((item) => item.message);
   const visibleRepairIndexes = new Set(
-    visibleRepairItems.map(({ index }) => index),
+    visibleItems
+      .filter(({ item }) => itemNeedsRepair(item))
+      .map(({ index }) => index),
   );
 
   const updateItem = (index: number, patch: Partial<BookCollectionItemUpdate>) => {
@@ -428,7 +449,16 @@ export default function BookCollectionEditor({
 
   const restoreExcludedVisibleItems = () => {
     setItems((current) => current.map((item) => (
-      !item.include && (repairFormat === "ALL" || itemFormat(item) === repairFormat)
+      !item.include && (
+        reviewFilter === "ALL"
+        || reviewFilter === "NEEDS_REPAIR"
+        || (reviewFilter === "MISSING_COVER" && !item.matched_artwork)
+        || (
+          reviewFilter === "DUPLICATES"
+          && (item.alternate_formats ?? []).length > 0
+        )
+        || itemFormat(item) === reviewFilter
+      )
         ? { ...item, include: true }
         : item
     )));
@@ -521,25 +551,25 @@ export default function BookCollectionEditor({
                 <p>{repairCount} book{repairCount === 1 ? "" : "s"} need repair. Clean books are hidden by default.</p>
               </div>
               <div className="book-review-panel__actions">
-                <button type="button" className="btn-sm" onClick={() => setShowAllBooks((value) => !value)}>
-                  {showAllBooks ? "Show repair only" : "Show all"}
-                </button>
+                {([
+                  ["ALL", "Show all"],
+                  ["NEEDS_REPAIR", "Needs repair"],
+                  ["MISSING_COVER", "Missing cover"],
+                  ["DUPLICATES", "Duplicate formats"],
+                  ["PDF", "PDF only"],
+                  ["EPUB", "EPUB only"],
+                ] as const).map(([filter, label]) => (
+                  <button
+                    key={filter}
+                    type="button"
+                    className={`btn-sm${reviewFilter === filter ? " btn-sm--active" : ""}`}
+                    onClick={() => setReviewFilter(filter)}
+                  >
+                    {label}
+                  </button>
+                ))}
                 <button type="button" className="btn-sm" onClick={() => setShowCleanPreview((value) => !value)}>
                   {showCleanPreview ? "Hide clean preview" : "Show clean preview"}
-                </button>
-                <button
-                  type="button"
-                  className={`btn-sm${repairFormat === "PDF" ? " btn-sm--active" : ""}`}
-                  onClick={() => setRepairFormat((value) => value === "PDF" ? "ALL" : "PDF")}
-                >
-                  {repairFormat === "PDF" ? "Show repair only" : "Show PDF-only repair"}
-                </button>
-                <button
-                  type="button"
-                  className={`btn-sm${repairFormat === "EPUB" ? " btn-sm--active" : ""}`}
-                  onClick={() => setRepairFormat((value) => value === "EPUB" ? "ALL" : "EPUB")}
-                >
-                  {repairFormat === "EPUB" ? "Show repair only" : "Show EPUB-only repair"}
                 </button>
               </div>
             </div>
@@ -586,7 +616,7 @@ export default function BookCollectionEditor({
               </div>
             )}
 
-            {repairCount === 0 ? (
+            {repairCount === 0 && reviewFilter === "NEEDS_REPAIR" ? (
               <div className="book-clean-state">
                 <strong>No blocking book metadata problems.</strong>
                 <span>{cleanCount} included book{cleanCount === 1 ? "" : "s"} ready for approval.</span>
@@ -598,7 +628,7 @@ export default function BookCollectionEditor({
               </div>
             ) : (
               <div className="book-repair-list">
-                {visibleRepairItems.map(({ item, index }) => (
+                {visibleItems.map(({ item, index }) => (
                   <BookRepairCard
                     key={item.source_file}
                     item={item}
@@ -609,6 +639,11 @@ export default function BookCollectionEditor({
                     onChange={updateItem}
                   />
                 ))}
+                {visibleItems.length === 0 && (
+                  <div className="book-clean-state">
+                    <strong>No books match this filter.</strong>
+                  </div>
+                )}
               </div>
             )}
           </section>
@@ -651,27 +686,6 @@ export default function BookCollectionEditor({
             </section>
           )}
 
-          {showAllBooks && (
-            <section className="book-all-editor">
-              <div className="book-clean-preview__header">
-                <strong>All books</strong>
-                <span>{items.length} total</span>
-              </div>
-              <div className="book-repair-list">
-                {indexedItems.map(({ item, index }) => (
-                  <BookRepairCard
-                    key={`all-${item.source_file}`}
-                    item={item}
-                    index={index}
-                    reasons={itemRepairReasons(item)}
-                    collectionTitle={collectionTitle}
-                    keepCollectionTogether={keepCollectionTogether}
-                    onChange={updateItem}
-                  />
-                ))}
-              </div>
-            </section>
-          )}
         </div>
 
         <div className="editor-shell__footer">

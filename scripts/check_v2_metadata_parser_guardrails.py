@@ -1,4 +1,4 @@
-"""Bounded checks for v2.060 metadata parser guardrails."""
+"""Bounded checks for v2.061 metadata parser guardrails."""
 
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ def assert_book(
 
 
 def main() -> None:
-    assert METADATA_ASSIST_VERSION == "v2.060"
+    assert METADATA_ASSIST_VERSION == "v2.061"
 
     assert_book(
         "@SoftSkills101 - Atomic Habits.pdf",
@@ -80,7 +80,17 @@ def main() -> None:
         title="Prepper Collection - Prepper's Hacks Box Set",
     )
     assert_book(
-        "1 - Dune - Frank Herbert (1965).epub",
+        "Book 1 - Dune (1965).epub",
+        title="Dune",
+        year="1965",
+    )
+    parsed_series = parse_book_name(
+        "Dune Saga 01 - Dune - Frank Herbert (1965).epub"
+    )
+    assert parsed_series["series"] == "Dune Saga", parsed_series
+    assert parsed_series["series_index"] == "01", parsed_series
+    assert_book(
+        "Dune - Frank Herbert (1965).epub",
         title="Dune",
         author="Frank Herbert",
         year="1965",
@@ -123,7 +133,7 @@ def main() -> None:
     finally:
         book_metadata.collect_book_files = original_collect_books
         book_metadata.extract_pdf_metadata = original_extract_pdf
-    assert built_book["metadata_assist_version"] == "v2.060"
+    assert built_book["metadata_assist_version"] == "v2.061"
     assert built_book["title"] == "Atomic Habits"
     assert built_book["author"] == "Unknown Author"
     assert built_book["candidate_runtime"][
@@ -173,7 +183,7 @@ def main() -> None:
     finally:
         audiobook_metadata.collect_audiobook_files = original_collect_audio
         audiobook_metadata.extract_audio_metadata = original_extract
-    assert built_audiobook["metadata_assist_version"] == "v2.060"
+    assert built_audiobook["metadata_assist_version"] == "v2.061"
     assert built_audiobook["title"] == "Star Wars The Old Republic Revan"
     assert built_audiobook["author"] == "Unknown Author"
     assert built_audiobook["candidate_runtime"][
@@ -187,7 +197,7 @@ def main() -> None:
         '"metadata_assist_version": METADATA_ASSIST_VERSION'
     ) >= 3
 
-    print("v2.060 metadata parser guardrail checks passed")
+    print("v2.061 metadata parser guardrail checks passed")
 
 
 if __name__ == "__main__":

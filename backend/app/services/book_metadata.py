@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
+import unicodedata
 import zipfile
 from xml.etree import ElementTree
 
@@ -17,7 +18,10 @@ from app.services.pdf_metadata_reader import read_pdf_metadata
 from app.services.title_display import clean_display_title, destination_title
 
 BOOK_EXTENSIONS = {".epub", ".pdf"}
-BOOK_SIDECAR_EXTENSIONS = {".opf", ".nfo", ".json", ".xml", ".txt"}
+BOOK_ALTERNATE_EXTENSIONS = {".mobi"}
+BOOK_SIDECAR_EXTENSIONS = {
+    ".opf", ".nfo", ".json", ".xml", ".txt", ".url",
+}
 BOOK_ARTWORK_NAMES = {
     "cover", "folder", "front", "book-cover", "book_cover", "thumbnail",
 }
@@ -27,8 +31,16 @@ BOOK_SERIES_PREFIX_RE = re.compile(
     r"^(?P<series>.+?)\s+(?P<index>\d+(?:\.\d+)?)\s*-\s*(?P<title>.+)$",
     re.I,
 )
-LEADING_INDEX_RE = re.compile(
-    r"^(?P<index>\d+(?:\.\d+)?)\s*-\s*(?P<rest>.+)$",
+BOOK_NUMBER_PREFIX_RE = re.compile(
+    r"^Book\s+(?P<index>\d+(?:\.\d+)?)\s*-\s*(?P<title>.+)$",
+    re.I,
+)
+BRACKETED_SERIES_RE = re.compile(
+    r"^\[(?P<series>.+?)\s+(?P<index>\d+(?:\.\d+)?)\]\s*(?P<title>.+)$",
+    re.I,
+)
+SERIES_SUFFIX_RE = re.compile(
+    r"^(?P<title>.+?)\s*\((?P<series>.+?)\s+#(?P<index>\d+(?:\.\d+)?)\)$",
     re.I,
 )
 YEAR_RE = re.compile(r"(?:\(|\[|\b)((?:19|20)\d{2})(?:\)|\]|\b)")
@@ -67,6 +79,25 @@ CATEGORY_AUTHOR_PHRASES = {
     "bug",
     "firearms ammo",
 }
+SUBTITLE_AUTHOR_WORDS = {
+    "blueprint",
+    "discipline",
+    "exercises",
+    "guide",
+    "habits",
+    "how",
+    "management",
+    "mindfulness",
+    "performance",
+    "psychology",
+    "relationship",
+    "secrets",
+    "strategy",
+    "strategies",
+    "stress",
+    "survival",
+    "to",
+}
 
 
 def is_book_file(path: Path) -> bool:
@@ -86,6 +117,30 @@ def is_book_artwork(path: Path) -> bool:
 
 def is_book_sidecar(path: Path) -> bool:
     return path.is_file() and path.suffix.casefold() in BOOK_SIDECAR_EXTENSIONS
+
+
+def is_book_alternate_format(path: Path) -> bool:
+    return path.is_file() and path.suffix.casefold() in BOOK_ALTERNATE_EXTENSIONS
+
+
+def normalize_book_match_key(value: str | Path) -> str:
+    path = Path(value)
+    text = path.stem if path.suffix else str(value)
+    text = unicodedata.normalize("NFKC", text).translate(str.maketrans({
+        "\u2018": "'",
+        "\u2019": "'",
+        "\u201b": "'",
+        "\u2032": "'",
+    }))
+    text = re.sub(r"[_\W]+", " ", text.casefold(), flags=re.UNICODE)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _book_source_relative_path(path: Path, source: Path) -> str:
+    try:
+        return path.relative_to(source).as_posix()
+    except ValueError:
+        return path.name
 
 
 def book_format_for(path: Path) -> str:
@@ -162,6 +217,8 @@ def _looks_like_author(value: str) -> bool:
     if words[-1].casefold() in {
         "a", "an", "and", "for", "in", "of", "on", "the", "to", "with",
     }:
+        return False
+    if {word.casefold() for word in words} & SUBTITLE_AUTHOR_WORDS:
         return False
     if re.search(r"\b[A-Z]\.?\s*[A-Z][a-z]+", text):
         return True
@@ -242,34 +299,45 @@ def parse_book_name(value: str) -> dict:
     series = None
     series_index = None
 
-    leading = LEADING_INDEX_RE.match(text)
-    if leading:
-        series_index = leading.group("index")
-        rest = leading.group("rest").strip()
-        parts = [part.strip() for part in rest.split(" - ") if part.strip()]
-        if len(parts) >= 2 and _looks_like_author(parts[-1]):
-            return {
-                "author": _clean_person_name(parts[-1]),
-                "title": _clean_book_title(" - ".join(parts[:-1])),
-                "year": year,
-                "raw_name": raw,
-                "series": series,
-                "series_index": series_index,
-                "source_label_removed": source_label,
-                "author_split_blocked": False,
-                "author_guess_confidence": _author_guess_confidence(
-                    _clean_person_name(parts[-1])
-                ),
-            }
+    book_number = BOOK_NUMBER_PREFIX_RE.match(text)
+    if book_number:
         return {
             "author": "Unknown Author",
-            "title": _clean_book_title(rest),
+            "title": _clean_book_title(book_number.group("title")),
             "year": year,
             "raw_name": raw,
             "series": series,
-            "series_index": series_index,
+            "series_index": book_number.group("index"),
             "source_label_removed": source_label,
-            "author_split_blocked": len(parts) >= 2,
+            "author_split_blocked": False,
+            "author_guess_confidence": "none",
+        }
+
+    bracketed_series = BRACKETED_SERIES_RE.match(text)
+    if bracketed_series:
+        return {
+            "author": "Unknown Author",
+            "title": _clean_book_title(bracketed_series.group("title")),
+            "year": year,
+            "raw_name": raw,
+            "series": _clean_book_title(bracketed_series.group("series")),
+            "series_index": bracketed_series.group("index"),
+            "source_label_removed": source_label,
+            "author_split_blocked": False,
+            "author_guess_confidence": "none",
+        }
+
+    series_suffix = SERIES_SUFFIX_RE.match(text)
+    if series_suffix:
+        return {
+            "author": "Unknown Author",
+            "title": _clean_book_title(series_suffix.group("title")),
+            "year": year,
+            "raw_name": raw,
+            "series": _clean_book_title(series_suffix.group("series")),
+            "series_index": series_suffix.group("index"),
+            "source_label_removed": source_label,
+            "author_split_blocked": False,
             "author_guess_confidence": "none",
         }
 
@@ -345,11 +413,124 @@ def collect_book_files(root: Path) -> dict[str, list[Path]]:
         path for path in root.rglob("*") if path.is_file()
     ]
     books = sorted(path for path in candidates if is_book_file(path))
+    alternates = sorted(
+        path for path in candidates if is_book_alternate_format(path)
+    )
     artwork = sorted(path for path in candidates if is_book_artwork(path))
     sidecars = sorted(path for path in candidates if is_book_sidecar(path))
-    recognized = {path.resolve() for path in [*books, *artwork, *sidecars]}
+    recognized = {
+        path.resolve()
+        for path in [*books, *alternates, *artwork, *sidecars]
+    }
     other = sorted(path for path in candidates if path.resolve() not in recognized)
-    return {"books": books, "artwork": artwork, "sidecars": sidecars, "other": other}
+    return {
+        "books": books,
+        "alternates": alternates,
+        "artwork": artwork,
+        "sidecars": sidecars,
+        "other": other,
+    }
+
+
+def build_book_collection_groups(source: Path, files: dict) -> tuple[list[dict], dict]:
+    primary_groups: dict[str, list[Path]] = {}
+    for path in files.get("books", []):
+        primary_groups.setdefault(normalize_book_match_key(path), []).append(path)
+
+    alternate_groups: dict[str, list[Path]] = {}
+    for path in files.get("alternates", []):
+        alternate_groups.setdefault(normalize_book_match_key(path), []).append(path)
+
+    artwork_groups: dict[str, list[Path]] = {}
+    for path in files.get("artwork", []):
+        artwork_groups.setdefault(normalize_book_match_key(path), []).append(path)
+
+    groups: list[dict] = []
+    matched_artwork_paths: set[Path] = set()
+    duplicate_format_groups = 0
+    mobi_duplicate_count = 0
+    for key, primary_paths in sorted(primary_groups.items()):
+        ordered_primary = sorted(
+            primary_paths,
+            key=lambda path: (
+                path.suffix.casefold() != ".epub",
+                path.name.casefold(),
+            ),
+        )
+        primary = ordered_primary[0]
+        alternate_paths = [*ordered_primary[1:], *alternate_groups.get(key, [])]
+        if alternate_paths:
+            duplicate_format_groups += 1
+        mobi_duplicate_count += sum(
+            path.suffix.casefold() == ".mobi" for path in alternate_paths
+        )
+        matched_artwork = None
+        matching_artwork = artwork_groups.get(key, [])
+        if matching_artwork:
+            artwork_path = sorted(
+                matching_artwork,
+                key=lambda path: str(path).casefold(),
+            )[0]
+            matched_artwork_paths.add(artwork_path)
+            matched_artwork = {
+                "file": (
+                    _book_source_relative_path(artwork_path, source)
+                ),
+                "match_method": "normalized_basename",
+                "confidence": 0.95,
+            }
+        groups.append({
+            "match_key": key,
+            "primary": primary,
+            "alternate_formats": [
+                {
+                    "format": path.suffix.lstrip(".").upper(),
+                    "file": (
+                        _book_source_relative_path(path, source)
+                    ),
+                    "role": "alternate_format",
+                }
+                for path in alternate_paths
+            ],
+            "matched_artwork": matched_artwork,
+        })
+
+    artwork_count = len(files.get("artwork", []))
+    ignored_sidecar_count = (
+        len(files.get("sidecars", []))
+        + len(files.get("other", []))
+        + sum(
+            len(paths)
+            for key, paths in alternate_groups.items()
+            if key not in primary_groups
+        )
+    )
+    summary = {
+        "total_files_seen": sum(
+            len(files.get(key, []))
+            for key in ("books", "alternates", "artwork", "sidecars", "other")
+        ),
+        "primary_book_count": len(groups),
+        "included_book_count": len(groups),
+        "epub_count": sum(
+            group["primary"].suffix.casefold() == ".epub" for group in groups
+        ),
+        "pdf_count": sum(
+            group["primary"].suffix.casefold() == ".pdf" for group in groups
+        ),
+        "mobi_duplicate_count": mobi_duplicate_count,
+        "opf_sidecar_count": sum(
+            path.suffix.casefold() == ".opf"
+            for path in files.get("sidecars", [])
+        ),
+        "artwork_count": artwork_count,
+        "matched_artwork_count": len(matched_artwork_paths),
+        "unmatched_artwork_count": artwork_count - len(matched_artwork_paths),
+        "ignored_sidecar_count": ignored_sidecar_count,
+        "duplicate_format_groups": duplicate_format_groups,
+        "needs_repair_count": 0,
+    }
+    return groups, summary
 
 
 def _xml_text(element: ElementTree.Element | None) -> str | None:
@@ -443,13 +624,29 @@ def build_book_metadata_candidates(
     for field in fields:
         file_value = file_guess.get(field)
         if str(file_value or "").casefold() not in UNKNOWN_BOOK_VALUES:
-            add_candidate(candidates, make_candidate(
+            candidate = make_candidate(
                 field,
                 file_value,
                 "filename",
                 "Filename",
                 0.68,
-            ))
+            )
+            if (
+                candidate
+                and field == "author"
+                and not _looks_like_author(str(file_value))
+            ):
+                candidate["ignored"] = True
+                candidate["confidence"] = min(
+                    float(candidate.get("confidence") or 0),
+                    0.35,
+                )
+                candidate["confidence_label"] = "low"
+                candidate["notes"] = list(dict.fromkeys([
+                    *candidate.get("notes", []),
+                    "subtitle-like filename segment, not author",
+                ]))
+            add_candidate(candidates, candidate)
 
     if candidate_runtime is not None:
         candidate_runtime.update({
@@ -467,6 +664,7 @@ def build_book_metadata_candidates(
             "metadata_reader_errors": [],
             "pdf_garbage_candidates_blocked": 0,
             "author_names_canonicalized": 0,
+            "collection_intelligence_active": True,
         })
     if primary.suffix.casefold() == ".epub":
         embedded = extract_epub_metadata(primary)

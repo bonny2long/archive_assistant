@@ -1,4 +1,4 @@
-"""Bounded checks for v2.060 PDF metadata quality guards."""
+"""Bounded checks for v2.061 PDF metadata quality guards."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from app.services.title_display import destination_title  # noqa: E402
 
 
 def main() -> None:
-    assert METADATA_ASSIST_VERSION == "v2.060"
+    assert METADATA_ASSIST_VERSION == "v2.061"
     assert normalize_metadata_text("Bad\x00  title\nvalue") == "Bad title value"
 
     assert is_garbage_document_title("tmpezE58S\x00")
@@ -133,7 +133,7 @@ def main() -> None:
         "to learn the Realms from A-Z of Self-Sufficient Living"
     ) == "Prepper’s Long Term Survival Guide"
 
-    print("v2.060 PDF metadata quality checks passed")
+    print("v2.061 PDF metadata quality checks passed")
 
 
 if __name__ == "__main__":

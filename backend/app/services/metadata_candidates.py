@@ -5,7 +5,7 @@ import unicodedata
 from typing import Any
 
 
-METADATA_ASSIST_VERSION = "v2.060"
+METADATA_ASSIST_VERSION = "v2.061"
 
 GENERIC_UNKNOWN_VALUES = {
     "",

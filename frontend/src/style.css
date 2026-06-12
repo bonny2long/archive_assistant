@@ -1783,6 +1783,20 @@ button:focus-visible, input:focus-visible {
   white-space: normal;
   overflow-wrap: anywhere;
 }
+.book-repair-card__cover,
+.book-repair-card__alternate {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--accent-green);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.book-repair-card__cover--missing {
+  color: var(--text-secondary);
+}
+.book-repair-card__alternate {
+  color: var(--accent-blue);
+}
 .book-repair-card__limited {
   display: block;
   width: fit-content;

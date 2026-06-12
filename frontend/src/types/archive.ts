@@ -102,6 +102,7 @@ export type BatchSummary = {
   book_files?: string[];
   primary_book_file?: string | null;
   book_items?: BookCollectionItem[];
+  collection_summary?: BookCollectionSummary;
   narrator?: string | null;
   series?: string | null;
   series_index?: string | null;
@@ -301,6 +302,8 @@ export type BookCollectionItem = {
   metadata_candidates?: Record<string, MetadataCandidate[]>;
   candidate_notes?: string[];
   candidate_runtime?: Record<string, unknown>;
+  matched_artwork?: MatchedArtwork | null;
+  alternate_formats?: AlternateBookFormat[];
 };
 
 export type BookCollectionItemUpdate = {
@@ -315,6 +318,36 @@ export type BookCollectionItemUpdate = {
   metadata_candidates?: Record<string, MetadataCandidate[]>;
   candidate_notes?: string[];
   candidate_runtime?: Record<string, unknown>;
+  matched_artwork?: MatchedArtwork | null;
+  alternate_formats?: AlternateBookFormat[];
+};
+
+export type MatchedArtwork = {
+  file: string;
+  match_method: "normalized_basename";
+  confidence: number;
+};
+
+export type AlternateBookFormat = {
+  format: string;
+  file: string;
+  role: "alternate_format";
+};
+
+export type BookCollectionSummary = {
+  total_files_seen: number;
+  primary_book_count: number;
+  included_book_count: number;
+  epub_count: number;
+  pdf_count: number;
+  mobi_duplicate_count: number;
+  opf_sidecar_count: number;
+  artwork_count: number;
+  matched_artwork_count: number;
+  unmatched_artwork_count: number;
+  ignored_sidecar_count: number;
+  duplicate_format_groups: number;
+  needs_repair_count: number;
 };
 
 export type BookCollectionReviewUpdate = {

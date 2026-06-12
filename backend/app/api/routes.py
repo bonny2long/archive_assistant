@@ -838,6 +838,15 @@ def update_book_collection_review(
                     {},
                 )
             ),
+            "matched_artwork": existing_items.get(
+                item.source_file, {}
+            ).get("matched_artwork"),
+            "alternate_formats": list(
+                existing_items.get(item.source_file, {}).get(
+                    "alternate_formats",
+                    [],
+                )
+            ),
         }
         destination = build_book_item_destination(
             books_root=settings.books_dir,
@@ -884,6 +893,19 @@ def update_book_collection_review(
         ],
         "confidence": 0.8,
     })
+    collection_summary = dict(metadata.get("collection_summary") or {})
+    collection_summary["included_book_count"] = sum(
+        item.get("include", True) for item in items
+    )
+    collection_summary["needs_repair_count"] = sum(
+        item.get("include", True)
+        and (
+            str(item.get("author") or "").casefold() == "unknown author"
+            or str(item.get("title") or "").casefold() == "unknown title"
+        )
+        for item in items
+    )
+    metadata["collection_summary"] = collection_summary
     if update.confirm_non_blocking_warnings:
         metadata["review_confirmed"] = True
     metadata = build_review_state("book", metadata)
@@ -1684,6 +1706,7 @@ def _batch_to_summary(
         book_files=list(meta.get("book_files") or []),
         primary_book_file=meta.get("primary_book_file"),
         book_items=list(meta.get("book_items") or []),
+        collection_summary=dict(meta.get("collection_summary") or {}),
         narrator=meta.get("narrator"),
         series=meta.get("series"),
         series_index=meta.get("series_index"),
