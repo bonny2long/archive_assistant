@@ -511,7 +511,7 @@ def update_movie_metadata(
     title = update.title.strip()
     if not title:
         raise HTTPException(status_code=422, detail="Movie title is required")
-    year = update.year.strip() if update.year else None
+    year = normalize_metadata_text(update.year) if update.year else None
     edition = update.edition.strip() if update.edition else None
     movie_format = update.format.strip().upper() if update.format else None
     metadata = dict(batch.metadata_json or {})
@@ -792,7 +792,7 @@ def update_book_collection_review(
     for item in update.books:
         title = normalize_metadata_text(item.title)
         author = normalize_metadata_text(item.author)
-        year = item.year.strip() if item.year else None
+        year = normalize_metadata_text(item.year) if item.year else None
         book_format = (
             item.format.strip().upper()
             if item.format
@@ -815,7 +815,9 @@ def update_book_collection_review(
                 else None
             ),
             "series_index": (
-                item.series_index.strip() if item.series_index else None
+                normalize_metadata_text(item.series_index)
+                if item.series_index
+                else None
             ),
             "format": book_format,
             "metadata_candidates": dict(
@@ -920,7 +922,7 @@ def update_audiobook_metadata(
 
     author = normalize_metadata_text(update.author)
     title = normalize_metadata_text(update.title)
-    year = update.year.strip() if update.year else None
+    year = normalize_metadata_text(update.year) if update.year else None
     narrator = (
         normalize_metadata_text(update.narrator)
         if update.narrator
@@ -932,7 +934,9 @@ def update_audiobook_metadata(
         else None
     )
     series_index = (
-        update.series_index.strip() if update.series_index else None
+        normalize_metadata_text(update.series_index)
+        if update.series_index
+        else None
     )
     metadata = dict(batch.metadata_json or {})
     audio_format = (

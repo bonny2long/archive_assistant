@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Any
 
 
-METADATA_ASSIST_VERSION = "v2.059"
+METADATA_ASSIST_VERSION = "v2.060"
 
 GENERIC_UNKNOWN_VALUES = {
     "",
@@ -38,7 +39,80 @@ def confidence_label(score: float) -> str:
 
 
 def normalize_metadata_text(value: Any) -> str:
-    return re.sub(r"\s+", " ", str(value or "")).strip()
+    cleaned: list[str] = []
+    for character in str(value or ""):
+        if character == "\x00":
+            continue
+        if unicodedata.category(character).startswith("C"):
+            cleaned.append(" ")
+        else:
+            cleaned.append(character)
+    text = "".join(cleaned)
+    return re.sub(r"\s+", " ", text).strip(" \t\r\n")
+
+
+def is_garbage_document_title(value: Any) -> bool:
+    raw = str(value or "")
+    if any(unicodedata.category(char).startswith("C") for char in raw):
+        return True
+    text = normalize_metadata_text(raw).strip(" ._-")
+    normalized = text.casefold()
+    if len(re.sub(r"[^a-z0-9]", "", normalized)) < 4:
+        return True
+    if re.match(
+        r"^(?:tmp|temp)[a-z0-9_-]*$",
+        normalized,
+    ):
+        return True
+    if re.match(r"^scan(?:ner)?(?:[_ -].*)?$", normalized):
+        return True
+    if normalized in {"document", "untitled"}:
+        return True
+    if re.match(r"^(?:microsoft word|adobe acrobat)\b", normalized):
+        return True
+    words = re.findall(r"[A-Za-z][A-Za-z'’&-]*", text)
+    if not words:
+        return True
+    if (
+        len(words) == 1
+        and len(text) >= 8
+        and re.search(r"[a-z][A-Z]|[A-Z][a-z].*\d|\d.*[A-Za-z]", text)
+    ):
+        return True
+    return False
+
+
+BUSINESS_AUTHOR_WORDS = {
+    "books",
+    "company",
+    "group",
+    "inc",
+    "llc",
+    "media",
+    "press",
+    "publishing",
+    "studios",
+}
+
+
+def canonicalize_author_name(value: Any) -> str:
+    text = normalize_metadata_text(value)
+    if text.count(",") != 1:
+        return text
+    last, first = (part.strip() for part in text.split(",", 1))
+    combined_words = {
+        word.casefold()
+        for word in re.findall(r"[A-Za-z][A-Za-z'’.-]*", text)
+    }
+    if combined_words & BUSINESS_AUTHOR_WORDS:
+        return text
+    surname = re.compile(r"^[A-Za-z][A-Za-z'’.-]*$")
+    given_names = re.compile(
+        r"^[A-Za-z][A-Za-z'’.-]*(?:\s+[A-Za-z][A-Za-z'’.-]*)?$"
+    )
+    if not surname.fullmatch(last) or not given_names.fullmatch(first):
+        return text
+    return f"{first} {last}"
 
 
 def is_generic_unknown_value(value: str) -> bool:
@@ -66,6 +140,12 @@ def should_hide_candidate(field: str, value: str, source: str) -> bool:
         or is_generated_timestamp_value(value)
     ):
         return True
+    if (
+        field == "title"
+        and source.startswith("pdf_document_info")
+        and is_garbage_document_title(value)
+    ):
+        return True
     return False
 
 
@@ -81,6 +161,12 @@ def candidate_quality_notes(
         or is_generated_timestamp_value(value)
     ):
         notes.append("generic embedded tag")
+    if (
+        field == "title"
+        and source.startswith("pdf_document_info")
+        and is_garbage_document_title(value)
+    ):
+        notes.append("garbage PDF document title")
     return notes
 
 
@@ -95,6 +181,8 @@ def make_candidate(
     if value is None:
         return None
     normalized_value = normalize_metadata_text(value)
+    if str(field) == "author":
+        normalized_value = canonicalize_author_name(normalized_value)
     if not normalized_value:
         return None
     quality_notes = candidate_quality_notes(

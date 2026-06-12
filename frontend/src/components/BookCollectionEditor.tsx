@@ -88,6 +88,15 @@ function pdfMetadataLimitedReason(item: BookCollectionItemUpdate): string {
   return "PDF metadata limited: no reliable embedded author/year found";
 }
 
+function garbagePdfTitleCount(item: BookCollectionItemUpdate): number {
+  return (item.metadata_candidates?.title ?? []).filter(
+    (candidate) => (
+      candidate.ignored
+      && candidate.notes.includes("garbage PDF document title")
+    ),
+  ).length;
+}
+
 function cleanPathPart(value: string): string {
   return value.replace(/[<>:"/\\|?*]/g, "_").trim() || "Unknown";
 }
@@ -190,6 +199,15 @@ function BookRepairCard({
               {pdfMetadataLimitedReason(item)}
             </span>
           )}
+          {itemFormat(item) === "PDF" && (
+            <span className="book-repair-card__checked">PDF metadata checked</span>
+          )}
+          {garbagePdfTitleCount(item) > 0 && (
+            <span className="book-repair-card__junk">Junk PDF title ignored</span>
+          )}
+          {itemFormat(item) === "PDF" && isUnknownAuthor(item.author) && (
+            <span className="book-repair-card__manual">Author still needs manual lookup</span>
+          )}
           <code>{item.source_file}</code>
         </div>
         <label className="collection-item-card__include">
@@ -207,6 +225,7 @@ function BookRepairCard({
           <input
             disabled={!item.include}
             value={item.title}
+            title={item.title}
             onChange={(event) => onChange(index, { title: event.target.value })}
           />
           <MetadataSuggestionChips
@@ -216,6 +235,11 @@ function BookRepairCard({
             currentValue={item.title}
             onApply={(value) => onChange(index, { title: value })}
           />
+          {garbagePdfTitleCount(item) > 0 && (
+            <small className="metadata-filter-count">
+              {garbagePdfTitleCount(item)} garbage PDF metadata candidate filtered
+            </small>
+          )}
         </label>
         <label>
           Author
@@ -605,7 +629,7 @@ export default function BookCollectionEditor({
                       <tr key={`clean-${item.source_file}`}>
                         <td>{item.format ?? "EPUB"}</td>
                         <td>{item.author}</td>
-                        <td>{item.title}</td>
+                        <td title={item.title}>{item.title}</td>
                         <td>{item.year || "Unknown Year"}</td>
                         <td>
                           <code>

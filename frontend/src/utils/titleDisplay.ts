@@ -5,7 +5,7 @@ export function cleanDisplayTitle(value: string): string {
 export function destinationTitle(value: string, maxLength = 120): string {
   const display = cleanDisplayTitle(value);
   const colon = display.indexOf(":");
-  if (display.length > 100 && colon >= 8 && colon <= maxLength) {
+  if (colon >= 8) {
     return display
       .slice(0, colon)
       .replace(/[<>:"/\\|?*]/g, "_")
@@ -14,6 +14,10 @@ export function destinationTitle(value: string, maxLength = 120): string {
   const cleaned = display
     .replace(/[<>:"/\\|?*]/g, "_")
     .replace(/[ .,:;-]+$/g, "");
+  const pipe = cleaned.indexOf("|");
+  if (pipe >= 8) {
+    return cleaned.slice(0, pipe).replace(/[ .,:;-]+$/g, "");
+  }
   if (cleaned.length <= maxLength) return cleaned || "Unknown Title";
 
   const sliced = cleaned.slice(0, maxLength).trimEnd();

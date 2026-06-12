@@ -101,7 +101,7 @@ export default function BookMetadataEditor({
           <div className="editor-grid">
             <label>
               <span>Title</span>
-              <input value={title} onChange={(event) => setTitle(event.target.value)} autoFocus />
+              <input value={title} title={title} onChange={(event) => setTitle(event.target.value)} autoFocus />
               <MetadataSuggestionChips
                 label="Title"
                 field="title"

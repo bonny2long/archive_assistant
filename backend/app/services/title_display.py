@@ -15,10 +15,14 @@ def destination_title(value: str, max_length: int = 120) -> str:
     display = clean_display_title(value)
     main_title, separator, _ = display.partition(":")
     main_title = main_title.rstrip(" .,:;-")
-    if separator and len(display) > 100 and 8 <= len(main_title) <= max_length:
+    if separator and len(main_title) >= 8:
         return ILLEGAL_PATH_CHARS_RE.sub("_", main_title)
 
     title = ILLEGAL_PATH_CHARS_RE.sub("_", display).rstrip(" .,:;-")
+    if "|" in title:
+        strong_title = title.split("|", 1)[0].rstrip(" .,:;-")
+        if len(strong_title) >= 8:
+            title = strong_title
     if len(title) <= max_length:
         return title or "Unknown Title"
 

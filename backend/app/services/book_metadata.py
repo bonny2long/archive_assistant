@@ -8,6 +8,7 @@ from xml.etree import ElementTree
 from app.services.metadata_candidates import (
     METADATA_ASSIST_VERSION,
     add_candidate,
+    canonicalize_author_name,
     make_candidate,
     normalize_metadata_text,
     preferred_candidate_value,
@@ -464,6 +465,8 @@ def build_book_metadata_candidates(
             "pdf_metadata_attempted": primary.suffix.casefold() == ".pdf",
             "epub_metadata_attempted": primary.suffix.casefold() == ".epub",
             "metadata_reader_errors": [],
+            "pdf_garbage_candidates_blocked": 0,
+            "author_names_canonicalized": 0,
         })
     if primary.suffix.casefold() == ".epub":
         embedded = extract_epub_metadata(primary)
@@ -498,13 +501,24 @@ def build_book_metadata_candidates(
             raw_date = str(embedded.get("date") or "")
             match = YEAR_RE.search(raw_date)
             value = match.group(1) if match else None
-        add_candidate(candidates, make_candidate(
+        candidate = make_candidate(
             field,
             value,
             f"{source_key}_{field}",
             source_label,
             0.92 if field in {"title", "author"} else 0.84,
-        ))
+        )
+        if candidate_runtime is not None and candidate:
+            if "garbage PDF document title" in candidate.get("notes", []):
+                candidate_runtime["pdf_garbage_candidates_blocked"] += 1
+            if (
+                field == "author"
+                and value
+                and canonicalize_author_name(value)
+                != normalize_metadata_text(value)
+            ):
+                candidate_runtime["author_names_canonicalized"] += 1
+        add_candidate(candidates, candidate)
 
     artwork_candidates = [
         candidate

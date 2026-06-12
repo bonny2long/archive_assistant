@@ -810,7 +810,7 @@ function BookBatchDetail({ batch, moveSummary }: Props) {
         <section className="library-card">
           <h3>{collection ? "Collection" : "Book"}</h3>
           <dl className="library-fields">
-            {!collection && <div><dt>Title</dt><dd>{String(metadata.title ?? "-")}</dd></div>}
+            {!collection && <div><dt>Title</dt><dd title={String(metadata.title ?? "-")}>{String(metadata.title ?? "-")}</dd></div>}
             {!collection && <div><dt>Author</dt><dd>{String(metadata.author ?? "-")}</dd></div>}
             {!collection && <div><dt>Year</dt><dd>{String(metadata.year ?? "-")}</dd></div>}
             {collection && <div><dt>Collection</dt><dd>{String(metadata.collection_title ?? "-")}</dd></div>}
@@ -844,7 +844,7 @@ function BookBatchDetail({ batch, moveSummary }: Props) {
                   <tr key={String(item.source_file ?? index)}>
                     <td>{String(item.format ?? "-")}</td>
                     <td>{String(item.author ?? "-")}</td>
-                    <td>{String(item.title ?? "-")}</td>
+                    <td title={String(item.title ?? "-")}>{String(item.title ?? "-")}</td>
                     <td>{String(item.year ?? "-")}</td>
                     <td>{String(item.series ?? "-")}</td>
                     <td>{String(item.destination_preview ?? "-")}</td>

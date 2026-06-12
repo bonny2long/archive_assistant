@@ -1,4 +1,4 @@
-"""Bounded checks for v2.059 metadata parser guardrails."""
+"""Bounded checks for v2.060 metadata parser guardrails."""
 
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ def assert_book(
 
 
 def main() -> None:
-    assert METADATA_ASSIST_VERSION == "v2.059"
+    assert METADATA_ASSIST_VERSION == "v2.060"
 
     assert_book(
         "@SoftSkills101 - Atomic Habits.pdf",
@@ -123,7 +123,7 @@ def main() -> None:
     finally:
         book_metadata.collect_book_files = original_collect_books
         book_metadata.extract_pdf_metadata = original_extract_pdf
-    assert built_book["metadata_assist_version"] == "v2.059"
+    assert built_book["metadata_assist_version"] == "v2.060"
     assert built_book["title"] == "Atomic Habits"
     assert built_book["author"] == "Unknown Author"
     assert built_book["candidate_runtime"][
@@ -173,7 +173,7 @@ def main() -> None:
     finally:
         audiobook_metadata.collect_audiobook_files = original_collect_audio
         audiobook_metadata.extract_audio_metadata = original_extract
-    assert built_audiobook["metadata_assist_version"] == "v2.059"
+    assert built_audiobook["metadata_assist_version"] == "v2.060"
     assert built_audiobook["title"] == "Star Wars The Old Republic Revan"
     assert built_audiobook["author"] == "Unknown Author"
     assert built_audiobook["candidate_runtime"][
@@ -187,7 +187,7 @@ def main() -> None:
         '"metadata_assist_version": METADATA_ASSIST_VERSION'
     ) >= 3
 
-    print("v2.059 metadata parser guardrail checks passed")
+    print("v2.060 metadata parser guardrail checks passed")
 
 
 if __name__ == "__main__":

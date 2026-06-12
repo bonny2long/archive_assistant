@@ -524,6 +524,8 @@ def build_audiobook_metadata(source: Path, audiobooks_root: Path) -> dict:
             "pdf_metadata_attempted": False,
             "epub_metadata_attempted": False,
             "metadata_reader_errors": [],
+            "pdf_garbage_candidates_blocked": 0,
+            "author_names_canonicalized": 0,
         },
         "review_type": "audiobook",
         "review_mode": "single_item",
