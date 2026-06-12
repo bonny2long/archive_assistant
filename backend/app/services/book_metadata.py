@@ -45,6 +45,24 @@ SOURCE_PREFIX_RE = re.compile(
     r")\s*[-_:]\s*",
     re.I,
 )
+BRACKETED_SOURCE_PREFIX_RE = re.compile(
+    r"^\[(?P<label>[^\]]{2,80})\]\s*[-_:]?\s*",
+    re.I,
+)
+UPLOADER_TOKEN_PREFIX_RE = re.compile(
+    r"^(?P<label>[A-Za-z][A-Za-z0-9.-]{2,})_\s+",
+)
+TRUNCATED_AUTHOR_ENDINGS = {
+    "en",
+    "foragi",
+    "proje",
+    "prepp",
+    "survi",
+}
+CATEGORY_AUTHOR_PHRASES = {
+    "bug",
+    "firearms ammo",
+}
 
 
 def is_book_file(path: Path) -> bool:
@@ -79,17 +97,34 @@ def safe_book_path_part(value: str) -> str:
     return cleaned or "Unknown"
 
 
-def _strip_release_noise(value: str) -> str:
+def _strip_source_label(value: str) -> tuple[str, str | None]:
+    text = value.strip()
+    bracketed = BRACKETED_SOURCE_PREFIX_RE.match(text)
+    if bracketed:
+        return text[bracketed.end():], bracketed.group("label")
+
+    uploader = UPLOADER_TOKEN_PREFIX_RE.match(text)
+    if uploader:
+        return text[uploader.end():], uploader.group("label")
+
+    source = SOURCE_PREFIX_RE.match(text)
+    if source:
+        label = source.group(0).strip(" -_:")
+        return text[source.end():], label
+    return text, None
+
+
+def _strip_release_noise(value: str) -> tuple[str, str | None]:
+    text, source_label = _strip_source_label(value)
     text = re.sub(
         r"\[(?:epub|pdf|ebook|retail|scan|ocr|azw3|mobi)\]",
         " ",
-        value,
+        text,
         flags=re.I,
     )
     text = re.sub(r"\b(?:epub|pdf|ebook|retail|scan|ocr)\b", " ", text, flags=re.I)
     text = re.sub(r"_+", " ", text)
-    text = SOURCE_PREFIX_RE.sub("", text)
-    return re.sub(r"\s+", " ", text).strip(" -_.")
+    return re.sub(r"\s+", " ", text).strip(" -_."), source_label
 
 
 def _clean_person_name(value: str) -> str:
@@ -106,7 +141,23 @@ def _looks_like_author(value: str) -> bool:
     text = value.strip()
     if not text:
         return False
+    normalized = re.sub(r"[^a-z0-9]+", " ", text.casefold()).strip()
+    words = re.findall(r"[A-Za-z][A-Za-z.'\u2019\-]*", text)
+    if len(normalized) < 3 or len(words) < 2:
+        return False
     if re.search(r"\d", text):
+        return False
+    if "," in text:
+        return False
+    if normalized in CATEGORY_AUTHOR_PHRASES:
+        return False
+    if "prepper" in normalized or "box set" in normalized:
+        return False
+    if words[-1].casefold() in TRUNCATED_AUTHOR_ENDINGS:
+        return False
+    if words[-1].casefold() in {
+        "a", "an", "and", "for", "in", "of", "on", "the", "to", "with",
+    }:
         return False
     if re.search(r"\b[A-Z]\.?\s*[A-Z][a-z]+", text):
         return True
@@ -117,7 +168,6 @@ def _looks_like_author(value: str) -> bool:
         return True
     if KNOWN_AUTHORISH_RE.search(text):
         return True
-    words = re.findall(r"[A-Za-z][A-Za-z.'\u2019\-]*", text)
     title_words = {
         "a", "against", "assertiveness", "conversations", "couples",
         "discipline", "effective", "empathy", "for", "guide", "happy",
@@ -127,6 +177,43 @@ def _looks_like_author(value: str) -> bool:
         return False
     capitalized = [word for word in words if word[:1].isupper()]
     return 2 <= len(words) <= 4 and len(capitalized) == len(words)
+
+
+def _looks_like_known_author(value: str) -> bool:
+    return bool(
+        KNOWN_AUTHORISH_RE.search(value)
+        or re.search(r"\b[A-Z]\.?\s*[A-Z][a-z]+", value)
+    )
+
+
+def _author_guess_confidence(value: str) -> str:
+    if value == "Unknown Author":
+        return "none"
+    if _looks_like_known_author(value):
+        return "high"
+    if re.search(r"\b(?:et al|and|&)\b", value, flags=re.I):
+        return "high"
+    return "medium"
+
+
+def _title_after_rejected_author(left: str, right: str) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", " ", right.casefold()).strip()
+    words = re.findall(r"[A-Za-z][A-Za-z.'\u2019\-]*", right)
+    if normalized in CATEGORY_AUTHOR_PHRASES:
+        return left
+    if len(words) == 1 and (
+        len(words[0]) == 1
+        or words[0].casefold() in TRUNCATED_AUTHOR_ENDINGS
+    ):
+        return left
+    if (
+        words
+        and words[-1].casefold() in TRUNCATED_AUTHOR_ENDINGS
+    ):
+        return left
+    if re.fullmatch(r"\d+", right.strip()):
+        return f"{left} {right.strip()}"
+    return f"{left} - {right}"
 
 
 def _extract_year(text: str) -> tuple[str, str | None]:
@@ -146,7 +233,7 @@ def parse_book_name(value: str) -> dict:
         if candidate.suffix.casefold() in BOOK_EXTENSIONS
         else value
     )
-    text = _strip_release_noise(raw)
+    text, source_label = _strip_release_noise(raw)
     text, year = _extract_year(text)
     series = None
     series_index = None
@@ -164,6 +251,11 @@ def parse_book_name(value: str) -> dict:
                 "raw_name": raw,
                 "series": series,
                 "series_index": series_index,
+                "source_label_removed": source_label,
+                "author_split_blocked": False,
+                "author_guess_confidence": _author_guess_confidence(
+                    _clean_person_name(parts[-1])
+                ),
             }
         return {
             "author": "Unknown Author",
@@ -172,6 +264,9 @@ def parse_book_name(value: str) -> dict:
             "raw_name": raw,
             "series": series,
             "series_index": series_index,
+            "source_label_removed": source_label,
+            "author_split_blocked": len(parts) >= 2,
+            "author_guess_confidence": "none",
         }
 
     series_match = BOOK_SERIES_PREFIX_RE.match(text)
@@ -183,6 +278,9 @@ def parse_book_name(value: str) -> dict:
             "raw_name": raw,
             "series": _clean_book_title(series_match.group("series")),
             "series_index": series_match.group("index"),
+            "source_label_removed": source_label,
+            "author_split_blocked": False,
+            "author_guess_confidence": "none",
         }
 
     by_match = AUTHOR_HINT_RE.search(text)
@@ -194,6 +292,11 @@ def parse_book_name(value: str) -> dict:
             "raw_name": raw,
             "series": series,
             "series_index": series_index,
+            "source_label_removed": source_label,
+            "author_split_blocked": False,
+            "author_guess_confidence": _author_guess_confidence(
+                _clean_person_name(by_match.group("author"))
+            ),
         }
 
     parts = [part.strip() for part in text.split(" - ") if part.strip()]
@@ -203,13 +306,14 @@ def parse_book_name(value: str) -> dict:
         if _looks_like_author(right):
             author, title = right, left
         elif (
-            _looks_like_author(parts[0])
+            _looks_like_known_author(parts[0])
             and len(parts) == 2
             and not parts[0].startswith("@")
         ):
             author, title = parts[0], parts[1]
         else:
-            author, title = "Unknown Author", text
+            author = "Unknown Author"
+            title = _title_after_rejected_author(left, right)
     else:
         author, title = "Unknown Author", text
     return {
@@ -219,6 +323,11 @@ def parse_book_name(value: str) -> dict:
         "raw_name": raw,
         "series": series,
         "series_index": series_index,
+        "source_label_removed": source_label,
+        "author_split_blocked": len(parts) >= 2 and author == "Unknown Author",
+        "author_guess_confidence": _author_guess_confidence(
+            _clean_person_name(author)
+        ),
     }
 
 
@@ -487,6 +596,18 @@ def build_single_book_metadata(source: Path, books_dir: Path) -> dict:
     return {
         "media_kind": "book",
         "metadata_assist_version": METADATA_ASSIST_VERSION,
+        "candidate_runtime": {
+            "metadata_assist_version": METADATA_ASSIST_VERSION,
+            "candidate_filter_active": True,
+            "generic_audio_tags_hidden": 0,
+            "bad_author_splits_blocked": int(
+                bool(source_parsed.get("author_split_blocked"))
+            ) + int(bool(file_parsed.get("author_split_blocked"))),
+        },
+        "source_label_removed": (
+            source_parsed.get("source_label_removed")
+            or file_parsed.get("source_label_removed")
+        ),
         "review_type": "book",
         "review_mode": "single_item",
         "author": author,

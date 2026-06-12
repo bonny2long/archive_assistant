@@ -4,7 +4,7 @@ import re
 from typing import Any
 
 
-METADATA_ASSIST_VERSION = "v2.056"
+METADATA_ASSIST_VERSION = "v2.057"
 
 GENERIC_UNKNOWN_VALUES = {
     "",
@@ -153,11 +153,29 @@ def preferred_candidate_value(
     candidates: dict[str, list[dict[str, Any]]],
     field: str,
     fallback: Any = None,
+    *,
+    min_confidence: str | float = "medium",
+    require_not_filename_guess: bool = False,
 ) -> Any:
+    confidence_thresholds = {
+        "low": 0.0,
+        "medium": 0.65,
+        "high": 0.85,
+    }
+    threshold = (
+        confidence_thresholds.get(min_confidence, 0.65)
+        if isinstance(min_confidence, str)
+        else float(min_confidence)
+    )
     for candidate in candidates.get(field, []):
         if candidate.get("ignored"):
             continue
-        if candidate.get("confidence_label") == "low":
+        if float(candidate.get("confidence") or 0) < threshold:
+            continue
+        if (
+            require_not_filename_guess
+            and candidate.get("source") == "filename"
+        ):
             continue
         value = candidate.get("value")
         if value is not None and str(value).strip():

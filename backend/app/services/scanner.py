@@ -924,13 +924,25 @@ def _create_book_batch(db: Session, source: Path) -> IngestBatch | None:
                 "source_key": path.name,
                 "source_file": path.name,
                 "include": True,
-                "author": item["author"],
+                "author": (
+                    item["author"]
+                    if item.get("author_guess_confidence") == "high"
+                    else "Unknown Author"
+                ),
                 "title": item["title"],
                 "year": item.get("year"),
                 "series": item.get("series"),
                 "series_index": item.get("series_index"),
                 "format": fmt,
                 "metadata_assist_version": METADATA_ASSIST_VERSION,
+                "candidate_runtime": {
+                    "metadata_assist_version": METADATA_ASSIST_VERSION,
+                    "candidate_filter_active": True,
+                    "generic_audio_tags_hidden": 0,
+                    "bad_author_splits_blocked": int(
+                        bool(item.get("author_split_blocked"))
+                    ),
+                },
             }
             item_candidates, _ = build_book_metadata_candidates(
                 path,
@@ -943,6 +955,8 @@ def _create_book_batch(db: Session, source: Path) -> IngestBatch | None:
                 item_candidates,
                 "author",
                 item_metadata["author"],
+                min_confidence="high",
+                require_not_filename_guess=True,
             )
             item_metadata["title"] = preferred_candidate_value(
                 item_candidates,
@@ -994,6 +1008,7 @@ def _create_book_batch(db: Session, source: Path) -> IngestBatch | None:
         confidence=float(metadata.get("confidence") or 0.65),
         suggested_destination=str(destination) if destination else None,
         suggested_metadata={
+            "metadata_assist_version": METADATA_ASSIST_VERSION,
             "author": preferred_candidate_value(
                 metadata.get("metadata_candidates") or {},
                 "author",
@@ -1068,6 +1083,7 @@ def _create_audiobook_batch(db: Session, source: Path) -> IngestBatch | None:
         confidence=float(metadata.get("confidence") or 0.65),
         suggested_destination=str(destination) if destination else None,
         suggested_metadata={
+            "metadata_assist_version": METADATA_ASSIST_VERSION,
             "author": preferred_candidate_value(
                 metadata.get("metadata_candidates") or {},
                 "author",

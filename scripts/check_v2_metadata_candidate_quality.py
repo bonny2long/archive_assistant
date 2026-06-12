@@ -90,7 +90,7 @@ def main() -> None:
     assert visible_titles[0]["value"] == "Star Wars The Old Republic Revan"
     assert all(item["value"] != bad_album for item in visible_titles)
     assert chapters == []
-    assert summary["generic_audio_tag_count"] == 2
+    assert summary["generic_audio_tag_count"] == 4
     assert summary["detected_disc_count"] == 2
 
     parsed = parse_book_name("@SoftSkills101 - Atomic Habits.pdf")
@@ -123,7 +123,7 @@ def main() -> None:
         scanner_source
     )
     assert "metadata_assist_version" in scanner_source
-    assert METADATA_ASSIST_VERSION == "v2.056"
+    assert METADATA_ASSIST_VERSION == "v2.057"
 
     print("v2 metadata candidate quality checks passed")
 

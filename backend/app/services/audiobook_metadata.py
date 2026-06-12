@@ -352,13 +352,16 @@ def build_audiobook_metadata_candidates(
     for path in audio:
         embedded = extract_audio_metadata(path)
         for field in ("author", "title", "year", "narrator"):
-            add_candidate(candidates, make_candidate(
+            candidate = make_candidate(
                 field,
                 embedded.get(field),
                 f"audio_tag_{field}",
                 "Embedded audio tags",
                 0.88 if field in {"author", "title"} else 0.78,
-            ))
+            )
+            if field == "title" and candidate and candidate.get("ignored"):
+                generic_audio_tag_count += 1
+            add_candidate(candidates, candidate)
         chapter_title = embedded.get("chapter_title")
         folder_disc = next(
             (
@@ -510,6 +513,14 @@ def build_audiobook_metadata(source: Path, audiobooks_root: Path) -> dict:
     return {
         "media_kind": "audiobook",
         "metadata_assist_version": METADATA_ASSIST_VERSION,
+        "candidate_runtime": {
+            "metadata_assist_version": METADATA_ASSIST_VERSION,
+            "candidate_filter_active": True,
+            "generic_audio_tags_hidden": candidate_summary[
+                "generic_audio_tag_count"
+            ],
+            "bad_author_splits_blocked": 0,
+        },
         "review_type": "audiobook",
         "review_mode": "single_item",
         "author": author,
