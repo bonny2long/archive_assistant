@@ -1,38 +1,69 @@
 # Archive Assistant Roadmap
 
-## Milestone 1: Local music scanner
-- Scan `_INGEST/music`
-- Extract metadata
-- Create ingest batches
-- Create JSON reports
+## v1 Core — Complete
 
-## Milestone 2: Approved mover
-- Approve/reject batches
-- Move approved files only
-- Write move logs
-- Update archive item records
+Tagged: `archive-assistant-v1-core`
 
-## Milestone 3: Local dashboard
-- Inbox
-- Pending Review
-- Move History
-- Library Search
+Safe deterministic organizer: scan, classify, guided review, edit, approve, move, manifest, index, logs, and regression runner.
 
-## Milestone 4: PostgreSQL
-- Replace SQLite with PostgreSQL for NAS deployment
+**Supported workflows:**
+- Music albums
+- Music discographies
+- Single movies
+- Movie collections / trilogies
+- TV shows (seasons, episodes, specials)
+- Books / book collections
+- Audiobooks / multi-disc audiobook folders
+- Bulk approval with skip reporting
+- Metadata manifests and library indexes
+- Mixed-media scan / review / approve / move
+- Core v1 regression suite
 
-## Milestone 5: AI metadata recovery
-- Use AI only for ambiguous metadata
-- Human approval before writes
+**Core v1 rules:**
+- No deletion
+- No overwrite
+- No embedded tag mutation
+- No move without approval
+- Recognized media with weak metadata → review, not quarantine
+- True unknown / unsupported → quarantine review
+- Moved media gets metadata manifests and move logs
 
-## Milestone 6: Add media types
-- Movies
-- TV
-- Books
-- Audiobooks
-- Internet Archive imports
+---
 
-## Future metadata assist phase
-- Books: read EPUB/PDF metadata using EbookLib / pypdf / optional Calibre CLI.
-- Audiobooks: optional read-only metadata/chapter helpers using mutagen and/or external lookup.
-- All suggestions remain review-first. No automatic rename or move without user approval.
+## v2 Metadata Assist — Next
+
+Scope stays focused on metadata only:
+
+- **EPUB/PDF metadata reading** — extract title, author, series from book files using EbookLib / pypdf
+- **Audiobook chapter/title metadata** — optional chapter naming helpers using mutagen
+- **Suggestion chips in editors** — metadata candidates from file parsing, embedded tags, and optional online lookup
+- **Artwork suggestion support** — find and suggest cover art candidates
+- **Online lookup** — optional Open Library, Google Books, Audible lookups (opt-in, never automatic)
+- No silent edits
+- No deletion
+- No embedded tag writing (unless explicitly approved later)
+- Manual approval remains authoritative
+
+---
+
+## v3 Production Ingest Cleanup
+
+Production hardening after metadata assist is stable:
+
+- Clean empty `_INGEST` folders after successful moves
+- Leave folders with leftover files for review
+- Never delete files that were not moved
+- Never delete quarantined / rejected files
+- Development mode keeps leftovers
+- Production mode can clean approved empty source folders
+- Cleanup actions must be logged
+
+---
+
+## Later Phases
+
+- **PostgreSQL analytics** — richer search, library intelligence, historical stats
+- **Dashboard intelligence** — library trends, missing metadata reports, duplicate analysis
+- **Local radio** — streaming from organized music library
+- **External metadata engines** — plugin system for custom metadata sources
+- **Off-site backup** — parents-house replication, remote sync
