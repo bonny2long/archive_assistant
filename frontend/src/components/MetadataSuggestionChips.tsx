@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { MetadataCandidate } from "../types/archive";
 
 type Props = {
@@ -6,6 +7,9 @@ type Props = {
   candidates: MetadataCandidate[];
   currentValue: string;
   onApply: (value: string) => void;
+  maxVisible?: number;
+  hideLowConfidence?: boolean;
+  showMoreLabel?: string;
 };
 
 export default function MetadataSuggestionChips({
@@ -14,10 +18,19 @@ export default function MetadataSuggestionChips({
   candidates,
   currentValue,
   onApply,
+  maxVisible = 3,
+  hideLowConfidence = true,
+  showMoreLabel = "Show more suggestions",
 }: Props) {
-  const visible = candidates.filter(
-    (candidate) => candidate.field === field && !candidate.ignored,
+  const [expanded, setExpanded] = useState(false);
+  const filtered = candidates.filter(
+    (candidate) => (
+      candidate.field === field
+      && !candidate.ignored
+      && (!hideLowConfidence || candidate.confidence_label !== "low")
+    ),
   );
+  const visible = expanded ? filtered : filtered.slice(0, maxVisible);
   if (visible.length === 0) return null;
 
   return (
@@ -41,6 +54,15 @@ export default function MetadataSuggestionChips({
             </button>
           );
         })}
+        {filtered.length > maxVisible && (
+          <button
+            type="button"
+            className="metadata-suggestion-more"
+            onClick={() => setExpanded((value) => !value)}
+          >
+            {expanded ? "Show fewer suggestions" : `${showMoreLabel} (${filtered.length - maxVisible})`}
+          </button>
+        )}
       </div>
     </div>
   );

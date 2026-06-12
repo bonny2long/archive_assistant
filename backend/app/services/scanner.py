@@ -54,6 +54,7 @@ from app.services.video_metadata import (
 from app.services.review_state import build_review_state
 from app.services.book_metadata import (
     book_format_for,
+    build_book_metadata_candidates,
     build_book_item_destination,
     build_single_book_metadata,
     collect_book_files,
@@ -926,6 +927,13 @@ def _create_book_batch(db: Session, source: Path) -> IngestBatch | None:
                 "series_index": item.get("series_index"),
                 "format": fmt,
             }
+            item_candidates, _ = build_book_metadata_candidates(
+                path,
+                path,
+                [],
+            )
+            item_metadata["metadata_candidates"] = item_candidates
+            item_metadata["candidate_notes"] = []
             destination = build_book_item_destination(
                 books_root=settings.books_dir,
                 item=item_metadata,

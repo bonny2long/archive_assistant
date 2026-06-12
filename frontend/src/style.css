@@ -1108,6 +1108,66 @@ button:focus-visible, input:focus-visible {
   color: var(--text-muted);
   font-size: 9px;
 }
+.metadata-suggestion-more {
+  align-self: center;
+  padding: 0.3rem 0.45rem;
+  border: 0;
+  background: transparent;
+  color: var(--accent-blue);
+  cursor: pointer;
+  font-size: 10px;
+}
+.book-repair-summary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+.book-repair-summary span {
+  display: grid;
+  gap: 2px;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-page);
+  color: var(--text-muted);
+  font-size: 10px;
+}
+.book-repair-summary strong {
+  color: var(--text-primary);
+  font-size: 15px;
+}
+.audiobook-editor {
+  width: min(1100px, calc(100vw - 2rem));
+}
+.audiobook-editor__metadata {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: rgba(15, 23, 42, 0.35);
+}
+.audiobook-editor__section-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.audiobook-editor__section-heading p,
+.audiobook-editor__section-heading span {
+  margin-top: 0.2rem;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.audiobook-editor .track-preview__header {
+  align-items: center;
+}
+.audiobook-editor .track-preview__header > div {
+  display: grid;
+  gap: 2px;
+}
+.audiobook-editor .track-preview__table {
+  max-height: 380px;
+}
 
 /* ──────────────────────────────────────────────────────────────────────────
    Wide editor shell — shared header/body/footer scaffold for Music + Movie
@@ -1744,6 +1804,8 @@ button:focus-visible, input:focus-visible {
   }
   .review-summary > span { white-space: normal; }
   .book-bulk-tools label { min-width: 100%; }
+  .book-repair-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .audiobook-editor__section-heading { flex-direction: column; }
 }
 
 .tv-season-preview {

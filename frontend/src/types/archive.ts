@@ -112,6 +112,9 @@ export type BatchSummary = {
   metadata_candidates?: Record<string, MetadataCandidate[]>;
   chapter_candidates?: ChapterCandidate[];
   artwork_candidates?: MetadataCandidate[];
+  generic_audio_tag_count?: number;
+  detected_disc_count?: number;
+  candidate_warning_count?: number;
   suggested_destination?: string | null;
   suggested_metadata?: SuggestedMetadata | null;
   metadata_confirmed: boolean;
@@ -287,6 +290,8 @@ export type BookCollectionItem = {
   series?: string | null;
   series_index?: string | null;
   destination_preview?: string | null;
+  metadata_candidates?: Record<string, MetadataCandidate[]>;
+  candidate_notes?: string[];
 };
 
 export type BookCollectionItemUpdate = {
@@ -298,6 +303,8 @@ export type BookCollectionItemUpdate = {
   format?: string | null;
   series?: string | null;
   series_index?: string | null;
+  metadata_candidates?: Record<string, MetadataCandidate[]>;
+  candidate_notes?: string[];
 };
 
 export type BookCollectionReviewUpdate = {

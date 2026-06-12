@@ -31,6 +31,15 @@ KNOWN_AUTHORISH_RE = re.compile(
     r"\b(?:Herbert|Anderson|Allen|Clear|King|Tolkien|Martin|Asimov|Butler|Le Guin)\b",
     re.I,
 )
+SOURCE_PREFIX_RE = re.compile(
+    r"^(?:"
+    r"@[A-Za-z0-9_.-]+|"
+    r"(?:https?://)?(?:www\.)?[A-Za-z0-9.-]+\.(?:com|org|net|io)|"
+    r"ebook(?:s)?(?:[-_ ]?(?:source|scan|share))?|"
+    r"pdfdrive|z[-_. ]?lib|libgen|scanner|scan(?:ned)?"
+    r")\s*[-_:]\s*",
+    re.I,
+)
 
 
 def is_book_file(path: Path) -> bool:
@@ -74,6 +83,7 @@ def _strip_release_noise(value: str) -> str:
     )
     text = re.sub(r"\b(?:epub|pdf|ebook|retail|scan|ocr)\b", " ", text, flags=re.I)
     text = re.sub(r"_+", " ", text)
+    text = SOURCE_PREFIX_RE.sub("", text)
     return re.sub(r"\s+", " ", text).strip(" -_.")
 
 
@@ -178,7 +188,11 @@ def parse_book_name(value: str) -> dict:
         left = " - ".join(parts[:-1])
         if _looks_like_author(right):
             author, title = right, left
-        elif _looks_like_author(parts[0]) and len(parts) == 2:
+        elif (
+            _looks_like_author(parts[0])
+            and len(parts) == 2
+            and not parts[0].startswith("@")
+        ):
             author, title = parts[0], parts[1]
         else:
             author, title = "Unknown Author", text

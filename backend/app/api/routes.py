@@ -775,6 +775,11 @@ def update_book_collection_review(
             detail="Collection label is required when keeping a collection together.",
         )
     items = []
+    existing_items = {
+        str(item.get("source_file") or ""): item
+        for item in metadata.get("book_items", [])
+        if isinstance(item, dict)
+    }
     for item in update.books:
         title = item.title.strip()
         author = item.author.strip()
@@ -797,6 +802,18 @@ def update_book_collection_review(
                 item.series_index.strip() if item.series_index else None
             ),
             "format": book_format,
+            "metadata_candidates": dict(
+                existing_items.get(item.source_file, {}).get(
+                    "metadata_candidates",
+                    {},
+                )
+            ),
+            "candidate_notes": list(
+                existing_items.get(item.source_file, {}).get(
+                    "candidate_notes",
+                    [],
+                )
+            ),
         }
         destination = build_book_item_destination(
             books_root=settings.books_dir,
@@ -1643,6 +1660,9 @@ def _batch_to_summary(
         metadata_candidates=dict(meta.get("metadata_candidates") or {}),
         chapter_candidates=list(meta.get("chapter_candidates") or []),
         artwork_candidates=list(meta.get("artwork_candidates") or []),
+        generic_audio_tag_count=meta.get("generic_audio_tag_count", 0),
+        detected_disc_count=meta.get("detected_disc_count", 0),
+        candidate_warning_count=meta.get("candidate_warning_count", 0),
         suggested_destination=batch.suggested_destination,
         suggested_metadata=batch.suggested_metadata,
         metadata_confirmed=batch.metadata_confirmed,

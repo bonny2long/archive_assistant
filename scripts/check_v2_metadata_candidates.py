@@ -62,7 +62,7 @@ def main() -> None:
         "title": "Manual Audio Title",
         "author": "Manual Audio Author",
     }
-    audiobook_candidates, chapters, artwork = (
+    audiobook_candidates, chapters, artwork, summary = (
         build_audiobook_metadata_candidates(
             Path("Dune - Frank Herbert (1965) Audiobook"),
             [Path("Dune - Frank Herbert (1965) Audiobook.mp3")],
@@ -77,6 +77,7 @@ def main() -> None:
     assert audiobook_candidates["author"][0]["value"] == "Frank Herbert"
     assert chapters == []
     assert artwork == []
+    assert summary["generic_audio_tag_count"] == 0
 
     print("v2 metadata candidate checks passed")
 

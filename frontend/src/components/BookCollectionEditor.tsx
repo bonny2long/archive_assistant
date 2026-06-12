@@ -4,6 +4,7 @@ import type {
   BookCollectionItemUpdate,
   BookCollectionReviewUpdate,
 } from "../types/archive";
+import MetadataSuggestionChips from "./MetadataSuggestionChips";
 
 type Props = {
   batch: BatchSummary;
@@ -90,6 +91,8 @@ function initialItems(batch: BatchSummary): BookCollectionItemUpdate[] {
     format: item.format ?? null,
     series: item.series ?? null,
     series_index: item.series_index ?? null,
+    metadata_candidates: item.metadata_candidates ?? {},
+    candidate_notes: item.candidate_notes ?? [],
   }));
 }
 
@@ -156,6 +159,13 @@ function BookRepairCard({
             value={item.title}
             onChange={(event) => onChange(index, { title: event.target.value })}
           />
+          <MetadataSuggestionChips
+            label="Title"
+            field="title"
+            candidates={item.metadata_candidates?.title ?? []}
+            currentValue={item.title}
+            onApply={(value) => onChange(index, { title: value })}
+          />
         </label>
         <label>
           Author
@@ -163,6 +173,13 @@ function BookRepairCard({
             disabled={!item.include}
             value={item.author}
             onChange={(event) => onChange(index, { author: event.target.value })}
+          />
+          <MetadataSuggestionChips
+            label="Author"
+            field="author"
+            candidates={item.metadata_candidates?.author ?? []}
+            currentValue={item.author}
+            onApply={(value) => onChange(index, { author: value })}
           />
         </label>
         <label>
@@ -172,6 +189,13 @@ function BookRepairCard({
             maxLength={4}
             value={item.year ?? ""}
             onChange={(event) => onChange(index, { year: event.target.value || null })}
+          />
+          <MetadataSuggestionChips
+            label="Year"
+            field="year"
+            candidates={item.metadata_candidates?.year ?? []}
+            currentValue={item.year ?? ""}
+            onApply={(value) => onChange(index, { year: value })}
           />
         </label>
         <label>
@@ -196,6 +220,13 @@ function BookRepairCard({
               value={item.series ?? ""}
               onChange={(event) => onChange(index, { series: event.target.value || null })}
             />
+            <MetadataSuggestionChips
+              label="Series"
+              field="series"
+              candidates={item.metadata_candidates?.series ?? []}
+              currentValue={item.series ?? ""}
+              onApply={(value) => onChange(index, { series: value })}
+            />
           </label>
           <label>
             Series index
@@ -203,6 +234,13 @@ function BookRepairCard({
               disabled={!item.include}
               value={item.series_index ?? ""}
               onChange={(event) => onChange(index, { series_index: event.target.value || null })}
+            />
+            <MetadataSuggestionChips
+              label="Series index"
+              field="series_index"
+              candidates={item.metadata_candidates?.series_index ?? []}
+              currentValue={item.series_index ?? ""}
+              onApply={(value) => onChange(index, { series_index: value })}
             />
           </label>
         </div>
@@ -246,6 +284,15 @@ export default function BookCollectionEditor({
   const repairCount = repairItems.length;
   const cleanCount = cleanItems.length;
   const excludedCount = excludedItems.length;
+  const missingAuthorCount = items.filter(
+    (item) => item.include && isUnknownAuthor(item.author),
+  ).length;
+  const missingTitleCount = items.filter(
+    (item) => item.include && isMissingTitle(item.title),
+  ).length;
+  const invalidYearCount = items.filter(
+    (item) => item.include && isInvalidYear(item.year),
+  ).length;
   const collectionRoutingValid = (
     !keepCollectionTogether || collectionTitle.trim() !== ""
   );
@@ -271,6 +318,16 @@ export default function BookCollectionEditor({
       }
       return { ...item, author };
     }));
+  };
+
+  const applyAuthorToAllUnknownItems = () => {
+    const author = bulkAuthor.trim();
+    if (!author) return;
+    setItems((current) => current.map((item) => (
+      item.include && isUnknownAuthor(item.author)
+        ? { ...item, author }
+        : item
+    )));
   };
 
   const excludeRepairItems = () => {
@@ -321,6 +378,14 @@ export default function BookCollectionEditor({
         <div className="editor-shell__body">
           <BookCollectionIssueSummary repairCount={repairCount} warnings={warningMessages} />
 
+          <div className="book-repair-summary">
+            <span><strong>{missingAuthorCount}</strong> missing author</span>
+            <span><strong>{missingTitleCount}</strong> missing title</span>
+            <span><strong>{invalidYearCount}</strong> invalid year</span>
+            <span><strong>{includedCount}</strong> included</span>
+            <span><strong>{excludedCount}</strong> excluded</span>
+          </div>
+
           <section className="collection-routing-card">
             <label>
               <span>Collection label optional</span>
@@ -358,7 +423,7 @@ export default function BookCollectionEditor({
               </div>
               <div className="book-review-panel__actions">
                 <button type="button" className="btn-sm" onClick={() => setShowAllBooks((value) => !value)}>
-                  {showAllBooks ? "Hide all books" : "Show all books"}
+                  {showAllBooks ? "Show repair only" : "Show all"}
                 </button>
                 <button type="button" className="btn-sm" onClick={() => setShowCleanPreview((value) => !value)}>
                   {showCleanPreview ? "Hide clean preview" : "Show clean preview"}
@@ -382,7 +447,10 @@ export default function BookCollectionEditor({
                   />
                 </label>
                 <button type="button" className="btn-sm" onClick={applyAuthorToRepairItems} disabled={!bulkAuthor.trim()}>
-                  Apply author
+                  Apply to repair items
+                </button>
+                <button type="button" className="btn-sm" onClick={applyAuthorToAllUnknownItems} disabled={!bulkAuthor.trim()}>
+                  Apply to all unknown authors
                 </button>
                 <button type="button" className="btn-sm" onClick={excludeRepairItems}>
                   Exclude repair items

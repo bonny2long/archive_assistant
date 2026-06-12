@@ -1,6 +1,30 @@
 from __future__ import annotations
 
+import re
 from typing import Any
+
+
+GENERIC_UNKNOWN_VALUES = {
+    "",
+    "unknown",
+    "unknown album",
+    "unknown artist",
+    "unknown author",
+    "unknown title",
+    "untitled",
+    "unkn",
+}
+GENERIC_TRACK_RE = re.compile(
+    r"^(?:0*\d+\s*[-_. ]*)?(?:track|chapter|audio|part)\s*0*\d+$",
+    re.I,
+)
+TIMESTAMP_RE = re.compile(
+    r"^(?:unknown album\s*)?\(?"
+    r"(?:\d{1,2}[/-]\d{1,2}[/-](?:19|20)\d{2})"
+    r"(?:\s+\d{1,2}:\d{2}(?::\d{2})?\s*(?:am|pm)?)?"
+    r"\)?$",
+    re.I,
+)
 
 
 def confidence_label(score: float) -> str:
@@ -9,6 +33,49 @@ def confidence_label(score: float) -> str:
     if score >= 0.65:
         return "medium"
     return "low"
+
+
+def is_generic_unknown_value(value: str) -> bool:
+    normalized = re.sub(r"\s+", " ", value).strip().casefold()
+    return normalized in GENERIC_UNKNOWN_VALUES or normalized.startswith(
+        "unknown album ("
+    )
+
+
+def is_generic_track_value(value: str) -> bool:
+    normalized = re.sub(r"\s+", " ", value).strip()
+    return bool(GENERIC_TRACK_RE.fullmatch(normalized))
+
+
+def is_generated_timestamp_value(value: str) -> bool:
+    normalized = re.sub(r"\s+", " ", value).strip()
+    return bool(TIMESTAMP_RE.fullmatch(normalized))
+
+
+def should_hide_candidate(field: str, value: str, source: str) -> bool:
+    if is_generic_unknown_value(value):
+        return True
+    if field in {"title", "chapter_title"} and (
+        is_generic_track_value(value)
+        or is_generated_timestamp_value(value)
+    ):
+        return True
+    return False
+
+
+def candidate_quality_notes(
+    field: str,
+    value: str,
+    source: str,
+) -> list[str]:
+    notes: list[str] = []
+    if source.startswith("audio_tag") and (
+        is_generic_unknown_value(value)
+        or is_generic_track_value(value)
+        or is_generated_timestamp_value(value)
+    ):
+        notes.append("generic embedded tag")
+    return notes
 
 
 def make_candidate(
@@ -24,7 +91,19 @@ def make_candidate(
     normalized_value = str(value).strip()
     if not normalized_value:
         return None
+    quality_notes = candidate_quality_notes(
+        str(field),
+        normalized_value,
+        str(source),
+    )
     score = max(0.0, min(1.0, float(confidence)))
+    hidden = should_hide_candidate(
+        str(field),
+        normalized_value,
+        str(source),
+    )
+    if quality_notes:
+        score = min(score, 0.35)
     return {
         "field": str(field),
         "value": normalized_value,
@@ -33,8 +112,11 @@ def make_candidate(
         "confidence": score,
         "confidence_label": confidence_label(score),
         "applied": False,
-        "ignored": False,
-        "notes": [str(note) for note in (notes or []) if str(note).strip()],
+        "ignored": hidden,
+        "notes": list(dict.fromkeys([
+            *quality_notes,
+            *[str(note) for note in (notes or []) if str(note).strip()],
+        ])),
     }
 
 
@@ -46,20 +128,17 @@ def add_candidate(
         return
     field = str(candidate["field"])
     values = candidates.setdefault(field, [])
-    identity = (
-        str(candidate["value"]).casefold(),
-        str(candidate["source"]).casefold(),
-    )
-    if any(
-        (
-            str(existing.get("value", "")).casefold(),
-            str(existing.get("source", "")).casefold(),
-        )
-        == identity
-        for existing in values
-    ):
-        return
-    values.append(candidate)
+    identity = str(candidate["value"]).strip().casefold()
+    for index, existing in enumerate(values):
+        if str(existing.get("value", "")).strip().casefold() != identity:
+            continue
+        if float(candidate.get("confidence") or 0) > float(
+            existing.get("confidence") or 0
+        ):
+            values[index] = candidate
+        break
+    else:
+        values.append(candidate)
     values.sort(
         key=lambda item: (
             -float(item.get("confidence") or 0),

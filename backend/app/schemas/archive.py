@@ -84,6 +84,9 @@ class BatchSummary(BaseModel):
     metadata_candidates: dict[str, list[dict]] = Field(default_factory=dict)
     chapter_candidates: list[dict] = Field(default_factory=list)
     artwork_candidates: list[dict] = Field(default_factory=list)
+    generic_audio_tag_count: int = 0
+    detected_disc_count: int = 0
+    candidate_warning_count: int = 0
     suggested_destination: str | None = None
     suggested_metadata: dict | None = None
     metadata_confirmed: bool = False

@@ -48,6 +48,7 @@ export default function AudiobookMetadataEditor({
   const [format, setFormat] = useState(
     () => batch.suggested_metadata?.format ?? batch.format ?? "MP3",
   );
+  const [showAllChapters, setShowAllChapters] = useState(false);
   const yearValid = year.trim() === "" || /^(19|20)\d{2}$/.test(year.trim());
   const blockers = [
     unknown(author) ? "Author is required." : null,
@@ -66,11 +67,27 @@ export default function AudiobookMetadataEditor({
   const audioFiles = batch.audio_files ?? [];
   const candidates = batch.metadata_candidates ?? {};
   const chapterCandidates = batch.chapter_candidates ?? [];
+  const chapterRows = chapterCandidates.length > 0
+    ? chapterCandidates
+    : audioFiles.map((file, index) => ({
+        source_file: file,
+        current_name: file,
+        suggested_title: "",
+        source: "filename_order",
+        source_label: "Filename order",
+        confidence: 0,
+        confidence_label: "low" as const,
+        track_number: index + 1,
+        disc_number: null,
+      }));
+  const visibleChapterRows = showAllChapters
+    ? chapterRows
+    : chapterRows.slice(0, 25);
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <form
-        className="metadata-editor metadata-editor--wide"
+        className="metadata-editor metadata-editor--wide audiobook-editor"
         onMouseDown={(event) => event.stopPropagation()}
         onSubmit={(event) => {
           event.preventDefault();
@@ -105,7 +122,10 @@ export default function AudiobookMetadataEditor({
               <strong>{batch.primary_audio_file ?? "Audiobook folder"}</strong>
             </div>
             <div className="movie-editor__counts">
-              <span>Chapters: {batch.chapter_count ?? 0}</span>
+              <span>Audio files: {batch.audiobook_file_count ?? 0}</span>
+              <span>Discs: {batch.detected_disc_count ?? 0}</span>
+              <span>Chapter suggestions: {chapterCandidates.length}</span>
+              <span>Generic tags hidden: {batch.generic_audio_tag_count ?? 0}</span>
               <span>Artwork: {batch.artwork_count}</span>
               <span>Sidecars: {batch.ignored_sidecar_count}</span>
             </div>
@@ -134,7 +154,17 @@ export default function AudiobookMetadataEditor({
             </div>
           )}
 
-          <div className="editor-grid">
+          <section className="audiobook-editor__metadata">
+            <div className="audiobook-editor__section-heading">
+              <div>
+                <strong>Main metadata</strong>
+                <p>Suggestions fill fields only. Save remains the confirmation step.</p>
+              </div>
+              {(batch.candidate_warning_count ?? 0) > 0 && (
+                <span>{batch.candidate_warning_count} generic candidate(s) filtered</span>
+              )}
+            </div>
+            <div className="editor-grid">
             <label>
               <span>Author</span>
               <input value={author} onChange={(event) => setAuthor(event.target.value)} autoFocus />
@@ -169,48 +199,44 @@ export default function AudiobookMetadataEditor({
               <span>Format</span>
               <input value={format} onChange={(event) => setFormat(event.target.value)} />
             </label>
-          </div>
+            </div>
+          </section>
 
           <div className="metadata-editor__preview">
             <span>Destination preview</span>
             <div><code>{preview}</code></div>
           </div>
 
-          {audioFiles.length > 0 && (
+          {chapterRows.length > 0 && (
             <section className="track-preview">
               <div className="track-preview__header">
-                <h3>Audio preview</h3>
-                <span>Showing {Math.min(audioFiles.length, 10)} of {audioFiles.length}</span>
+                <div>
+                  <h3>Chapter preview</h3>
+                  <span>
+                    {chapterRows.length} audio file(s) · {chapterCandidates.length} title suggestion(s) · no files will be renamed
+                  </span>
+                </div>
+                {chapterRows.length > 25 && (
+                  <button
+                    type="button"
+                    className="btn-sm"
+                    onClick={() => setShowAllChapters((value) => !value)}
+                  >
+                    {showAllChapters ? "Show first 25" : `Show all chapters (${chapterRows.length})`}
+                  </button>
+                )}
               </div>
               <div className="track-preview__table">
                 <table>
-                  <thead><tr><th>#</th><th>Audio file</th></tr></thead>
+                  <thead><tr><th>Disc</th><th>Track</th><th>Current file</th><th>Suggested chapter</th><th>Confidence</th></tr></thead>
                   <tbody>
-                    {audioFiles.slice(0, 10).map((file, index) => (
-                      <tr key={file}><td>{index + 1}</td><td><code>{file}</code></td></tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          )}
-
-          {chapterCandidates.length > 0 && (
-            <section className="track-preview">
-              <div className="track-preview__header">
-                <h3>Read-only chapter suggestions</h3>
-                <span>No files will be renamed</span>
-              </div>
-              <div className="track-preview__table">
-                <table>
-                  <thead><tr><th>#</th><th>Current file</th><th>Suggested title</th><th>Source</th></tr></thead>
-                  <tbody>
-                    {chapterCandidates.slice(0, 20).map((candidate, index) => (
+                    {visibleChapterRows.map((candidate, index) => (
                       <tr key={`${candidate.source_file}:${candidate.suggested_title}`}>
+                        <td>{candidate.disc_number ?? "—"}</td>
                         <td>{candidate.track_number ?? index + 1}</td>
                         <td><code>{candidate.source_file}</code></td>
-                        <td>{candidate.suggested_title}</td>
-                        <td><small>{candidate.confidence_label} · {candidate.source_label ?? candidate.source}</small></td>
+                        <td>{candidate.suggested_title || "No embedded chapter title"}</td>
+                        <td><small>{candidate.confidence_label}</small></td>
                       </tr>
                     ))}
                   </tbody>
