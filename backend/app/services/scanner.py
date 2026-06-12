@@ -56,6 +56,7 @@ from app.services.metadata_candidates import (
     METADATA_ASSIST_VERSION,
     preferred_candidate_value,
 )
+from app.services.title_display import clean_display_title, destination_title
 from app.services.book_metadata import (
     book_format_for,
     build_book_metadata_candidates,
@@ -935,22 +936,17 @@ def _create_book_batch(db: Session, source: Path) -> IngestBatch | None:
                 "series_index": item.get("series_index"),
                 "format": fmt,
                 "metadata_assist_version": METADATA_ASSIST_VERSION,
-                "candidate_runtime": {
-                    "metadata_assist_version": METADATA_ASSIST_VERSION,
-                    "candidate_filter_active": True,
-                    "generic_audio_tags_hidden": 0,
-                    "bad_author_splits_blocked": int(
-                        bool(item.get("author_split_blocked"))
-                    ),
-                },
             }
+            candidate_runtime: dict = {}
             item_candidates, _ = build_book_metadata_candidates(
                 path,
                 path,
                 [],
+                candidate_runtime,
             )
             item_metadata["metadata_candidates"] = item_candidates
             item_metadata["candidate_notes"] = []
+            item_metadata["candidate_runtime"] = candidate_runtime
             item_metadata["author"] = preferred_candidate_value(
                 item_candidates,
                 "author",
@@ -967,6 +963,13 @@ def _create_book_batch(db: Session, source: Path) -> IngestBatch | None:
                 item_candidates,
                 "year",
                 item_metadata["year"],
+            )
+            item_metadata["metadata_title"] = item_metadata["title"]
+            item_metadata["display_title"] = clean_display_title(
+                item_metadata["title"]
+            )
+            item_metadata["destination_title"] = destination_title(
+                item_metadata["title"]
             )
             destination = build_book_item_destination(
                 books_root=settings.books_dir,

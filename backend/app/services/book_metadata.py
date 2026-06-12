@@ -11,6 +11,8 @@ from app.services.metadata_candidates import (
     make_candidate,
     preferred_candidate_value,
 )
+from app.services.pdf_metadata_reader import read_pdf_metadata
+from app.services.title_display import clean_display_title, destination_title
 
 BOOK_EXTENSIONS = {".epub", ".pdf"}
 BOOK_SIDECAR_EXTENSIONS = {".opf", ".nfo", ".json", ".xml", ".txt"}
@@ -408,38 +410,15 @@ def extract_epub_metadata(path: Path) -> dict:
 def extract_pdf_metadata(path: Path) -> dict:
     if path.suffix.casefold() != ".pdf":
         return {}
-    try:
-        from pypdf import PdfReader
-    except ImportError:
-        return {}
-    try:
-        metadata = PdfReader(str(path)).metadata
-    except Exception:
-        return {}
-    if not metadata:
-        return {}
-    date_value = str(
-        getattr(metadata, "creation_date", None)
-        or metadata.get("/CreationDate")
-        or ""
-    )
-    year_match = YEAR_RE.search(date_value)
-    values = {
-        "title": getattr(metadata, "title", None) or metadata.get("/Title"),
-        "author": getattr(metadata, "author", None) or metadata.get("/Author"),
-        "year": year_match.group(1) if year_match else None,
-    }
-    return {
-        key: str(value).strip()
-        for key, value in values.items()
-        if value and str(value).strip()
-    }
+    metadata, _ = read_pdf_metadata(path)
+    return metadata
 
 
 def build_book_metadata_candidates(
     source: Path,
     primary: Path,
     artwork: list[Path],
+    candidate_runtime: dict | None = None,
 ) -> tuple[dict[str, list[dict]], list[dict]]:
     candidates: dict[str, list[dict]] = {}
     source_guess = parse_book_name(
@@ -470,11 +449,38 @@ def build_book_metadata_candidates(
                 0.68,
             ))
 
-    embedded = (
-        extract_epub_metadata(primary)
-        if primary.suffix.casefold() == ".epub"
-        else extract_pdf_metadata(primary)
-    )
+    if candidate_runtime is not None:
+        candidate_runtime.update({
+            "metadata_assist_version": METADATA_ASSIST_VERSION,
+            "candidate_filter_active": True,
+            "generic_audio_tags_hidden": 0,
+            "bad_author_splits_blocked": int(
+                bool(source_guess.get("author_split_blocked"))
+            ) + int(bool(file_guess.get("author_split_blocked"))),
+            "source_labels_removed": int(
+                bool(source_guess.get("source_label_removed"))
+            ) + int(bool(file_guess.get("source_label_removed"))),
+            "pdf_metadata_attempted": primary.suffix.casefold() == ".pdf",
+            "epub_metadata_attempted": primary.suffix.casefold() == ".epub",
+            "metadata_reader_errors": [],
+        })
+    if primary.suffix.casefold() == ".epub":
+        embedded = extract_epub_metadata(primary)
+    else:
+        source_labels = [
+            value
+            for value in (
+                source_guess.get("source_label_removed"),
+                file_guess.get("source_label_removed"),
+            )
+            if value
+        ]
+        embedded, reader_errors = read_pdf_metadata(
+            primary,
+            source_labels=source_labels,
+        )
+        if candidate_runtime is not None:
+            candidate_runtime["metadata_reader_errors"] = reader_errors
     source_key = (
         "epub_opf"
         if primary.suffix.casefold() == ".epub"
@@ -526,7 +532,9 @@ def book_destination(
         books_dir
         / safe_book_path_part(format_name.upper())
         / safe_book_path_part(author)
-        / safe_book_path_part(f"{year or 'Unknown Year'} - {title}")
+        / safe_book_path_part(
+            f"{year or 'Unknown Year'} - {destination_title(title)}"
+        )
     )
 
 
@@ -540,7 +548,9 @@ def build_book_item_destination(
     fmt = str(
         item.get("format") or item.get("book_format") or "EPUB"
     ).upper()
-    title = safe_book_path_part(str(item.get("title") or "Unknown Title"))
+    title = safe_book_path_part(destination_title(
+        str(item.get("title") or "Unknown Title")
+    ))
     author = safe_book_path_part(str(item.get("author") or "Unknown Author"))
     year = str(item.get("year") or "").strip()
     year_title = safe_book_path_part(
@@ -567,10 +577,12 @@ def build_single_book_metadata(source: Path, books_dir: Path) -> dict:
         title = file_parsed["title"]
     year = source_parsed.get("year") or file_parsed.get("year")
     fmt = book_format_for(primary)
+    candidate_runtime: dict = {}
     metadata_candidates, artwork_candidates = build_book_metadata_candidates(
         source,
         primary,
         files["artwork"],
+        candidate_runtime,
     )
     author = preferred_candidate_value(
         metadata_candidates,
@@ -596,14 +608,7 @@ def build_single_book_metadata(source: Path, books_dir: Path) -> dict:
     return {
         "media_kind": "book",
         "metadata_assist_version": METADATA_ASSIST_VERSION,
-        "candidate_runtime": {
-            "metadata_assist_version": METADATA_ASSIST_VERSION,
-            "candidate_filter_active": True,
-            "generic_audio_tags_hidden": 0,
-            "bad_author_splits_blocked": int(
-                bool(source_parsed.get("author_split_blocked"))
-            ) + int(bool(file_parsed.get("author_split_blocked"))),
-        },
+        "candidate_runtime": candidate_runtime,
         "source_label_removed": (
             source_parsed.get("source_label_removed")
             or file_parsed.get("source_label_removed")
@@ -612,6 +617,9 @@ def build_single_book_metadata(source: Path, books_dir: Path) -> dict:
         "review_mode": "single_item",
         "author": author,
         "title": title,
+        "metadata_title": title,
+        "display_title": clean_display_title(title),
+        "destination_title": destination_title(title),
         "year": year,
         "format": fmt,
         "book_format": fmt,

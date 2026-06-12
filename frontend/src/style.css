@@ -1142,6 +1142,11 @@ button:focus-visible, input:focus-visible {
   color: var(--text-secondary);
   font-size: 10px;
 }
+.metadata-assist-copy {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
 .book-repair-summary {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -1178,6 +1183,17 @@ button:focus-visible, input:focus-visible {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: rgba(15, 23, 42, 0.35);
+}
+.audiobook-editor__helpers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.audiobook-editor__helpers .btn-sm {
+  min-height: 30px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-raised);
+  color: var(--text-primary);
 }
 .audiobook-editor__section-heading {
   display: flex;
@@ -1694,6 +1710,11 @@ button:focus-visible, input:focus-visible {
   background: var(--bg-hover);
   color: #fff;
 }
+.book-review-panel .btn-sm--active {
+  border-color: var(--accent-blue);
+  color: #fff;
+  background: rgba(59, 130, 246, 0.18);
+}
 .book-review-panel .btn-sm:disabled,
 .book-clean-state .btn-sm:disabled {
   border-color: var(--border);
@@ -1739,6 +1760,16 @@ button:focus-visible, input:focus-visible {
   color: var(--text-secondary);
   white-space: normal;
   overflow-wrap: anywhere;
+}
+.book-repair-card__limited {
+  display: block;
+  width: fit-content;
+  margin-top: 0.3rem;
+  padding: 0.15rem 0.35rem;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--accent-amber);
+  font-size: 10px;
 }
 .book-repair-card__fields {
   padding: 0.75rem;

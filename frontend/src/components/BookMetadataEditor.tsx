@@ -3,6 +3,7 @@ import type { BatchSummary, BookMetadataUpdate } from "../types/archive";
 import ReviewIssuesPanel from "./ReviewIssuesPanel";
 import MetadataSuggestionChips from "./MetadataSuggestionChips";
 import MetadataAssistStaleWarning from "./MetadataAssistStaleWarning";
+import { destinationTitle } from "../utils/titleDisplay";
 
 type Props = {
   batch: BatchSummary;
@@ -44,7 +45,7 @@ export default function BookMetadataEditor({
   const yearValid = year.trim() === "" || /^(19|20)\d{2}$/.test(year.trim());
   const valid = !unknown(title) && !unknown(author) && yearValid;
   const preview = useMemo(
-    () => `Books/${safePart(format.toUpperCase() || "EPUB")}/${safePart(author || "Unknown Author")}/${safePart(`${year || "Unknown Year"} - ${title || "Unknown Title"}`)}`,
+    () => `Books/${safePart(format.toUpperCase() || "EPUB")}/${safePart(author || "Unknown Author")}/${safePart(`${year || "Unknown Year"} - ${destinationTitle(title || "Unknown Title")}`)}`,
     [author, format, title, year],
   );
   const candidates = batch.metadata_candidates ?? {};
@@ -93,6 +94,10 @@ export default function BookMetadataEditor({
             onConfirm={onConfirm}
           />
           <MetadataAssistStaleWarning batch={batch} />
+          <p className="metadata-assist-copy">
+            Metadata suggestions are assistive only. Suggestions fill fields only.
+            Save confirms metadata. Move approved files only after review.
+          </p>
           <div className="editor-grid">
             <label>
               <span>Title</span>
@@ -145,7 +150,7 @@ export default function BookMetadataEditor({
           <button type="button" className="btn" disabled={saving} onClick={onClose}>Cancel</button>
           <button type="submit" className="btn btn--green" disabled={saving || !valid}>
             <i className={`ti ti-${saving ? "loader-2 spinner" : "device-floppy"}`} />
-            Save book
+            Save book metadata
           </button>
         </div>
       </form>

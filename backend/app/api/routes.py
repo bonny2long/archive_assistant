@@ -67,6 +67,8 @@ from app.services.book_metadata import (
     book_destination,
     build_book_item_destination,
 )
+from app.services.title_display import clean_display_title, destination_title
+from app.services.metadata_candidates import METADATA_ASSIST_VERSION
 from app.services.audiobook_metadata import audiobook_destination
 from app.core.config import settings
 from app.core.time import configured_timezone, now_local, now_utc, serialize_utc
@@ -711,6 +713,9 @@ def update_book_metadata(
         "review_mode": "single_item",
         "author": author,
         "title": title,
+        "metadata_title": title,
+        "display_title": clean_display_title(title),
+        "destination_title": destination_title(title),
         "year": year,
         "format": book_format,
         "book_format": book_format,
@@ -724,6 +729,7 @@ def update_book_metadata(
     metadata = build_review_state("book", metadata)
     batch.metadata_json = metadata
     batch.suggested_metadata = {
+        "metadata_assist_version": METADATA_ASSIST_VERSION,
         "author": author,
         "title": title,
         "year": year,
@@ -796,6 +802,9 @@ def update_book_collection_review(
             "include": bool(item.include),
             "author": author,
             "title": title,
+            "metadata_title": title,
+            "display_title": clean_display_title(title),
+            "destination_title": destination_title(title),
             "year": year,
             "series": item.series.strip() if item.series else None,
             "series_index": (
@@ -812,6 +821,12 @@ def update_book_collection_review(
                 existing_items.get(item.source_file, {}).get(
                     "candidate_notes",
                     [],
+                )
+            ),
+            "candidate_runtime": dict(
+                existing_items.get(item.source_file, {}).get(
+                    "candidate_runtime",
+                    {},
                 )
             ),
         }

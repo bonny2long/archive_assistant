@@ -160,7 +160,7 @@ export default function MusicAlbumReviewEditor({
         <div className="editor-shell__header">
           <div>
             <h2>Review music album</h2>
-            <p>Batch {batch.id}. Saving confirms these values for review.</p>
+            <p>Batch {batch.id}. Save metadata corrections after review.</p>
           </div>
           <button type="button" className="btn-sm" title="Close" onClick={onClose}>
             <i className="ti ti-x" />

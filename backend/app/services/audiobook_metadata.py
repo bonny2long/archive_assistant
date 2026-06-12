@@ -520,6 +520,10 @@ def build_audiobook_metadata(source: Path, audiobooks_root: Path) -> dict:
                 "generic_audio_tag_count"
             ],
             "bad_author_splits_blocked": 0,
+            "source_labels_removed": 0,
+            "pdf_metadata_attempted": False,
+            "epub_metadata_attempted": False,
+            "metadata_reader_errors": [],
         },
         "review_type": "audiobook",
         "review_mode": "single_item",

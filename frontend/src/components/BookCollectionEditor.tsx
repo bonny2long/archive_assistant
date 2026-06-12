@@ -6,6 +6,7 @@ import type {
 } from "../types/archive";
 import MetadataSuggestionChips from "./MetadataSuggestionChips";
 import MetadataAssistStaleWarning from "./MetadataAssistStaleWarning";
+import { destinationTitle } from "../utils/titleDisplay";
 
 type Props = {
   batch: BatchSummary;
@@ -47,6 +48,33 @@ function itemNeedsRepair(item: BookCollectionItemUpdate): boolean {
   return itemRepairReasons(item).length > 0;
 }
 
+function itemFormat(item: BookCollectionItemUpdate): "PDF" | "EPUB" {
+  return normalized(item.format).toUpperCase() === "PDF" ? "PDF" : "EPUB";
+}
+
+function hasUsefulCandidate(
+  item: BookCollectionItemUpdate,
+  field: string,
+): boolean {
+  return (item.metadata_candidates?.[field] ?? []).some(
+    (candidate) => (
+      !candidate.ignored
+      && candidate.confidence_label !== "low"
+      && candidate.source !== "filename"
+    ),
+  );
+}
+
+function pdfMetadataLimited(item: BookCollectionItemUpdate): boolean {
+  return (
+    itemFormat(item) === "PDF"
+    && !isMissingTitle(item.title)
+    && isUnknownAuthor(item.author)
+    && !hasUsefulCandidate(item, "author")
+    && !hasUsefulCandidate(item, "title")
+  );
+}
+
 function cleanPathPart(value: string): string {
   return value.replace(/[<>:"/\\|?*]/g, "_").trim() || "Unknown";
 }
@@ -61,7 +89,9 @@ function buildBookDestinationPreview(
     normalized(item.format || "EPUB").toUpperCase() || "EPUB",
   );
   const author = cleanPathPart(normalized(item.author) || "Unknown Author");
-  const title = cleanPathPart(normalized(item.title) || "Unknown Title");
+  const title = cleanPathPart(
+    destinationTitle(normalized(item.title) || "Unknown Title"),
+  );
   const yearTitle = `${normalized(item.year) || "Unknown Year"} - ${title}`;
   if (keepTogether) {
     return `Books/${format}/Collections/${cleanPathPart(collectionTitle || "Unknown Collection")}/${yearTitle}`;
@@ -141,6 +171,9 @@ function BookRepairCard({
       <div className="book-repair-card__header">
         <div>
           <strong>{reasons.length ? reasons.map(reasonLabel).join(" · ") : "Ready"}</strong>
+          {pdfMetadataLimited(item) && (
+            <span className="book-repair-card__limited">PDF metadata limited</span>
+          )}
           <code>{item.source_file}</code>
         </div>
         <label className="collection-item-card__include">
@@ -276,9 +309,14 @@ export default function BookCollectionEditor({
   const [showAllBooks, setShowAllBooks] = useState(false);
   const [showCleanPreview, setShowCleanPreview] = useState(false);
   const [bulkAuthor, setBulkAuthor] = useState("");
+  const [bulkYear, setBulkYear] = useState("");
+  const [repairFormat, setRepairFormat] = useState<"ALL" | "PDF" | "EPUB">("ALL");
 
   const indexedItems = items.map((item, index) => ({ item, index }));
   const repairItems = indexedItems.filter(({ item }) => itemNeedsRepair(item));
+  const visibleRepairItems = repairItems.filter(
+    ({ item }) => repairFormat === "ALL" || itemFormat(item) === repairFormat,
+  );
   const cleanItems = indexedItems.filter(({ item }) => item.include && !itemNeedsRepair(item));
   const excludedItems = indexedItems.filter(({ item }) => !item.include);
   const includedCount = items.filter((item) => item.include).length;
@@ -303,6 +341,9 @@ export default function BookCollectionEditor({
     && collectionRoutingValid
   );
   const warningMessages = (batch.non_blocking_review_items ?? []).map((item) => item.message);
+  const visibleRepairIndexes = new Set(
+    visibleRepairItems.map(({ index }) => index),
+  );
 
   const updateItem = (index: number, patch: Partial<BookCollectionItemUpdate>) => {
     setItems((current) => current.map((item, itemIndex) => (
@@ -313,8 +354,8 @@ export default function BookCollectionEditor({
   const applyAuthorToRepairItems = () => {
     const author = bulkAuthor.trim();
     if (!author) return;
-    setItems((current) => current.map((item) => {
-      if (!item.include || !itemNeedsRepair(item) || !isUnknownAuthor(item.author)) {
+    setItems((current) => current.map((item, index) => {
+      if (!visibleRepairIndexes.has(index) || !isUnknownAuthor(item.author)) {
         return item;
       }
       return { ...item, author };
@@ -331,14 +372,26 @@ export default function BookCollectionEditor({
     )));
   };
 
-  const excludeRepairItems = () => {
-    setItems((current) => current.map((item) => (
-      itemNeedsRepair(item) ? { ...item, include: false } : item
+  const applyYearToVisibleRepairItems = () => {
+    const value = bulkYear.trim();
+    if (!/^(19|20)\d{2}$/.test(value)) return;
+    setItems((current) => current.map((item, index) => (
+      visibleRepairIndexes.has(index) ? { ...item, year: value } : item
     )));
   };
 
-  const includeAllItems = () => {
-    setItems((current) => current.map((item) => ({ ...item, include: true })));
+  const excludeRepairItems = () => {
+    setItems((current) => current.map((item, index) => (
+      visibleRepairIndexes.has(index) ? { ...item, include: false } : item
+    )));
+  };
+
+  const restoreExcludedVisibleItems = () => {
+    setItems((current) => current.map((item) => (
+      !item.include && (repairFormat === "ALL" || itemFormat(item) === repairFormat)
+        ? { ...item, include: true }
+        : item
+    )));
   };
 
   const handleCollectionTitleChange = (value: string) => {
@@ -379,6 +432,10 @@ export default function BookCollectionEditor({
         <div className="editor-shell__body">
           <BookCollectionIssueSummary repairCount={repairCount} warnings={warningMessages} />
           <MetadataAssistStaleWarning batch={batch} />
+          <p className="metadata-assist-copy">
+            Metadata suggestions are assistive only. Suggestions fill fields only.
+            Save confirms metadata. Move approved files only after review.
+          </p>
 
           <div className="book-repair-summary">
             <span><strong>{missingAuthorCount}</strong> missing author</span>
@@ -430,18 +487,27 @@ export default function BookCollectionEditor({
                 <button type="button" className="btn-sm" onClick={() => setShowCleanPreview((value) => !value)}>
                   {showCleanPreview ? "Hide clean preview" : "Show clean preview"}
                 </button>
-                {excludedCount > 0 && (
-                  <button type="button" className="btn-sm" onClick={includeAllItems}>
-                    Include all
-                  </button>
-                )}
+                <button
+                  type="button"
+                  className={`btn-sm${repairFormat === "PDF" ? " btn-sm--active" : ""}`}
+                  onClick={() => setRepairFormat((value) => value === "PDF" ? "ALL" : "PDF")}
+                >
+                  {repairFormat === "PDF" ? "Show repair only" : "Show PDF-only repair"}
+                </button>
+                <button
+                  type="button"
+                  className={`btn-sm${repairFormat === "EPUB" ? " btn-sm--active" : ""}`}
+                  onClick={() => setRepairFormat((value) => value === "EPUB" ? "ALL" : "EPUB")}
+                >
+                  {repairFormat === "EPUB" ? "Show repair only" : "Show EPUB-only repair"}
+                </button>
               </div>
             </div>
 
             {repairCount > 0 && (
               <div className="book-bulk-tools">
                 <label>
-                  Apply author to repair items with unknown author
+                  Apply author to visible repair items
                   <input
                     placeholder="e.g. Frank Herbert"
                     value={bulkAuthor}
@@ -449,14 +515,31 @@ export default function BookCollectionEditor({
                   />
                 </label>
                 <button type="button" className="btn-sm" onClick={applyAuthorToRepairItems} disabled={!bulkAuthor.trim()}>
-                  Apply to repair items
+                  Apply author
                 </button>
                 <button type="button" className="btn-sm" onClick={applyAuthorToAllUnknownItems} disabled={!bulkAuthor.trim()}>
                   Apply to all unknown authors
                 </button>
-                <button type="button" className="btn-sm" onClick={excludeRepairItems}>
-                  Exclude repair items
+                <label>
+                  Apply year to visible repair items
+                  <input
+                    placeholder="e.g. 2018"
+                    maxLength={4}
+                    value={bulkYear}
+                    onChange={(event) => setBulkYear(event.target.value)}
+                  />
+                </label>
+                <button type="button" className="btn-sm" onClick={applyYearToVisibleRepairItems} disabled={!/^(19|20)\d{2}$/.test(bulkYear.trim())}>
+                  Apply year
                 </button>
+                <button type="button" className="btn-sm" onClick={excludeRepairItems}>
+                  Exclude visible repair items
+                </button>
+                {excludedCount > 0 && (
+                  <button type="button" className="btn-sm" onClick={restoreExcludedVisibleItems}>
+                    Restore excluded visible items
+                  </button>
+                )}
               </div>
             )}
 
@@ -472,7 +555,7 @@ export default function BookCollectionEditor({
               </div>
             ) : (
               <div className="book-repair-list">
-                {repairItems.map(({ item, index }) => (
+                {visibleRepairItems.map(({ item, index }) => (
                   <BookRepairCard
                     key={item.source_file}
                     item={item}
@@ -555,7 +638,7 @@ export default function BookCollectionEditor({
               ? "Add collection label first"
               : repairCount > 0
               ? `Fix ${repairCount} book${repairCount === 1 ? "" : "s"} first`
-              : "Save book collection"}
+              : "Save collection metadata"}
           </button>
         </div>
       </form>

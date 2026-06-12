@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { AudiobookMetadataUpdate, BatchSummary } from "../types/archive";
 import MetadataSuggestionChips from "./MetadataSuggestionChips";
 import MetadataAssistStaleWarning from "./MetadataAssistStaleWarning";
+import { destinationTitle } from "../utils/titleDisplay";
 
 type Props = {
   batch: BatchSummary;
@@ -62,7 +63,7 @@ export default function AudiobookMetadataEditor({
   ].filter((value): value is string => Boolean(value));
   const valid = blockers.length === 0;
   const preview = useMemo(
-    () => `Audiobooks/Library/${safePart(author || "Unknown Author")}/${safePart(`${year || "Unknown Year"} - ${title || "Unknown Title"}`)}`,
+    () => `Audiobooks/Library/${safePart(author || "Unknown Author")}/${safePart(`${year || "Unknown Year"} - ${destinationTitle(title || "Unknown Title")}`)}`,
     [author, title, year],
   );
   const audioFiles = batch.audio_files ?? [];
@@ -80,10 +81,18 @@ export default function AudiobookMetadataEditor({
         confidence_label: "low" as const,
         track_number: index + 1,
         disc_number: null,
+        ignored: true,
+        generic: true,
       }));
   const visibleChapterRows = showAllChapters
     ? chapterRows
     : chapterRows.slice(0, 25);
+  const bestCandidate = (field: string): string | null => {
+    const candidate = (candidates[field] ?? []).find(
+      (item) => !item.ignored && item.confidence_label !== "low",
+    );
+    return candidate?.value ?? null;
+  };
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -144,6 +153,10 @@ export default function AudiobookMetadataEditor({
             <span>{blockers.length} blocker(s) · {warnings.length} warning(s)</span>
           </div>
           <MetadataAssistStaleWarning batch={batch} />
+          <p className="metadata-assist-copy">
+            Metadata suggestions are assistive only. Suggestions fill fields only.
+            Save confirms metadata. Move approved files only after review.
+          </p>
 
           {warnings.length > 0 && (
             <div className="tv-review-panel__warnings">
@@ -163,8 +176,19 @@ export default function AudiobookMetadataEditor({
                 <p>Suggestions fill fields only. Save remains the confirmation step.</p>
               </div>
               {(batch.candidate_warning_count ?? 0) > 0 && (
-                <span>{batch.candidate_warning_count} generic candidate(s) filtered</span>
+                <span>{batch.generic_audio_tag_count ?? batch.candidate_warning_count} generic candidate(s) filtered</span>
               )}
+            </div>
+            <div className="audiobook-editor__helpers">
+              <button type="button" className="btn-sm" disabled={!bestCandidate("author")} onClick={() => setAuthor(bestCandidate("author") ?? author)}>
+                Apply author
+              </button>
+              <button type="button" className="btn-sm" disabled={!bestCandidate("narrator")} onClick={() => setNarrator(bestCandidate("narrator") ?? narrator)}>
+                Apply narrator
+              </button>
+              <button type="button" className="btn-sm" disabled={!bestCandidate("year")} onClick={() => setYear(bestCandidate("year") ?? year)}>
+                Apply year
+              </button>
             </div>
             <div className="editor-grid audiobook-editor__grid">
             <label>
@@ -230,7 +254,7 @@ export default function AudiobookMetadataEditor({
               </div>
               <div className="track-preview__table">
                 <table>
-                  <thead><tr><th>Disc</th><th>Track</th><th>Current file</th><th>Suggested chapter</th><th>Confidence</th></tr></thead>
+                  <thead><tr><th>Disc</th><th>Track</th><th>File name</th><th>Candidate title</th><th>Status</th></tr></thead>
                   <tbody>
                     {visibleChapterRows.map((candidate, index) => (
                       <tr key={`${candidate.source_file}:${candidate.suggested_title}`}>
@@ -238,7 +262,13 @@ export default function AudiobookMetadataEditor({
                         <td>{candidate.track_number ?? index + 1}</td>
                         <td><code>{candidate.source_file}</code></td>
                         <td>{candidate.suggested_title || "No embedded chapter title"}</td>
-                        <td><small>{candidate.confidence_label}</small></td>
+                        <td>
+                          <small>
+                            {candidate.ignored || candidate.generic || !candidate.suggested_title
+                              ? "Ignored / generic"
+                              : candidate.confidence_label}
+                          </small>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -257,7 +287,7 @@ export default function AudiobookMetadataEditor({
         <div className="editor-shell__footer">
           <button type="button" className="btn" disabled={saving} onClick={onClose}>Cancel</button>
           <button type="submit" className="btn btn--green" disabled={saving || !valid}>
-            Save audiobook
+            Save audiobook metadata
           </button>
         </div>
       </form>

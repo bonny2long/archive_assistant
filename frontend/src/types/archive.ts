@@ -152,9 +152,13 @@ export type ChapterCandidate = {
   source_label?: string;
   confidence: number;
   confidence_label: "high" | "medium" | "low";
+  ignored?: boolean;
+  generic?: boolean;
+  notes?: string[];
 };
 
 export type SuggestedMetadata = {
+  metadata_assist_version?: string | null;
   artist?: string | null;
   album?: string | null;
   year?: string | null;
@@ -285,6 +289,9 @@ export type BookCollectionItem = {
   source_file: string;
   include: boolean;
   title?: string | null;
+  metadata_title?: string | null;
+  display_title?: string | null;
+  destination_title?: string | null;
   author?: string | null;
   year?: string | null;
   format?: string | null;
@@ -293,6 +300,7 @@ export type BookCollectionItem = {
   destination_preview?: string | null;
   metadata_candidates?: Record<string, MetadataCandidate[]>;
   candidate_notes?: string[];
+  candidate_runtime?: Record<string, unknown>;
 };
 
 export type BookCollectionItemUpdate = {

@@ -4,7 +4,7 @@ import re
 from typing import Any
 
 
-METADATA_ASSIST_VERSION = "v2.057"
+METADATA_ASSIST_VERSION = "v2.058"
 
 GENERIC_UNKNOWN_VALUES = {
     "",
