@@ -323,17 +323,21 @@ def build_book_metadata_candidates(
         source.name if source.is_dir() else primary.name
     )
     file_guess = parse_book_name(primary.name)
-    for field in ("title", "author", "year", "series", "series_index"):
-        source_value = source_guess.get(field)
+    fields = ("title", "author", "year", "series", "series_index")
+    if source.is_dir():
+        for field in fields:
+            source_value = source_guess.get(field)
+            if str(source_value or "").casefold() not in UNKNOWN_BOOK_VALUES:
+                add_candidate(candidates, make_candidate(
+                    field,
+                    source_value,
+                    "folder_name",
+                    "Folder name",
+                    0.72,
+                ))
+
+    for field in fields:
         file_value = file_guess.get(field)
-        if str(source_value or "").casefold() not in UNKNOWN_BOOK_VALUES:
-            add_candidate(candidates, make_candidate(
-                field,
-                source_value,
-                "folder_name" if source.is_dir() else "filename",
-                "Folder name" if source.is_dir() else "Filename",
-                0.72,
-            ))
         if str(file_value or "").casefold() not in UNKNOWN_BOOK_VALUES:
             add_candidate(candidates, make_candidate(
                 field,

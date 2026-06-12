@@ -1136,8 +1136,15 @@ button:focus-visible, input:focus-visible {
   color: var(--text-primary);
   font-size: 15px;
 }
-.audiobook-editor {
+.metadata-editor.audiobook-editor {
   width: min(1100px, calc(100vw - 2rem));
+  max-width: 1100px;
+  height: min(90vh, 860px);
+  max-height: calc(100vh - 2rem);
+  min-width: 540px;
+}
+.audiobook-editor__grid {
+  grid-template-columns: 1fr 1fr;
 }
 .audiobook-editor__metadata {
   display: grid;
@@ -1167,6 +1174,11 @@ button:focus-visible, input:focus-visible {
 }
 .audiobook-editor .track-preview__table {
   max-height: 380px;
+}
+@media (min-width: 900px) {
+  .audiobook-editor__grid {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
 }
 
 /* ──────────────────────────────────────────────────────────────────────────

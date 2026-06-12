@@ -26,7 +26,7 @@ export default function MetadataSuggestionChips({
   const filtered = candidates.filter(
     (candidate) => (
       candidate.field === field
-      && !candidate.ignored
+      && !Boolean(candidate.ignored)
       && (!hideLowConfidence || candidate.confidence_label !== "low")
     ),
   );

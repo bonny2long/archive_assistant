@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -20,6 +21,7 @@ from app.services.metadata_candidates import (  # noqa: E402
     make_candidate,
     should_hide_candidate,
 )
+from app.schemas.archive import BatchSummary  # noqa: E402
 
 
 def main() -> None:
@@ -35,6 +37,19 @@ def main() -> None:
     assert candidate["ignored"] is True
     assert candidate["confidence_label"] == "low"
     assert should_hide_candidate("title", "Track 1", "audio_tag_title")
+    summary = BatchSummary(
+        id=1,
+        detected_type="audiobook",
+        status="needs_metadata_review",
+        confidence=0.7,
+        metadata_quality="weak",
+        metadata_warnings=[],
+        metadata_candidates={"title": [candidate]},
+        item_count=1,
+        created_at=datetime.now(timezone.utc),
+    )
+    serialized = summary.model_dump(mode="json")
+    assert serialized["metadata_candidates"]["title"][0]["ignored"] is True
 
     original_extract = audiobook_metadata.extract_audio_metadata
     audiobook_metadata.extract_audio_metadata = lambda path: {
@@ -88,6 +103,13 @@ def main() -> None:
         "Atomic Habits"
     )
     assert "author" not in collection_item["metadata_candidates"]
+
+    scanner_source = (
+        ROOT / "backend/app/services/scanner.py"
+    ).read_text(encoding="utf-8")
+    assert 'item_metadata["metadata_candidates"] = item_candidates' in (
+        scanner_source
+    )
 
     print("v2 metadata candidate quality checks passed")
 

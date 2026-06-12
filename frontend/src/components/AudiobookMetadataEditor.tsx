@@ -164,7 +164,7 @@ export default function AudiobookMetadataEditor({
                 <span>{batch.candidate_warning_count} generic candidate(s) filtered</span>
               )}
             </div>
-            <div className="editor-grid">
+            <div className="editor-grid audiobook-editor__grid">
             <label>
               <span>Author</span>
               <input value={author} onChange={(event) => setAuthor(event.target.value)} autoFocus />
