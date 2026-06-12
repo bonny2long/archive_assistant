@@ -1906,6 +1906,74 @@ button:focus-visible, input:focus-visible {
   opacity: 0.4;
   cursor: not-allowed;
 }
+.book-repair-card__accepted,
+.book-repair-card__lookup {
+  display: inline-flex;
+  width: fit-content;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.book-repair-card__accepted {
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.1);
+  color: var(--accent-green);
+}
+.book-repair-card__lookup {
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--accent-blue);
+}
+.book-repair-card__actions,
+.acceptance-controls__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.book-repair-card__actions {
+  padding: 0.65rem 0.75rem;
+  border-top: 1px solid var(--border);
+}
+.btn-sm--warning {
+  border-color: rgba(245, 158, 11, 0.45);
+  color: var(--accent-amber);
+}
+.btn-sm--active {
+  border-color: rgba(34, 197, 94, 0.5);
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--accent-green);
+}
+.acceptance-controls,
+.final-review-panel {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+}
+.acceptance-controls p {
+  margin: 0.2rem 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.final-review-panel {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.06);
+}
+.final-review-panel strong {
+  grid-column: 1 / -1;
+  color: var(--accent-green);
+}
+.final-review-panel span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.book-readiness-panel {
+  background: rgba(34, 197, 94, 0.06);
+}
 .optional-metadata-fields {
   border-top: 1px solid var(--border);
 }

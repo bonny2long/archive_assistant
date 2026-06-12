@@ -39,7 +39,10 @@ function itemRepairReasons(item: BookCollectionItemUpdate): string[] {
   if (!item.include) return [];
   const reasons: string[] = [];
   if (isMissingTitle(item.title)) reasons.push("missing_title");
-  if (isUnknownAuthor(item.author)) reasons.push("missing_author");
+  if (
+    isUnknownAuthor(item.author)
+    && !item.accepted_unknown_author
+  ) reasons.push("missing_author");
   if (isInvalidYear(item.year)) reasons.push("invalid_year");
   return reasons;
 }
@@ -149,6 +152,9 @@ function initialItems(batch: BatchSummary): BookCollectionItemUpdate[] {
     candidate_runtime: item.candidate_runtime ?? {},
     matched_artwork: item.matched_artwork ?? null,
     alternate_formats: item.alternate_formats ?? [],
+    accepted_unknown_author: item.accepted_unknown_author ?? false,
+    accepted_unknown_year: item.accepted_unknown_year ?? false,
+    lookup_later: item.lookup_later ?? false,
   }));
 }
 
@@ -221,6 +227,14 @@ function BookRepairCard({
               Alternate formats: {(item.alternate_formats ?? []).map((entry) => entry.format).join(", ")}
             </span>
           )}
+          {item.accepted_unknown_author && (
+            <span className="book-repair-card__accepted">
+              Unknown author accepted
+            </span>
+          )}
+          {item.lookup_later && (
+            <span className="book-repair-card__lookup">Lookup later</span>
+          )}
         </div>
         <label className="collection-item-card__include">
           <input
@@ -230,6 +244,43 @@ function BookRepairCard({
           />
           Include
         </label>
+      </div>
+      <div className="book-repair-card__actions">
+        {isUnknownAuthor(item.author) && (
+          <button
+            type="button"
+            className="btn-sm"
+            disabled={!item.include}
+            onClick={() => onChange(index, {
+              author: isUnknownAuthor(item.author)
+                ? "Unknown Author"
+                : item.author,
+              accepted_unknown_author: !item.accepted_unknown_author,
+            })}
+          >
+            {item.accepted_unknown_author
+              ? "Undo accepted author"
+              : "Accept Unknown Author"}
+          </button>
+        )}
+        <button
+          type="button"
+          className="btn-sm"
+          disabled={!item.include}
+          onClick={() => onChange(index, {
+            lookup_later: !item.lookup_later,
+          })}
+        >
+          {item.lookup_later ? "Undo lookup later" : "Lookup Later"}
+        </button>
+        <button
+          type="button"
+          className="btn-sm btn-sm--warning"
+          disabled={!item.include}
+          onClick={() => onChange(index, { include: false })}
+        >
+          Exclude From Batch
+        </button>
       </div>
       <div className="book-repair-card__fields">
         <label>
@@ -391,6 +442,18 @@ export default function BookCollectionEditor({
   const invalidYearCount = items.filter(
     (item) => item.include && isInvalidYear(item.year),
   ).length;
+  const acceptedUnknownCount = items.filter(
+    (item) => item.include && item.accepted_unknown_author,
+  ).length;
+  const lookupLaterCount = items.filter(
+    (item) => item.include && item.lookup_later,
+  ).length;
+  const artworkMatchedCount = items.filter(
+    (item) => item.include && item.matched_artwork,
+  ).length;
+  const duplicateFormatCount = items.filter(
+    (item) => item.include && (item.alternate_formats ?? []).length > 0,
+  ).length;
   const collectionRoutingValid = (
     !keepCollectionTogether || collectionTitle.trim() !== ""
   );
@@ -444,6 +507,28 @@ export default function BookCollectionEditor({
   const excludeRepairItems = () => {
     setItems((current) => current.map((item, index) => (
       visibleRepairIndexes.has(index) ? { ...item, include: false } : item
+    )));
+  };
+
+  const acceptUnknownAuthorsForVisibleItems = () => {
+    setItems((current) => current.map((item, index) => (
+      visibleRepairIndexes.has(index)
+      && item.include
+      && isUnknownAuthor(item.author)
+        ? {
+            ...item,
+            author: "Unknown Author",
+            accepted_unknown_author: true,
+          }
+        : item
+    )));
+  };
+
+  const markVisibleAsLookupLater = () => {
+    setItems((current) => current.map((item, index) => (
+      visibleRepairIndexes.has(index) && item.include
+        ? { ...item, lookup_later: true }
+        : item
     )));
   };
 
@@ -511,6 +596,8 @@ export default function BookCollectionEditor({
             <span><strong>{missingAuthorCount}</strong> missing author</span>
             <span><strong>{missingTitleCount}</strong> missing title</span>
             <span><strong>{invalidYearCount}</strong> invalid year</span>
+            <span><strong>{acceptedUnknownCount}</strong> accepted unknown</span>
+            <span><strong>{lookupLaterCount}</strong> lookup later</span>
             <span><strong>{includedCount}</strong> included</span>
             <span><strong>{excludedCount}</strong> excluded</span>
           </div>
@@ -605,6 +692,24 @@ export default function BookCollectionEditor({
                 <button type="button" className="btn-sm" onClick={excludeRepairItems}>
                   Exclude visible repair items
                 </button>
+                <button
+                  type="button"
+                  className="btn-sm"
+                  onClick={acceptUnknownAuthorsForVisibleItems}
+                  disabled={!visibleItems.some(
+                    ({ item }) => item.include && isUnknownAuthor(item.author),
+                  )}
+                >
+                  Accept unknown authors for visible items
+                </button>
+                <button
+                  type="button"
+                  className="btn-sm"
+                  onClick={markVisibleAsLookupLater}
+                  disabled={visibleRepairIndexes.size === 0}
+                >
+                  Mark visible as lookup later
+                </button>
                 {excludedCount > 0 && (
                   <button type="button" className="btn-sm" onClick={restoreExcludedVisibleItems}>
                     Restore excluded visible items
@@ -617,9 +722,14 @@ export default function BookCollectionEditor({
             )}
 
             {repairCount === 0 && reviewFilter === "NEEDS_REPAIR" ? (
-              <div className="book-clean-state">
-                <strong>No blocking book metadata problems.</strong>
-                <span>{cleanCount} included book{cleanCount === 1 ? "" : "s"} ready for approval.</span>
+              <div className="book-clean-state book-readiness-panel">
+                <strong>Ready for approval</strong>
+                <span>{includedCount} included · {excludedCount} excluded</span>
+                <span>{cleanCount} clean · {acceptedUnknownCount} accepted with unknown author</span>
+                <span>{artworkMatchedCount} artwork matched · {duplicateFormatCount} duplicate format group(s)</span>
+                {lookupLaterCount > 0 && (
+                  <span>{lookupLaterCount} marked for lookup later</span>
+                )}
                 {!batch.review_confirmed && (batch.blocking_review_items ?? []).length === 0 && (
                   <button type="button" className="btn-sm" disabled={saving} onClick={() => void onConfirm()}>
                     Confirm book collection
@@ -695,7 +805,7 @@ export default function BookCollectionEditor({
               ? "Add collection label first"
               : repairCount > 0
               ? `Fix ${repairCount} book${repairCount === 1 ? "" : "s"} first`
-              : "Save collection metadata"}
+              : "Save review"}
           </button>
         </div>
       </form>

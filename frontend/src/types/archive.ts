@@ -118,6 +118,10 @@ export type BatchSummary = {
   candidate_warning_count?: number;
   audiobook_collection_type?: string | null;
   contained_books?: AudiobookContainedBook[];
+  accepted_unknown_author?: boolean;
+  accepted_unknown_year?: boolean;
+  accepted_unknown_narrator?: boolean;
+  lookup_later?: boolean;
   metadata_assist_version?: string | null;
   suggested_destination?: string | null;
   suggested_metadata?: SuggestedMetadata | null;
@@ -177,6 +181,10 @@ export type SuggestedMetadata = {
   season_number?: number | null;
   season_title?: string | null;
   note?: string | null;
+  accepted_unknown_author?: boolean;
+  accepted_unknown_year?: boolean;
+  accepted_unknown_narrator?: boolean;
+  lookup_later?: boolean;
   sources?: Partial<Record<
     "artist" | "album" | "year" | "genre" | "title" | "author" | "narrator" | "series" | "series_index" | "edition" | "format" | "show_title" | "season_number" | "season_title",
     string
@@ -306,6 +314,9 @@ export type BookCollectionItem = {
   candidate_runtime?: Record<string, unknown>;
   matched_artwork?: MatchedArtwork | null;
   alternate_formats?: AlternateBookFormat[];
+  accepted_unknown_author?: boolean;
+  accepted_unknown_year?: boolean;
+  lookup_later?: boolean;
 };
 
 export type BookCollectionItemUpdate = {
@@ -322,6 +333,9 @@ export type BookCollectionItemUpdate = {
   candidate_runtime?: Record<string, unknown>;
   matched_artwork?: MatchedArtwork | null;
   alternate_formats?: AlternateBookFormat[];
+  accepted_unknown_author?: boolean;
+  accepted_unknown_year?: boolean;
+  lookup_later?: boolean;
 };
 
 export type MatchedArtwork = {
@@ -368,6 +382,10 @@ export type AudiobookMetadataUpdate = {
   series_index?: string | null;
   format?: string | null;
   note?: string | null;
+  accepted_unknown_author?: boolean;
+  accepted_unknown_year?: boolean;
+  accepted_unknown_narrator?: boolean;
+  lookup_later?: boolean;
 };
 
 export type AudiobookContainedBook = {

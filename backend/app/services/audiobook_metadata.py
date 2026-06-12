@@ -581,6 +581,10 @@ def build_audiobook_metadata(source: Path, audiobooks_root: Path) -> dict:
             source_guess.get("series_index")
             or file_guess.get("series_index")
         ),
+        "accepted_unknown_author": False,
+        "accepted_unknown_year": False,
+        "accepted_unknown_narrator": False,
+        "lookup_later": False,
         "format": fmt,
         "audiobook_file_count": len(audio),
         "chapter_count": len(audio),

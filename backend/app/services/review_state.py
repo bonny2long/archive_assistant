@@ -308,8 +308,26 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
                 source = str(item.get("source_file") or "")
                 if not str(item.get("title") or "").strip():
                     blocking.append(_item("book_item_missing_title", "Included book is missing a title.", file_name=source))
-                if str(item.get("author") or "").strip().casefold() in {"", "unknown author"}:
-                    blocking.append(_item("book_item_missing_author", "Included book is missing an author.", file_name=source))
+                if str(item.get("author") or "").strip().casefold() in {
+                    "",
+                    "unknown",
+                    "unknown author",
+                    "unkn",
+                }:
+                    if item.get("accepted_unknown_author", False):
+                        non_blocking.append(_item(
+                            "book_author_unknown_accepted",
+                            "Book author is unknown but accepted for this review.",
+                            file_name=source,
+                        ))
+                    else:
+                        blocking.append(_item("book_item_missing_author", "Included book is missing an author.", file_name=source))
+                if item.get("lookup_later", False):
+                    non_blocking.append(_item(
+                        "book_lookup_later",
+                        "Book metadata is marked for later lookup.",
+                        file_name=source,
+                    ))
                 raw_year = str(item.get("year") or "").strip()
                 if raw_year and (len(raw_year) != 4 or not raw_year.isdigit()):
                     blocking.append(_item("book_item_invalid_year", "Book year must be four digits when provided.", file_name=source))
@@ -350,29 +368,71 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
         title = str(meta.get("title") or "").strip().casefold()
         raw_year = str(meta.get("year") or "").strip()
         if author in {"", "unknown author", "unknown", "unkn"}:
-            blocking.append(_item(
-                "audiobook_author_missing",
-                "Audiobook author is required before approval.",
-            ))
+            if meta.get("accepted_unknown_author", False):
+                non_blocking.append(_item(
+                    "audiobook_author_unknown_accepted",
+                    "Audiobook author is unknown but accepted for this review.",
+                ))
+            else:
+                blocking.append(_item(
+                    "audiobook_author_missing",
+                    "Audiobook author is required before approval.",
+                ))
         if title in {"", "unknown title", "unknown", "unkn"}:
             blocking.append(_item(
                 "audiobook_title_missing",
                 "Audiobook title is required before approval.",
             ))
-        if raw_year and (len(raw_year) != 4 or not raw_year.isdigit()):
+        year_unknown = raw_year.casefold() in {
+            "",
+            "unknown",
+            "unknown year",
+            "unkn",
+        }
+        if (
+            raw_year
+            and not year_unknown
+            and (len(raw_year) != 4 or not raw_year.isdigit())
+        ):
             blocking.append(_item(
                 "audiobook_year_invalid",
                 "Audiobook year must be four digits when provided.",
             ))
-        if not raw_year:
+        if year_unknown:
             non_blocking.append(_item(
-                "audiobook_year_missing",
-                "Audiobook year is missing; destination will use Unknown Year.",
+                (
+                    "audiobook_year_unknown_accepted"
+                    if meta.get("accepted_unknown_year", False)
+                    else "audiobook_year_missing"
+                ),
+                (
+                    "Audiobook year is unknown but accepted for this review."
+                    if meta.get("accepted_unknown_year", False)
+                    else "Audiobook year is missing; destination will use Unknown Year."
+                ),
             ))
-        if not str(meta.get("narrator") or "").strip():
+        if str(meta.get("narrator") or "").strip().casefold() in {
+            "",
+            "unknown",
+            "unknown narrator",
+            "unkn",
+        }:
             non_blocking.append(_item(
-                "audiobook_narrator_missing",
-                "Narrator is missing.",
+                (
+                    "audiobook_narrator_unknown_accepted"
+                    if meta.get("accepted_unknown_narrator", False)
+                    else "audiobook_narrator_missing"
+                ),
+                (
+                    "Narrator is unknown but accepted for this review."
+                    if meta.get("accepted_unknown_narrator", False)
+                    else "Narrator is missing."
+                ),
+            ))
+        if meta.get("lookup_later", False):
+            non_blocking.append(_item(
+                "audiobook_lookup_later",
+                "Audiobook metadata is marked for later lookup.",
             ))
     elif detected_type in {"unknown_type", "unsupported_file"}:
         blocking.append(_item(
@@ -401,6 +461,23 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
     quality = str(meta.get("metadata_quality") or "weak")
     if blocking:
         quality = "broken" if quality == "broken" else "weak"
+    elif (
+        detected_type in {"book", "audiobook"}
+        and (
+            meta.get("accepted_unknown_author", False)
+            or meta.get("accepted_unknown_year", False)
+            or meta.get("accepted_unknown_narrator", False)
+            or any(
+                isinstance(item, dict)
+                and (
+                    item.get("accepted_unknown_author", False)
+                    or item.get("accepted_unknown_year", False)
+                )
+                for item in (meta.get("book_items") or [])
+            )
+        )
+    ):
+        quality = "accepted_with_unknowns"
     elif quality in {"weak", "broken", "unsupported"} and confirmed:
         quality = "fair"
 

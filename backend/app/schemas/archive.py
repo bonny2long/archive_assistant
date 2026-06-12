@@ -90,6 +90,10 @@ class BatchSummary(BaseModel):
     candidate_warning_count: int = 0
     audiobook_collection_type: str | None = None
     contained_books: list[dict] = Field(default_factory=list)
+    accepted_unknown_author: bool = False
+    accepted_unknown_year: bool = False
+    accepted_unknown_narrator: bool = False
+    lookup_later: bool = False
     metadata_assist_version: str | None = None
     suggested_destination: str | None = None
     suggested_metadata: dict | None = None
@@ -215,6 +219,9 @@ class BookCollectionItemUpdate(BaseModel):
     format: str | None = None
     series: str | None = None
     series_index: str | None = None
+    accepted_unknown_author: bool = False
+    accepted_unknown_year: bool = False
+    lookup_later: bool = False
 
 
 class BookCollectionReviewUpdate(BaseModel):
@@ -233,6 +240,10 @@ class AudiobookMetadataUpdate(BaseModel):
     series_index: str | None = None
     format: str | None = None
     note: str | None = None
+    accepted_unknown_author: bool = False
+    accepted_unknown_year: bool = False
+    accepted_unknown_narrator: bool = False
+    lookup_later: bool = False
 
 
 class ReviewConfirmationUpdate(BaseModel):

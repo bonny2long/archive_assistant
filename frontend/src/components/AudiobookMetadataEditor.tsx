@@ -13,7 +13,15 @@ type Props = {
 };
 
 function unknown(value: string): boolean {
-  return ["", "unknown", "unknown author", "unknown title", "unkn"].includes(
+  return [
+    "",
+    "unknown",
+    "unknown author",
+    "unknown narrator",
+    "unknown title",
+    "unknown year",
+    "unkn",
+  ].includes(
     value.trim().toLowerCase(),
   );
 }
@@ -50,19 +58,52 @@ export default function AudiobookMetadataEditor({
   const [format, setFormat] = useState(
     () => batch.suggested_metadata?.format ?? batch.format ?? "MP3",
   );
+  const [acceptedUnknownAuthor, setAcceptedUnknownAuthor] = useState(
+    Boolean(batch.accepted_unknown_author),
+  );
+  const [acceptedUnknownYear, setAcceptedUnknownYear] = useState(
+    Boolean(batch.accepted_unknown_year),
+  );
+  const [acceptedUnknownNarrator, setAcceptedUnknownNarrator] = useState(
+    Boolean(batch.accepted_unknown_narrator),
+  );
+  const [lookupLater, setLookupLater] = useState(
+    Boolean(batch.lookup_later),
+  );
   const [showAllChapters, setShowAllChapters] = useState(false);
   const [repairAuthor, setRepairAuthor] = useState("");
   const [repairNarrator, setRepairNarrator] = useState("");
   const [repairYear, setRepairYear] = useState("");
-  const yearValid = year.trim() === "" || /^(19|20)\d{2}$/.test(year.trim());
+  const normalizedYear = year.trim();
+  const yearUnknown = unknown(normalizedYear);
+  const narratorUnknown = unknown(narrator);
+  const yearValid = (
+    normalizedYear === ""
+    || /^(19|20)\d{2}$/.test(normalizedYear)
+    || (yearUnknown && acceptedUnknownYear)
+  );
   const blockers = [
-    unknown(author) ? "Author is required." : null,
+    unknown(author) && !acceptedUnknownAuthor
+      ? "Author is required or must be explicitly accepted as unknown."
+      : null,
     unknown(title) ? "Title is required." : null,
     !yearValid ? "Year must be a four-digit year." : null,
   ].filter((value): value is string => Boolean(value));
   const warnings = [
-    !year.trim() ? "Year is missing; destination will use Unknown Year." : null,
-    !narrator.trim() ? "Narrator is missing." : null,
+    yearUnknown
+      ? acceptedUnknownYear
+        ? "Unknown year accepted."
+        : "Year is missing; destination will use Unknown Year."
+      : null,
+    narratorUnknown
+      ? acceptedUnknownNarrator
+        ? "Unknown narrator accepted."
+        : "Narrator is missing."
+      : null,
+    unknown(author) && acceptedUnknownAuthor
+      ? "Unknown author accepted."
+      : null,
+    lookupLater ? "Metadata marked for later lookup." : null,
   ].filter((value): value is string => Boolean(value));
   const valid = blockers.length === 0;
   const preview = useMemo(
@@ -101,13 +142,17 @@ export default function AudiobookMetadataEditor({
           event.preventDefault();
           if (!valid) return;
           void onSave({
-            author: author.trim(),
+            author: unknown(author) ? "Unknown Author" : author.trim(),
             title: title.trim(),
-            year: year.trim() || null,
-            narrator: narrator.trim() || null,
+            year: yearUnknown ? null : normalizedYear,
+            narrator: narratorUnknown ? null : narrator.trim(),
             series: series.trim() || null,
             series_index: seriesIndex.trim() || null,
             format: format.trim().toUpperCase() || null,
+            accepted_unknown_author: acceptedUnknownAuthor,
+            accepted_unknown_year: acceptedUnknownYear,
+            accepted_unknown_narrator: acceptedUnknownNarrator,
+            lookup_later: lookupLater,
           });
         }}
       >
@@ -134,7 +179,12 @@ export default function AudiobookMetadataEditor({
               <span>Discs: {batch.detected_disc_count ?? 0}</span>
               <span>Chapter suggestions: {chapterCandidates.length}</span>
               <span>Generic tags hidden: {batch.generic_audio_tag_count ?? 0}</span>
-              <span>Artwork: {batch.artwork_count} matched</span>
+              <span>
+                Artwork: {batch.artwork_count} matched
+                {batch.artwork_files?.[0]
+                  ? ` · ${batch.artwork_files[0]}`
+                  : ""}
+              </span>
               <span>Sidecars: {batch.ignored_sidecar_count}</span>
             </div>
           </div>
@@ -174,6 +224,63 @@ export default function AudiobookMetadataEditor({
             Metadata suggestions are assistive only. Suggestions fill fields only.
             Save confirms metadata. Move approved files only after review.
           </p>
+
+          <section className="acceptance-controls">
+            <div>
+              <strong>Accepted unknown metadata</strong>
+              <p>These choices are explicit and remain visible in move manifests.</p>
+            </div>
+            <div className="acceptance-controls__buttons">
+              <button
+                type="button"
+                className={`btn-sm${acceptedUnknownAuthor ? " btn-sm--active" : ""}`}
+                onClick={() => {
+                  setAcceptedUnknownAuthor((value) => {
+                    const next = !value;
+                    if (next && unknown(author)) setAuthor("Unknown Author");
+                    return next;
+                  });
+                }}
+              >
+                {acceptedUnknownAuthor ? "Unknown Author Accepted" : "Accept Unknown Author"}
+              </button>
+              <button
+                type="button"
+                className={`btn-sm${acceptedUnknownNarrator ? " btn-sm--active" : ""}`}
+                onClick={() => {
+                  setAcceptedUnknownNarrator((value) => {
+                    const next = !value;
+                    if (next && narratorUnknown) {
+                      setNarrator("Unknown Narrator");
+                    }
+                    return next;
+                  });
+                }}
+              >
+                {acceptedUnknownNarrator ? "Unknown Narrator Accepted" : "Accept Unknown Narrator"}
+              </button>
+              <button
+                type="button"
+                className={`btn-sm${acceptedUnknownYear ? " btn-sm--active" : ""}`}
+                onClick={() => {
+                  setAcceptedUnknownYear((value) => {
+                    const next = !value;
+                    if (next && yearUnknown) setYear("Unknown Year");
+                    return next;
+                  });
+                }}
+              >
+                {acceptedUnknownYear ? "Unknown Year Accepted" : "Accept Unknown Year"}
+              </button>
+              <button
+                type="button"
+                className={`btn-sm${lookupLater ? " btn-sm--active" : ""}`}
+                onClick={() => setLookupLater((value) => !value)}
+              >
+                {lookupLater ? "Lookup Later Marked" : "Lookup Later"}
+              </button>
+            </div>
+          </section>
 
           {warnings.length > 0 && (
             <div className="tv-review-panel__warnings">
@@ -256,6 +363,37 @@ export default function AudiobookMetadataEditor({
             <div><code>{preview}</code></div>
           </div>
 
+          {valid && (
+            <section className="final-review-panel">
+              <strong>
+                {warnings.length > 0
+                  ? "Ready for approval with warnings"
+                  : "Ready for approval"}
+              </strong>
+              <span>Title: {title || "Unknown Title"}</span>
+              <span>
+                Author: {author || "Unknown Author"}
+                {acceptedUnknownAuthor ? " · accepted" : ""}
+              </span>
+              <span>
+                Year: {year || "Unknown Year"}
+                {acceptedUnknownYear ? " · accepted" : ""}
+              </span>
+              <span>
+                Narrator: {narrator || "Unknown Narrator"}
+                {acceptedUnknownNarrator ? " · accepted" : ""}
+              </span>
+              <span>Artwork: {batch.artwork_count} matched</span>
+              <span>Generic tags hidden: {batch.generic_audio_tag_count ?? 0}</span>
+              <span>Discs: {batch.detected_disc_count ?? 0} · Files: {batch.audiobook_file_count ?? 0}</span>
+              {containedBooks.length > 0 && (
+                <span>
+                  Detected contained books: {containedBooks.length} · Files remain one audiobook batch
+                </span>
+              )}
+            </section>
+          )}
+
           {chapterRows.length > 0 && (
             <section className="track-preview">
               <div className="track-preview__header">
@@ -300,17 +438,20 @@ export default function AudiobookMetadataEditor({
             </section>
           )}
 
-          {valid && !batch.review_confirmed && (
+          {valid
+            && !batch.review_confirmed
+            && (batch.blocking_review_items ?? []).length === 0
+            && (
             <button type="button" className="btn btn--compact" disabled={saving} onClick={() => void onConfirm()}>
               Confirm audiobook metadata
             </button>
-          )}
+            )}
         </div>
 
         <div className="editor-shell__footer">
           <button type="button" className="btn" disabled={saving} onClick={onClose}>Cancel</button>
           <button type="submit" className="btn btn--green" disabled={saving || !valid}>
-            Save audiobook metadata
+            Save review
           </button>
         </div>
       </form>

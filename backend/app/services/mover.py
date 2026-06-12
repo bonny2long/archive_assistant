@@ -431,6 +431,16 @@ def _move_movie_collection_batch(
                         batch.metadata_confirmed
                         or metadata.get("review_confirmed")
                     ),
+                    "accepted_unknown_author": bool(
+                        metadata.get("accepted_unknown_author")
+                    ),
+                    "accepted_unknown_year": bool(
+                        metadata.get("accepted_unknown_year")
+                    ),
+                    "accepted_unknown_narrator": bool(
+                        metadata.get("accepted_unknown_narrator")
+                    ),
+                    "lookup_later": bool(metadata.get("lookup_later")),
                     "batch_id": batch.id,
                 },
                 settings.movies_metadata_dir,
@@ -926,6 +936,13 @@ def _move_tv_batch(
                     batch.metadata_confirmed
                     or metadata.get("review_confirmed")
                 ),
+                "accepted_unknown_author": bool(
+                    item.get("accepted_unknown_author")
+                ),
+                "accepted_unknown_year": bool(
+                    item.get("accepted_unknown_year")
+                ),
+                "lookup_later": bool(item.get("lookup_later")),
                 "batch_id": batch.id,
             },
             settings.tv_metadata_dir,

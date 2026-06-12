@@ -945,6 +945,9 @@ def _create_book_batch(db: Session, source: Path) -> IngestBatch | None:
                 "metadata_assist_version": METADATA_ASSIST_VERSION,
                 "matched_artwork": group["matched_artwork"],
                 "alternate_formats": group["alternate_formats"],
+                "accepted_unknown_author": False,
+                "accepted_unknown_year": False,
+                "lookup_later": False,
             }
             candidate_runtime: dict = {}
             item_candidates, _ = build_book_metadata_candidates(

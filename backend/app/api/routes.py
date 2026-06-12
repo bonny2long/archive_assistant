@@ -847,6 +847,11 @@ def update_book_collection_review(
                     [],
                 )
             ),
+            "accepted_unknown_author": bool(
+                item.accepted_unknown_author
+            ),
+            "accepted_unknown_year": bool(item.accepted_unknown_year),
+            "lookup_later": bool(item.lookup_later),
         }
         destination = build_book_item_destination(
             books_root=settings.books_dir,
@@ -900,9 +905,22 @@ def update_book_collection_review(
     collection_summary["needs_repair_count"] = sum(
         item.get("include", True)
         and (
-            str(item.get("author") or "").casefold() == "unknown author"
+            (
+                str(item.get("author") or "").casefold()
+                == "unknown author"
+                and not item.get("accepted_unknown_author", False)
+            )
             or str(item.get("title") or "").casefold() == "unknown title"
         )
+        for item in items
+    )
+    collection_summary["accepted_unknown_count"] = sum(
+        item.get("include", True)
+        and item.get("accepted_unknown_author", False)
+        for item in items
+    )
+    collection_summary["lookup_later_count"] = sum(
+        item.get("include", True) and item.get("lookup_later", False)
         for item in items
     )
     metadata["collection_summary"] = collection_summary
@@ -913,7 +931,18 @@ def update_book_collection_review(
         metadata["metadata_quality"] = "weak"
         batch.status = "needs_metadata_review"
     else:
-        metadata["metadata_quality"] = "reviewed"
+        metadata["metadata_quality"] = (
+            "accepted_with_unknowns"
+            if any(
+                item.get("include", True)
+                and (
+                    item.get("accepted_unknown_author", False)
+                    or item.get("accepted_unknown_year", False)
+                )
+                for item in items
+            )
+            else "reviewed"
+        )
         metadata["review_confirmed"] = True
         metadata["confidence"] = 1.0
         batch.status = "pending_review"
@@ -999,6 +1028,12 @@ def update_audiobook_metadata(
         "series_index": series_index,
         "format": audio_format,
         "note": update.note.strip() if update.note else None,
+        "accepted_unknown_author": bool(update.accepted_unknown_author),
+        "accepted_unknown_year": bool(update.accepted_unknown_year),
+        "accepted_unknown_narrator": bool(
+            update.accepted_unknown_narrator
+        ),
+        "lookup_later": bool(update.lookup_later),
         "suggested_destination_preview": str(destination),
         "metadata_quality": "good",
         "metadata_warnings": list(dict.fromkeys(warnings)),
@@ -1024,6 +1059,12 @@ def update_audiobook_metadata(
             "series_index": "manual correction",
             "format": "manual correction",
         },
+        "accepted_unknown_author": bool(update.accepted_unknown_author),
+        "accepted_unknown_year": bool(update.accepted_unknown_year),
+        "accepted_unknown_narrator": bool(
+            update.accepted_unknown_narrator
+        ),
+        "lookup_later": bool(update.lookup_later),
     }
     batch.suggested_destination = str(destination)
     batch.metadata_confirmed = not bool(metadata["blocking_review_items"])
@@ -1722,6 +1763,16 @@ def _batch_to_summary(
         candidate_warning_count=meta.get("candidate_warning_count", 0),
         audiobook_collection_type=meta.get("audiobook_collection_type"),
         contained_books=list(meta.get("contained_books") or []),
+        accepted_unknown_author=bool(
+            meta.get("accepted_unknown_author", False)
+        ),
+        accepted_unknown_year=bool(
+            meta.get("accepted_unknown_year", False)
+        ),
+        accepted_unknown_narrator=bool(
+            meta.get("accepted_unknown_narrator", False)
+        ),
+        lookup_later=bool(meta.get("lookup_later", False)),
         metadata_assist_version=meta.get("metadata_assist_version"),
         suggested_destination=batch.suggested_destination,
         suggested_metadata=batch.suggested_metadata,
