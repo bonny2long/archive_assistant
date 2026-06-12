@@ -81,6 +81,9 @@ class BatchSummary(BaseModel):
     audio_files: list[str] = Field(default_factory=list)
     primary_audio_file: str | None = None
     chapter_count: int = 0
+    metadata_candidates: dict[str, list[dict]] = Field(default_factory=dict)
+    chapter_candidates: list[dict] = Field(default_factory=list)
+    artwork_candidates: list[dict] = Field(default_factory=list)
     suggested_destination: str | None = None
     suggested_metadata: dict | None = None
     metadata_confirmed: bool = False

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { AudiobookMetadataUpdate, BatchSummary } from "../types/archive";
+import MetadataSuggestionChips from "./MetadataSuggestionChips";
 
 type Props = {
   batch: BatchSummary;
@@ -63,6 +64,8 @@ export default function AudiobookMetadataEditor({
     [author, title, year],
   );
   const audioFiles = batch.audio_files ?? [];
+  const candidates = batch.metadata_candidates ?? {};
+  const chapterCandidates = batch.chapter_candidates ?? [];
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -135,26 +138,32 @@ export default function AudiobookMetadataEditor({
             <label>
               <span>Author</span>
               <input value={author} onChange={(event) => setAuthor(event.target.value)} autoFocus />
+              <MetadataSuggestionChips label="Author" field="author" candidates={candidates.author ?? []} currentValue={author} onApply={setAuthor} />
             </label>
             <label>
               <span>Title</span>
               <input value={title} onChange={(event) => setTitle(event.target.value)} />
+              <MetadataSuggestionChips label="Title" field="title" candidates={candidates.title ?? []} currentValue={title} onApply={setTitle} />
             </label>
             <label>
               <span>Year optional</span>
               <input value={year} maxLength={4} onChange={(event) => setYear(event.target.value)} />
+              <MetadataSuggestionChips label="Year" field="year" candidates={candidates.year ?? []} currentValue={year} onApply={setYear} />
             </label>
             <label>
               <span>Narrator optional</span>
               <input value={narrator} onChange={(event) => setNarrator(event.target.value)} />
+              <MetadataSuggestionChips label="Narrator" field="narrator" candidates={candidates.narrator ?? []} currentValue={narrator} onApply={setNarrator} />
             </label>
             <label>
               <span>Series optional</span>
               <input value={series} onChange={(event) => setSeries(event.target.value)} />
+              <MetadataSuggestionChips label="Series" field="series" candidates={candidates.series ?? []} currentValue={series} onApply={setSeries} />
             </label>
             <label>
               <span>Series index optional</span>
               <input value={seriesIndex} onChange={(event) => setSeriesIndex(event.target.value)} />
+              <MetadataSuggestionChips label="Series index" field="series_index" candidates={candidates.series_index ?? []} currentValue={seriesIndex} onApply={setSeriesIndex} />
             </label>
             <label>
               <span>Format</span>
@@ -179,6 +188,30 @@ export default function AudiobookMetadataEditor({
                   <tbody>
                     {audioFiles.slice(0, 10).map((file, index) => (
                       <tr key={file}><td>{index + 1}</td><td><code>{file}</code></td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+          {chapterCandidates.length > 0 && (
+            <section className="track-preview">
+              <div className="track-preview__header">
+                <h3>Read-only chapter suggestions</h3>
+                <span>No files will be renamed</span>
+              </div>
+              <div className="track-preview__table">
+                <table>
+                  <thead><tr><th>#</th><th>Current file</th><th>Suggested title</th><th>Source</th></tr></thead>
+                  <tbody>
+                    {chapterCandidates.slice(0, 20).map((candidate, index) => (
+                      <tr key={`${candidate.source_file}:${candidate.suggested_title}`}>
+                        <td>{candidate.track_number ?? index + 1}</td>
+                        <td><code>{candidate.source_file}</code></td>
+                        <td>{candidate.suggested_title}</td>
+                        <td><small>{candidate.confidence_label} · {candidate.source_label ?? candidate.source}</small></td>
+                      </tr>
                     ))}
                   </tbody>
                 </table>

@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 import re
 
+from app.services.metadata_candidates import add_candidate, make_candidate
+
 AUDIOBOOK_EXTENSIONS = {
     ".mp3", ".m4b", ".m4a", ".aac", ".flac", ".wav", ".ogg", ".opus",
 }
@@ -253,6 +255,132 @@ def collect_audiobook_files(root: Path) -> dict[str, list[Path]]:
     }
 
 
+def _first_tag_value(tags, keys: tuple[str, ...]) -> str | None:
+    for key in keys:
+        value = tags.get(key) if tags is not None else None
+        if not value:
+            continue
+        if isinstance(value, (list, tuple)):
+            value = value[0] if value else None
+        if value is not None:
+            text = str(value).strip()
+            if text:
+                return text
+    return None
+
+
+def extract_audio_metadata(path: Path) -> dict:
+    try:
+        from mutagen import File as MutagenFile
+    except ImportError:
+        return {}
+    try:
+        media = MutagenFile(str(path), easy=True)
+    except Exception:
+        return {}
+    if media is None or media.tags is None:
+        return {}
+    tags = media.tags
+    date = _first_tag_value(tags, ("date", "year", "originaldate"))
+    year_match = YEAR_RE.search(date or "")
+    return {
+        key: value
+        for key, value in {
+            "title": _first_tag_value(tags, ("album",)),
+            "author": _first_tag_value(
+                tags,
+                ("albumartist", "artist", "author"),
+            ),
+            "year": year_match.group(1) if year_match else None,
+            "narrator": _first_tag_value(
+                tags,
+                ("narrator", "performer", "composer"),
+            ),
+            "chapter_title": _first_tag_value(tags, ("title",)),
+            "track_number": _first_tag_value(tags, ("tracknumber",)),
+            "disc_number": _first_tag_value(tags, ("discnumber",)),
+        }.items()
+        if value
+    }
+
+
+def build_audiobook_metadata_candidates(
+    source: Path,
+    audio: list[Path],
+    artwork: list[Path],
+) -> tuple[dict[str, list[dict]], list[dict], list[dict]]:
+    candidates: dict[str, list[dict]] = {}
+    source_guess = parse_audiobook_name(
+        source.name if source.is_dir() else audio[0].name
+    )
+    file_guess = parse_audiobook_name(audio[0].name)
+    for field in (
+        "author", "title", "year", "narrator", "series", "series_index",
+    ):
+        source_value = source_guess.get(field)
+        file_value = file_guess.get(field)
+        if str(source_value or "").casefold() not in UNKNOWN_AUDIOBOOK_VALUES:
+            add_candidate(candidates, make_candidate(
+                field,
+                source_value,
+                "folder_name" if source.is_dir() else "filename",
+                "Folder name" if source.is_dir() else "Filename",
+                0.72,
+            ))
+        if str(file_value or "").casefold() not in UNKNOWN_AUDIOBOOK_VALUES:
+            add_candidate(candidates, make_candidate(
+                field,
+                file_value,
+                "filename",
+                "Filename",
+                0.68,
+            ))
+
+    chapter_candidates: list[dict] = []
+    for path in audio:
+        embedded = extract_audio_metadata(path)
+        for field in ("author", "title", "year", "narrator"):
+            add_candidate(candidates, make_candidate(
+                field,
+                embedded.get(field),
+                f"audio_tag_{field}",
+                "Embedded audio tags",
+                0.88 if field in {"author", "title"} else 0.78,
+            ))
+        chapter_title = embedded.get("chapter_title")
+        if chapter_title:
+            chapter_candidates.append({
+                "source_file": (
+                    str(path.relative_to(source))
+                    if source.is_dir()
+                    else path.name
+                ),
+                "track_number": embedded.get("track_number"),
+                "disc_number": embedded.get("disc_number"),
+                "current_name": path.name,
+                "suggested_title": chapter_title,
+                "source": "audio_tag_title",
+                "source_label": "Embedded audio title",
+                "confidence": 0.8,
+                "confidence_label": "medium",
+            })
+
+    artwork_candidates = [
+        candidate
+        for path in artwork
+        if (
+            candidate := make_candidate(
+                "artwork",
+                str(path.relative_to(source)) if source.is_dir() else path.name,
+                "audiobook_sidecar_artwork",
+                "Audiobook artwork file",
+                0.9,
+            )
+        )
+    ]
+    return candidates, chapter_candidates, artwork_candidates
+
+
 def audiobook_destination(
     *,
     audiobooks_root: Path,
@@ -287,6 +415,15 @@ def build_audiobook_metadata(source: Path, audiobooks_root: Path) -> dict:
     )
     year = source_guess.get("year") or file_guess.get("year")
     narrator = source_guess.get("narrator") or file_guess.get("narrator")
+    (
+        metadata_candidates,
+        chapter_candidates,
+        artwork_candidates,
+    ) = build_audiobook_metadata_candidates(
+        source,
+        audio,
+        files["artwork"],
+    )
     fmt = audiobook_format_for(audio)
     destination = audiobook_destination(
         audiobooks_root=audiobooks_root,
@@ -349,4 +486,7 @@ def build_audiobook_metadata(source: Path, audiobooks_root: Path) -> dict:
             if author != "Unknown Author" and title != "Unknown Title"
             else 0.65
         ),
+        "metadata_candidates": metadata_candidates,
+        "chapter_candidates": chapter_candidates,
+        "artwork_candidates": artwork_candidates,
     }

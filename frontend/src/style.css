@@ -1064,6 +1064,50 @@ button:focus-visible, input:focus-visible {
 .metadata-editor__error { margin-top: 0.5rem; color: var(--accent-red); font-size: 12px; }
 .metadata-editor__warning { margin-top: 0.5rem; color: var(--accent-amber); font-size: 12px; }
 .metadata-editor__actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
+.metadata-suggestions {
+  display: grid;
+  gap: 0.3rem;
+}
+.metadata-suggestions > span {
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.metadata-suggestions > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.metadata-suggestion-chip {
+  display: grid;
+  gap: 1px;
+  max-width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-page);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+.metadata-suggestion-chip:hover,
+.metadata-suggestion-chip--selected {
+  border-color: var(--accent-blue);
+  background: rgba(59, 130, 246, 0.08);
+}
+.metadata-suggestion-chip strong {
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.metadata-suggestion-chip__meta {
+  color: var(--text-muted);
+  font-size: 9px;
+}
 
 /* ──────────────────────────────────────────────────────────────────────────
    Wide editor shell — shared header/body/footer scaffold for Music + Movie

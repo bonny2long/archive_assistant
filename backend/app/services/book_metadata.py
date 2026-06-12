@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
+import zipfile
+from xml.etree import ElementTree
+
+from app.services.metadata_candidates import add_candidate, make_candidate
 
 BOOK_EXTENSIONS = {".epub", ".pdf"}
 BOOK_SIDECAR_EXTENSIONS = {".opf", ".nfo", ".json", ".xml", ".txt"}
@@ -207,6 +211,169 @@ def collect_book_files(root: Path) -> dict[str, list[Path]]:
     return {"books": books, "artwork": artwork, "sidecars": sidecars, "other": other}
 
 
+def _xml_text(element: ElementTree.Element | None) -> str | None:
+    if element is None or element.text is None:
+        return None
+    value = element.text.strip()
+    return value or None
+
+
+def extract_epub_metadata(path: Path) -> dict:
+    if path.suffix.casefold() != ".epub":
+        return {}
+    try:
+        with zipfile.ZipFile(path) as archive:
+            container = ElementTree.fromstring(
+                archive.read("META-INF/container.xml")
+            )
+            rootfile = container.find(
+                ".//{urn:oasis:names:tc:opendocument:xmlns:container}rootfile"
+            )
+            if rootfile is None:
+                return {}
+            opf_path = rootfile.attrib.get("full-path")
+            if not opf_path:
+                return {}
+            package = ElementTree.fromstring(archive.read(opf_path))
+            metadata = package.find(
+                ".//{http://www.idpf.org/2007/opf}metadata"
+            )
+            if metadata is None:
+                return {}
+            values = {
+                "title": _xml_text(metadata.find(
+                    "{http://purl.org/dc/elements/1.1/}title"
+                )),
+                "author": _xml_text(metadata.find(
+                    "{http://purl.org/dc/elements/1.1/}creator"
+                )),
+                "date": _xml_text(metadata.find(
+                    "{http://purl.org/dc/elements/1.1/}date"
+                )),
+                "language": _xml_text(metadata.find(
+                    "{http://purl.org/dc/elements/1.1/}language"
+                )),
+            }
+            for meta in metadata.findall(
+                "{http://www.idpf.org/2007/opf}meta"
+            ):
+                name = str(meta.attrib.get("name") or "").casefold()
+                content = str(meta.attrib.get("content") or "").strip()
+                if name == "calibre:series" and content:
+                    values["series"] = content
+                elif name == "calibre:series_index" and content:
+                    values["series_index"] = content
+            return {key: value for key, value in values.items() if value}
+    except (OSError, KeyError, zipfile.BadZipFile, ElementTree.ParseError):
+        return {}
+
+
+def extract_pdf_metadata(path: Path) -> dict:
+    if path.suffix.casefold() != ".pdf":
+        return {}
+    try:
+        from pypdf import PdfReader
+    except ImportError:
+        return {}
+    try:
+        metadata = PdfReader(str(path)).metadata
+    except Exception:
+        return {}
+    if not metadata:
+        return {}
+    date_value = str(
+        getattr(metadata, "creation_date", None)
+        or metadata.get("/CreationDate")
+        or ""
+    )
+    year_match = YEAR_RE.search(date_value)
+    values = {
+        "title": getattr(metadata, "title", None) or metadata.get("/Title"),
+        "author": getattr(metadata, "author", None) or metadata.get("/Author"),
+        "year": year_match.group(1) if year_match else None,
+    }
+    return {
+        key: str(value).strip()
+        for key, value in values.items()
+        if value and str(value).strip()
+    }
+
+
+def build_book_metadata_candidates(
+    source: Path,
+    primary: Path,
+    artwork: list[Path],
+) -> tuple[dict[str, list[dict]], list[dict]]:
+    candidates: dict[str, list[dict]] = {}
+    source_guess = parse_book_name(
+        source.name if source.is_dir() else primary.name
+    )
+    file_guess = parse_book_name(primary.name)
+    for field in ("title", "author", "year", "series", "series_index"):
+        source_value = source_guess.get(field)
+        file_value = file_guess.get(field)
+        if str(source_value or "").casefold() not in UNKNOWN_BOOK_VALUES:
+            add_candidate(candidates, make_candidate(
+                field,
+                source_value,
+                "folder_name" if source.is_dir() else "filename",
+                "Folder name" if source.is_dir() else "Filename",
+                0.72,
+            ))
+        if str(file_value or "").casefold() not in UNKNOWN_BOOK_VALUES:
+            add_candidate(candidates, make_candidate(
+                field,
+                file_value,
+                "filename",
+                "Filename",
+                0.68,
+            ))
+
+    embedded = (
+        extract_epub_metadata(primary)
+        if primary.suffix.casefold() == ".epub"
+        else extract_pdf_metadata(primary)
+    )
+    source_key = (
+        "epub_opf"
+        if primary.suffix.casefold() == ".epub"
+        else "pdf_document_info"
+    )
+    source_label = (
+        "EPUB package metadata"
+        if primary.suffix.casefold() == ".epub"
+        else "PDF document metadata"
+    )
+    for field in ("title", "author", "year", "series", "series_index"):
+        value = embedded.get(field)
+        if field == "year" and not value:
+            raw_date = str(embedded.get("date") or "")
+            match = YEAR_RE.search(raw_date)
+            value = match.group(1) if match else None
+        add_candidate(candidates, make_candidate(
+            field,
+            value,
+            f"{source_key}_{field}",
+            source_label,
+            0.92 if field in {"title", "author"} else 0.84,
+        ))
+
+    artwork_candidates = [
+        candidate
+        for path in artwork
+        if (
+            candidate := make_candidate(
+                "artwork",
+                str(path.relative_to(source)) if source.is_dir() else path.name,
+                "book_sidecar_artwork",
+                "Book artwork file",
+                0.9,
+            )
+        )
+    ]
+    return candidates, artwork_candidates
+
+
 def book_destination(
     format_name: str,
     author: str,
@@ -259,6 +426,11 @@ def build_single_book_metadata(source: Path, books_dir: Path) -> dict:
         title = file_parsed["title"]
     year = source_parsed.get("year") or file_parsed.get("year")
     fmt = book_format_for(primary)
+    metadata_candidates, artwork_candidates = build_book_metadata_candidates(
+        source,
+        primary,
+        files["artwork"],
+    )
     destination = book_destination(fmt, author, title, year, books_dir)
     warnings = []
     if author.casefold() in UNKNOWN_BOOK_VALUES:
@@ -304,4 +476,6 @@ def build_single_book_metadata(source: Path, books_dir: Path) -> dict:
             if author != "Unknown Author" and title != "Unknown Title"
             else 0.65
         ),
+        "metadata_candidates": metadata_candidates,
+        "artwork_candidates": artwork_candidates,
     }

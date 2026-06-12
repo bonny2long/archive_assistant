@@ -109,6 +109,9 @@ export type BatchSummary = {
   audio_files?: string[];
   primary_audio_file?: string | null;
   chapter_count?: number;
+  metadata_candidates?: Record<string, MetadataCandidate[]>;
+  chapter_candidates?: ChapterCandidate[];
+  artwork_candidates?: MetadataCandidate[];
   suggested_destination?: string | null;
   suggested_metadata?: SuggestedMetadata | null;
   metadata_confirmed: boolean;
@@ -121,6 +124,30 @@ export type BatchSummary = {
   item_count: number;
   edit_kind?: string | null;
   created_at: string;
+};
+
+export type MetadataCandidate = {
+  field: string;
+  value: string;
+  source: string;
+  source_label: string;
+  confidence: number;
+  confidence_label: "high" | "medium" | "low";
+  applied: boolean;
+  ignored: boolean;
+  notes: string[];
+};
+
+export type ChapterCandidate = {
+  source_file: string;
+  track_number?: string | number | null;
+  disc_number?: string | number | null;
+  current_name: string;
+  suggested_title: string;
+  source: string;
+  source_label?: string;
+  confidence: number;
+  confidence_label: "high" | "medium" | "low";
 };
 
 export type SuggestedMetadata = {

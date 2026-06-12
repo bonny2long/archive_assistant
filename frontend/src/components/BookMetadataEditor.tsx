@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { BatchSummary, BookMetadataUpdate } from "../types/archive";
 import ReviewIssuesPanel from "./ReviewIssuesPanel";
+import MetadataSuggestionChips from "./MetadataSuggestionChips";
 
 type Props = {
   batch: BatchSummary;
@@ -45,6 +46,7 @@ export default function BookMetadataEditor({
     () => `Books/${safePart(format.toUpperCase() || "EPUB")}/${safePart(author || "Unknown Author")}/${safePart(`${year || "Unknown Year"} - ${title || "Unknown Title"}`)}`,
     [author, format, title, year],
   );
+  const candidates = batch.metadata_candidates ?? {};
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -93,14 +95,35 @@ export default function BookMetadataEditor({
             <label>
               <span>Title</span>
               <input value={title} onChange={(event) => setTitle(event.target.value)} autoFocus />
+              <MetadataSuggestionChips
+                label="Title"
+                field="title"
+                candidates={candidates.title ?? []}
+                currentValue={title}
+                onApply={setTitle}
+              />
             </label>
             <label>
               <span>Author</span>
               <input value={author} onChange={(event) => setAuthor(event.target.value)} />
+              <MetadataSuggestionChips
+                label="Author"
+                field="author"
+                candidates={candidates.author ?? []}
+                currentValue={author}
+                onApply={setAuthor}
+              />
             </label>
             <label>
               <span>Year optional</span>
               <input value={year} maxLength={4} onChange={(event) => setYear(event.target.value)} />
+              <MetadataSuggestionChips
+                label="Year"
+                field="year"
+                candidates={candidates.year ?? []}
+                currentValue={year}
+                onApply={setYear}
+              />
             </label>
             <label>
               <span>Format</span>
