@@ -4,6 +4,8 @@ import re
 from typing import Any
 
 
+METADATA_ASSIST_VERSION = "v2.056"
+
 GENERIC_UNKNOWN_VALUES = {
     "",
     "unknown",
@@ -145,3 +147,19 @@ def add_candidate(
             str(item.get("value") or "").casefold(),
         )
     )
+
+
+def preferred_candidate_value(
+    candidates: dict[str, list[dict[str, Any]]],
+    field: str,
+    fallback: Any = None,
+) -> Any:
+    for candidate in candidates.get(field, []):
+        if candidate.get("ignored"):
+            continue
+        if candidate.get("confidence_label") == "low":
+            continue
+        value = candidate.get("value")
+        if value is not None and str(value).strip():
+            return value
+    return fallback

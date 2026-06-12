@@ -5,6 +5,7 @@ import type {
   BookCollectionReviewUpdate,
 } from "../types/archive";
 import MetadataSuggestionChips from "./MetadataSuggestionChips";
+import MetadataAssistStaleWarning from "./MetadataAssistStaleWarning";
 
 type Props = {
   batch: BatchSummary;
@@ -377,6 +378,7 @@ export default function BookCollectionEditor({
 
         <div className="editor-shell__body">
           <BookCollectionIssueSummary repairCount={repairCount} warnings={warningMessages} />
+          <MetadataAssistStaleWarning batch={batch} />
 
           <div className="book-repair-summary">
             <span><strong>{missingAuthorCount}</strong> missing author</span>

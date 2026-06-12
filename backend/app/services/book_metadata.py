@@ -5,7 +5,12 @@ import re
 import zipfile
 from xml.etree import ElementTree
 
-from app.services.metadata_candidates import add_candidate, make_candidate
+from app.services.metadata_candidates import (
+    METADATA_ASSIST_VERSION,
+    add_candidate,
+    make_candidate,
+    preferred_candidate_value,
+)
 
 BOOK_EXTENSIONS = {".epub", ".pdf"}
 BOOK_SIDECAR_EXTENSIONS = {".opf", ".nfo", ".json", ".xml", ".txt"}
@@ -101,6 +106,8 @@ def _looks_like_author(value: str) -> bool:
     text = value.strip()
     if not text:
         return False
+    if re.search(r"\d", text):
+        return False
     if re.search(r"\b[A-Z]\.?\s*[A-Z][a-z]+", text):
         return True
     if (
@@ -111,8 +118,15 @@ def _looks_like_author(value: str) -> bool:
     if KNOWN_AUTHORISH_RE.search(text):
         return True
     words = re.findall(r"[A-Za-z][A-Za-z.'\u2019\-]*", text)
+    title_words = {
+        "a", "against", "assertiveness", "conversations", "couples",
+        "discipline", "effective", "empathy", "for", "guide", "happy",
+        "help", "live", "parenting", "questions", "relationship", "step",
+    }
+    if any(word.casefold() in title_words for word in words):
+        return False
     capitalized = [word for word in words if word[:1].isupper()]
-    return 1 <= len(words) <= 4 and len(capitalized) == len(words)
+    return 2 <= len(words) <= 4 and len(capitalized) == len(words)
 
 
 def _extract_year(text: str) -> tuple[str, str | None]:
@@ -449,6 +463,17 @@ def build_single_book_metadata(source: Path, books_dir: Path) -> dict:
         primary,
         files["artwork"],
     )
+    author = preferred_candidate_value(
+        metadata_candidates,
+        "author",
+        author if author.casefold() not in UNKNOWN_BOOK_VALUES else "Unknown Author",
+    )
+    title = preferred_candidate_value(
+        metadata_candidates,
+        "title",
+        title if title.casefold() not in UNKNOWN_BOOK_VALUES else "Unknown Title",
+    )
+    year = preferred_candidate_value(metadata_candidates, "year", year)
     destination = book_destination(fmt, author, title, year, books_dir)
     warnings = []
     if author.casefold() in UNKNOWN_BOOK_VALUES:
@@ -461,6 +486,7 @@ def build_single_book_metadata(source: Path, books_dir: Path) -> dict:
         warnings.append("book_ignored_sidecars_present")
     return {
         "media_kind": "book",
+        "metadata_assist_version": METADATA_ASSIST_VERSION,
         "review_type": "book",
         "review_mode": "single_item",
         "author": author,

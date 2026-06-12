@@ -4,9 +4,11 @@ from pathlib import Path
 import re
 
 from app.services.metadata_candidates import (
+    METADATA_ASSIST_VERSION,
     add_candidate,
     is_generic_track_value,
     make_candidate,
+    preferred_candidate_value,
 )
 
 AUDIOBOOK_EXTENSIONS = {
@@ -471,6 +473,22 @@ def build_audiobook_metadata(source: Path, audiobooks_root: Path) -> dict:
         audio,
         files["artwork"],
     )
+    author = preferred_candidate_value(
+        metadata_candidates,
+        "author",
+        author if author.casefold() not in UNKNOWN_AUDIOBOOK_VALUES else "Unknown Author",
+    )
+    title = preferred_candidate_value(
+        metadata_candidates,
+        "title",
+        title if title.casefold() not in UNKNOWN_AUDIOBOOK_VALUES else "Unknown Title",
+    )
+    year = preferred_candidate_value(metadata_candidates, "year", year)
+    narrator = preferred_candidate_value(
+        metadata_candidates,
+        "narrator",
+        narrator,
+    )
     fmt = audiobook_format_for(audio)
     destination = audiobook_destination(
         audiobooks_root=audiobooks_root,
@@ -491,6 +509,7 @@ def build_audiobook_metadata(source: Path, audiobooks_root: Path) -> dict:
         warnings.append("audiobook_ignored_sidecars_present")
     return {
         "media_kind": "audiobook",
+        "metadata_assist_version": METADATA_ASSIST_VERSION,
         "review_type": "audiobook",
         "review_mode": "single_item",
         "author": author,

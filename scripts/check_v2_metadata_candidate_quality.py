@@ -18,7 +18,9 @@ from app.services.book_metadata import (  # noqa: E402
     parse_book_name,
 )
 from app.services.metadata_candidates import (  # noqa: E402
+    METADATA_ASSIST_VERSION,
     make_candidate,
+    preferred_candidate_value,
     should_hide_candidate,
 )
 from app.schemas.archive import BatchSummary  # noqa: E402
@@ -37,6 +39,11 @@ def main() -> None:
     assert candidate["ignored"] is True
     assert candidate["confidence_label"] == "low"
     assert should_hide_candidate("title", "Track 1", "audio_tag_title")
+    assert preferred_candidate_value(
+        {"title": [candidate]},
+        "title",
+        "Unknown Title",
+    ) == "Unknown Title"
     summary = BatchSummary(
         id=1,
         detected_type="audiobook",
@@ -89,6 +96,11 @@ def main() -> None:
     parsed = parse_book_name("@SoftSkills101 - Atomic Habits.pdf")
     assert parsed["title"] == "Atomic Habits", parsed
     assert parsed["author"] == "Unknown Author", parsed
+    title_like = parse_book_name(
+        "131 Creative Conversations For Couples - "
+        "Christ-honoring questions to deepen your relationship.pdf"
+    )
+    assert title_like["author"] == "Unknown Author", title_like
 
     item_candidates, _ = build_book_metadata_candidates(
         Path("@SoftSkills101 - Atomic Habits.pdf"),
@@ -110,6 +122,8 @@ def main() -> None:
     assert 'item_metadata["metadata_candidates"] = item_candidates' in (
         scanner_source
     )
+    assert "metadata_assist_version" in scanner_source
+    assert METADATA_ASSIST_VERSION == "v2.056"
 
     print("v2 metadata candidate quality checks passed")
 

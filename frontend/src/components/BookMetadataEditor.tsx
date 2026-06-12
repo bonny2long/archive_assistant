@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { BatchSummary, BookMetadataUpdate } from "../types/archive";
 import ReviewIssuesPanel from "./ReviewIssuesPanel";
 import MetadataSuggestionChips from "./MetadataSuggestionChips";
+import MetadataAssistStaleWarning from "./MetadataAssistStaleWarning";
 
 type Props = {
   batch: BatchSummary;
@@ -91,6 +92,7 @@ export default function BookMetadataEditor({
             confirmLabel="Confirm book metadata"
             onConfirm={onConfirm}
           />
+          <MetadataAssistStaleWarning batch={batch} />
           <div className="editor-grid">
             <label>
               <span>Title</span>

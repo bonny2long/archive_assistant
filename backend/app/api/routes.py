@@ -1663,6 +1663,7 @@ def _batch_to_summary(
         generic_audio_tag_count=meta.get("generic_audio_tag_count", 0),
         detected_disc_count=meta.get("detected_disc_count", 0),
         candidate_warning_count=meta.get("candidate_warning_count", 0),
+        metadata_assist_version=meta.get("metadata_assist_version"),
         suggested_destination=batch.suggested_destination,
         suggested_metadata=batch.suggested_metadata,
         metadata_confirmed=batch.metadata_confirmed,

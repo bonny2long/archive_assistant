@@ -1117,6 +1117,31 @@ button:focus-visible, input:focus-visible {
   cursor: pointer;
   font-size: 10px;
 }
+.metadata-assist-stale-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: var(--radius-md);
+  background: rgba(245, 158, 11, 0.07);
+  color: var(--accent-amber);
+}
+.metadata-assist-stale-warning i {
+  margin-top: 1px;
+  font-size: 15px;
+}
+.metadata-assist-stale-warning div {
+  display: grid;
+  gap: 2px;
+}
+.metadata-assist-stale-warning strong {
+  font-size: 11px;
+}
+.metadata-assist-stale-warning span {
+  color: var(--text-secondary);
+  font-size: 10px;
+}
 .book-repair-summary {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));

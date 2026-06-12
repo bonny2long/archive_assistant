@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { AudiobookMetadataUpdate, BatchSummary } from "../types/archive";
 import MetadataSuggestionChips from "./MetadataSuggestionChips";
+import MetadataAssistStaleWarning from "./MetadataAssistStaleWarning";
 
 type Props = {
   batch: BatchSummary;
@@ -142,6 +143,7 @@ export default function AudiobookMetadataEditor({
             </div>
             <span>{blockers.length} blocker(s) · {warnings.length} warning(s)</span>
           </div>
+          <MetadataAssistStaleWarning batch={batch} />
 
           {warnings.length > 0 && (
             <div className="tv-review-panel__warnings">

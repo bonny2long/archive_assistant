@@ -115,6 +115,7 @@ export type BatchSummary = {
   generic_audio_tag_count?: number;
   detected_disc_count?: number;
   candidate_warning_count?: number;
+  metadata_assist_version?: string | null;
   suggested_destination?: string | null;
   suggested_metadata?: SuggestedMetadata | null;
   metadata_confirmed: boolean;

@@ -52,6 +52,10 @@ from app.services.video_metadata import (
     useful_movie_name,
 )
 from app.services.review_state import build_review_state
+from app.services.metadata_candidates import (
+    METADATA_ASSIST_VERSION,
+    preferred_candidate_value,
+)
 from app.services.book_metadata import (
     book_format_for,
     build_book_metadata_candidates,
@@ -926,6 +930,7 @@ def _create_book_batch(db: Session, source: Path) -> IngestBatch | None:
                 "series": item.get("series"),
                 "series_index": item.get("series_index"),
                 "format": fmt,
+                "metadata_assist_version": METADATA_ASSIST_VERSION,
             }
             item_candidates, _ = build_book_metadata_candidates(
                 path,
@@ -934,6 +939,21 @@ def _create_book_batch(db: Session, source: Path) -> IngestBatch | None:
             )
             item_metadata["metadata_candidates"] = item_candidates
             item_metadata["candidate_notes"] = []
+            item_metadata["author"] = preferred_candidate_value(
+                item_candidates,
+                "author",
+                item_metadata["author"],
+            )
+            item_metadata["title"] = preferred_candidate_value(
+                item_candidates,
+                "title",
+                item_metadata["title"],
+            )
+            item_metadata["year"] = preferred_candidate_value(
+                item_candidates,
+                "year",
+                item_metadata["year"],
+            )
             destination = build_book_item_destination(
                 books_root=settings.books_dir,
                 item=item_metadata,
@@ -974,9 +994,21 @@ def _create_book_batch(db: Session, source: Path) -> IngestBatch | None:
         confidence=float(metadata.get("confidence") or 0.65),
         suggested_destination=str(destination) if destination else None,
         suggested_metadata={
-            "author": metadata.get("author"),
-            "title": metadata.get("title"),
-            "year": metadata.get("year"),
+            "author": preferred_candidate_value(
+                metadata.get("metadata_candidates") or {},
+                "author",
+                metadata.get("author"),
+            ),
+            "title": preferred_candidate_value(
+                metadata.get("metadata_candidates") or {},
+                "title",
+                metadata.get("title"),
+            ),
+            "year": preferred_candidate_value(
+                metadata.get("metadata_candidates") or {},
+                "year",
+                metadata.get("year"),
+            ),
             "format": metadata.get("format"),
         },
         metadata_json=metadata,
@@ -1036,10 +1068,26 @@ def _create_audiobook_batch(db: Session, source: Path) -> IngestBatch | None:
         confidence=float(metadata.get("confidence") or 0.65),
         suggested_destination=str(destination) if destination else None,
         suggested_metadata={
-            "author": metadata.get("author"),
-            "title": metadata.get("title"),
-            "year": metadata.get("year"),
-            "narrator": metadata.get("narrator"),
+            "author": preferred_candidate_value(
+                metadata.get("metadata_candidates") or {},
+                "author",
+                metadata.get("author"),
+            ),
+            "title": preferred_candidate_value(
+                metadata.get("metadata_candidates") or {},
+                "title",
+                metadata.get("title"),
+            ),
+            "year": preferred_candidate_value(
+                metadata.get("metadata_candidates") or {},
+                "year",
+                metadata.get("year"),
+            ),
+            "narrator": preferred_candidate_value(
+                metadata.get("metadata_candidates") or {},
+                "narrator",
+                metadata.get("narrator"),
+            ),
             "format": metadata.get("format"),
         },
         metadata_json=metadata,
