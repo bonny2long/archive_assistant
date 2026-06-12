@@ -79,8 +79,16 @@ def read_pdf_metadata(
     except Exception as exc:
         return {}, [f"pdf_read_failed:{type(exc).__name__}"]
 
-    info = reader.metadata
-    xmp = getattr(reader, "xmp_metadata", None)
+    try:
+        info = reader.metadata
+    except Exception as exc:
+        info = None
+        errors.append(f"pdf_document_info_failed:{type(exc).__name__}")
+    try:
+        xmp = getattr(reader, "xmp_metadata", None)
+    except Exception as exc:
+        xmp = None
+        errors.append(f"pdf_xmp_invalid:{type(exc).__name__}")
     title, title_ignored = _trusted(
         getattr(info, "title", None)
         or (info.get("/Title") if info else None),

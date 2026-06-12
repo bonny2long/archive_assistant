@@ -49,6 +49,21 @@ def install_fake_pypdf(metadata: dict, xmp=None) -> object | None:
     return previous
 
 
+def install_broken_xmp_pypdf(metadata: dict) -> object | None:
+    previous = sys.modules.get("pypdf")
+
+    class FakePdfReader:
+        def __init__(self, path: str):
+            self.metadata = FakePdfInfo(metadata)
+
+        @property
+        def xmp_metadata(self):
+            raise ValueError("invalid XMP XML")
+
+    sys.modules["pypdf"] = SimpleNamespace(PdfReader=FakePdfReader)
+    return previous
+
+
 def restore_pypdf(previous: object | None) -> None:
     if previous is None:
         sys.modules.pop("pypdf", None)
@@ -98,6 +113,24 @@ def main() -> None:
         "year": "2018",
     }
     assert errors == []
+
+    previous_pypdf = install_broken_xmp_pypdf({
+        "/Title": "Readable Document Info",
+        "/Author": "Valid Author",
+        "/CreationDate": "D:20200101000000",
+    })
+    try:
+        broken_xmp_pdf, errors = read_pdf_metadata(
+            Path("broken-xmp.pdf")
+        )
+    finally:
+        restore_pypdf(previous_pypdf)
+    assert broken_xmp_pdf == {
+        "title": "Readable Document Info",
+        "author": "Valid Author",
+        "year": "2020",
+    }
+    assert errors == ["pdf_xmp_invalid:ValueError"]
 
     long_title = (
         "Prepper's Survival Medicine Handbook: A Lifesaving Collection of "
