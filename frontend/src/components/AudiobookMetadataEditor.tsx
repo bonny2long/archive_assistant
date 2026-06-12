@@ -51,6 +51,9 @@ export default function AudiobookMetadataEditor({
     () => batch.suggested_metadata?.format ?? batch.format ?? "MP3",
   );
   const [showAllChapters, setShowAllChapters] = useState(false);
+  const [repairAuthor, setRepairAuthor] = useState("");
+  const [repairNarrator, setRepairNarrator] = useState("");
+  const [repairYear, setRepairYear] = useState("");
   const yearValid = year.trim() === "" || /^(19|20)\d{2}$/.test(year.trim());
   const blockers = [
     unknown(author) ? "Author is required." : null,
@@ -87,12 +90,6 @@ export default function AudiobookMetadataEditor({
   const visibleChapterRows = showAllChapters
     ? chapterRows
     : chapterRows.slice(0, 25);
-  const bestCandidate = (field: string): string | null => {
-    const candidate = (candidates[field] ?? []).find(
-      (item) => !item.ignored && item.confidence_label !== "low",
-    );
-    return candidate?.value ?? null;
-  };
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -180,15 +177,21 @@ export default function AudiobookMetadataEditor({
               )}
             </div>
             <div className="audiobook-editor__helpers">
-              <button type="button" className="btn-sm" disabled={!bestCandidate("author")} onClick={() => setAuthor(bestCandidate("author") ?? author)}>
-                Apply author
-              </button>
-              <button type="button" className="btn-sm" disabled={!bestCandidate("narrator")} onClick={() => setNarrator(bestCandidate("narrator") ?? narrator)}>
-                Apply narrator
-              </button>
-              <button type="button" className="btn-sm" disabled={!bestCandidate("year")} onClick={() => setYear(bestCandidate("year") ?? year)}>
-                Apply year
-              </button>
+              <label>
+                <span>Manual author</span>
+                <input value={repairAuthor} onChange={(event) => setRepairAuthor(event.target.value)} />
+                <button type="button" className="btn-sm" disabled={!repairAuthor.trim()} onClick={() => setAuthor(repairAuthor.trim().replace(/\s+/g, " "))}>Apply author</button>
+              </label>
+              <label>
+                <span>Manual narrator</span>
+                <input value={repairNarrator} onChange={(event) => setRepairNarrator(event.target.value)} />
+                <button type="button" className="btn-sm" disabled={!repairNarrator.trim()} onClick={() => setNarrator(repairNarrator.trim().replace(/\s+/g, " "))}>Apply narrator</button>
+              </label>
+              <label>
+                <span>Manual year</span>
+                <input maxLength={4} value={repairYear} onChange={(event) => setRepairYear(event.target.value)} />
+                <button type="button" className="btn-sm" disabled={!/^(19|20)\d{2}$/.test(repairYear.trim())} onClick={() => setYear(repairYear.trim())}>Apply year</button>
+              </label>
             </div>
             <div className="editor-grid audiobook-editor__grid">
             <label>

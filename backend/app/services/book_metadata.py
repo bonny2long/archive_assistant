@@ -9,6 +9,7 @@ from app.services.metadata_candidates import (
     METADATA_ASSIST_VERSION,
     add_candidate,
     make_candidate,
+    normalize_metadata_text,
     preferred_candidate_value,
 )
 from app.services.pdf_metadata_reader import read_pdf_metadata
@@ -353,7 +354,7 @@ def collect_book_files(root: Path) -> dict[str, list[Path]]:
 def _xml_text(element: ElementTree.Element | None) -> str | None:
     if element is None or element.text is None:
         return None
-    value = element.text.strip()
+    value = normalize_metadata_text(element.text)
     return value or None
 
 
@@ -397,7 +398,7 @@ def extract_epub_metadata(path: Path) -> dict:
                 "{http://www.idpf.org/2007/opf}meta"
             ):
                 name = str(meta.attrib.get("name") or "").casefold()
-                content = str(meta.attrib.get("content") or "").strip()
+                content = normalize_metadata_text(meta.attrib.get("content"))
                 if name == "calibre:series" and content:
                     values["series"] = content
                 elif name == "calibre:series_index" and content:

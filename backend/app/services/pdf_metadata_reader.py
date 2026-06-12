@@ -45,11 +45,16 @@ def _is_untrusted(value: str, source_labels: set[str]) -> bool:
     return False
 
 
-def _trusted(value: Any, source_labels: set[str]) -> str | None:
+def _trusted(
+    value: Any,
+    source_labels: set[str],
+) -> tuple[str | None, bool]:
     text = _first_text(value)
-    if not text or _is_untrusted(text, source_labels):
-        return None
-    return text
+    if not text:
+        return None, False
+    if _is_untrusted(text, source_labels):
+        return None, True
+    return text, False
 
 
 def read_pdf_metadata(
@@ -76,20 +81,30 @@ def read_pdf_metadata(
 
     info = reader.metadata
     xmp = getattr(reader, "xmp_metadata", None)
-    title = _trusted(
+    title, title_ignored = _trusted(
         getattr(info, "title", None)
         or (info.get("/Title") if info else None),
         labels,
     )
-    author = _trusted(
+    author, author_ignored = _trusted(
         getattr(info, "author", None)
         or (info.get("/Author") if info else None),
         labels,
     )
     if not title and xmp is not None:
-        title = _trusted(getattr(xmp, "dc_title", None), labels)
+        title, xmp_title_ignored = _trusted(
+            getattr(xmp, "dc_title", None),
+            labels,
+        )
+        title_ignored = title_ignored or xmp_title_ignored
     if not author and xmp is not None:
-        author = _trusted(getattr(xmp, "dc_creator", None), labels)
+        author, xmp_author_ignored = _trusted(
+            getattr(xmp, "dc_creator", None),
+            labels,
+        )
+        author_ignored = author_ignored or xmp_author_ignored
+    if title_ignored or author_ignored:
+        errors.append("pdf_metadata_generic_ignored")
 
     date_value = _first_text(
         getattr(info, "creation_date", None)

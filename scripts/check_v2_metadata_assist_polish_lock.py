@@ -1,4 +1,4 @@
-"""Bounded regression proof for the v2.058 metadata assist polish lock."""
+"""Bounded regression proof for the v2.059 metadata assist polish lock."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from app.services import audiobook_metadata, book_metadata  # noqa: E402
 from app.services.metadata_candidates import (  # noqa: E402
     METADATA_ASSIST_VERSION,
     make_candidate,
+    normalize_metadata_text,
     preferred_candidate_value,
 )
 from app.services.pdf_metadata_reader import read_pdf_metadata  # noqa: E402
@@ -56,7 +57,8 @@ def restore_pypdf(previous: object | None) -> None:
 
 
 def main() -> None:
-    assert METADATA_ASSIST_VERSION == "v2.058"
+    assert METADATA_ASSIST_VERSION == "v2.059"
+    assert normalize_metadata_text("Jim  Cobb") == "Jim Cobb"
 
     parsed = book_metadata.parse_book_name(
         "@SoftSkills101 - Atomic Habits.pdf"
@@ -79,7 +81,7 @@ def main() -> None:
     finally:
         restore_pypdf(previous_pypdf)
     assert bad_pdf == {"year": "2018"}, bad_pdf
-    assert errors == []
+    assert errors == ["pdf_metadata_generic_ignored"]
 
     previous_pypdf = install_fake_pypdf({
         "/Title": "Atomic Habits",
@@ -127,7 +129,7 @@ def main() -> None:
         book_metadata.read_pdf_metadata = original_read_pdf
     assert built_book["title"] == "Atomic Habits"
     assert built_book["author"] == "Unknown Author"
-    assert built_book["metadata_assist_version"] == "v2.058"
+    assert built_book["metadata_assist_version"] == "v2.059"
     runtime = built_book["candidate_runtime"]
     assert runtime["candidate_filter_active"] is True
     assert runtime["source_labels_removed"] >= 1
@@ -182,7 +184,7 @@ def main() -> None:
     assert built_audio["title"] == "Star Wars The Old Republic Revan"
     assert built_audio["author"] == "Unknown Author"
     assert built_audio["format"] == "MP3"
-    assert built_audio["metadata_assist_version"] == "v2.058"
+    assert built_audio["metadata_assist_version"] == "v2.059"
     assert built_audio["candidate_runtime"]["candidate_filter_active"] is True
     assert built_audio["candidate_runtime"]["generic_audio_tags_hidden"] >= 1
 
@@ -197,10 +199,30 @@ def main() -> None:
         "Exclude visible repair items",
         "Restore excluded visible items",
         "PDF metadata limited",
+        "pypdf is not installed",
+        "embedded metadata looked generic and was ignored",
+        "no reliable embedded author/year found",
+        "This excludes items from this batch review only. It does not delete files.",
     ):
         assert label in collection_ui, label
 
-    print("v2.058 metadata assist polish lock checks passed")
+    detail_ui = (
+        ROOT / "frontend/src/components/BatchDetail.tsx"
+    ).read_text(encoding="utf-8")
+    for label in (
+        "Destination mode:",
+        "Each included book will route to its own destination.",
+        "Previewing first item:",
+    ):
+        assert label in detail_ui, label
+
+    audiobook_ui = (
+        ROOT / "frontend/src/components/AudiobookMetadataEditor.tsx"
+    ).read_text(encoding="utf-8")
+    for label in ("Manual author", "Manual narrator", "Manual year"):
+        assert label in audiobook_ui, label
+
+    print("v2.059 metadata assist polish lock checks passed")
 
 
 if __name__ == "__main__":

@@ -314,6 +314,7 @@ export type BookCollectionItemUpdate = {
   series_index?: string | null;
   metadata_candidates?: Record<string, MetadataCandidate[]>;
   candidate_notes?: string[];
+  candidate_runtime?: Record<string, unknown>;
 };
 
 export type BookCollectionReviewUpdate = {

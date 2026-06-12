@@ -4,7 +4,7 @@ import re
 from typing import Any
 
 
-METADATA_ASSIST_VERSION = "v2.058"
+METADATA_ASSIST_VERSION = "v2.059"
 
 GENERIC_UNKNOWN_VALUES = {
     "",
@@ -37,20 +37,24 @@ def confidence_label(score: float) -> str:
     return "low"
 
 
+def normalize_metadata_text(value: Any) -> str:
+    return re.sub(r"\s+", " ", str(value or "")).strip()
+
+
 def is_generic_unknown_value(value: str) -> bool:
-    normalized = re.sub(r"\s+", " ", value).strip().casefold()
+    normalized = normalize_metadata_text(value).casefold()
     return normalized in GENERIC_UNKNOWN_VALUES or normalized.startswith(
         "unknown album ("
     )
 
 
 def is_generic_track_value(value: str) -> bool:
-    normalized = re.sub(r"\s+", " ", value).strip()
+    normalized = normalize_metadata_text(value)
     return bool(GENERIC_TRACK_RE.fullmatch(normalized))
 
 
 def is_generated_timestamp_value(value: str) -> bool:
-    normalized = re.sub(r"\s+", " ", value).strip()
+    normalized = normalize_metadata_text(value)
     return bool(TIMESTAMP_RE.fullmatch(normalized))
 
 
@@ -90,7 +94,7 @@ def make_candidate(
 ) -> dict[str, Any] | None:
     if value is None:
         return None
-    normalized_value = str(value).strip()
+    normalized_value = normalize_metadata_text(value)
     if not normalized_value:
         return None
     quality_notes = candidate_quality_notes(

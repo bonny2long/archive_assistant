@@ -68,7 +68,10 @@ from app.services.book_metadata import (
     build_book_item_destination,
 )
 from app.services.title_display import clean_display_title, destination_title
-from app.services.metadata_candidates import METADATA_ASSIST_VERSION
+from app.services.metadata_candidates import (
+    METADATA_ASSIST_VERSION,
+    normalize_metadata_text,
+)
 from app.services.audiobook_metadata import audiobook_destination
 from app.core.config import settings
 from app.core.time import configured_timezone, now_local, now_utc, serialize_utc
@@ -680,8 +683,8 @@ def update_book_metadata(
     if batch.status in {"moved", "merged"}:
         raise HTTPException(status_code=400, detail="Moved batches cannot be edited")
 
-    title = update.title.strip()
-    author = update.author.strip()
+    title = normalize_metadata_text(update.title)
+    author = normalize_metadata_text(update.author)
     year = update.year.strip() if update.year else None
     metadata = dict(batch.metadata_json or {})
     book_format = (
@@ -787,8 +790,8 @@ def update_book_collection_review(
         if isinstance(item, dict)
     }
     for item in update.books:
-        title = item.title.strip()
-        author = item.author.strip()
+        title = normalize_metadata_text(item.title)
+        author = normalize_metadata_text(item.author)
         year = item.year.strip() if item.year else None
         book_format = (
             item.format.strip().upper()
@@ -806,7 +809,11 @@ def update_book_collection_review(
             "display_title": clean_display_title(title),
             "destination_title": destination_title(title),
             "year": year,
-            "series": item.series.strip() if item.series else None,
+            "series": (
+                normalize_metadata_text(item.series)
+                if item.series
+                else None
+            ),
             "series_index": (
                 item.series_index.strip() if item.series_index else None
             ),
@@ -911,11 +918,19 @@ def update_audiobook_metadata(
     if batch.status in {"moved", "merged"}:
         raise HTTPException(status_code=400, detail="Moved batches cannot be edited")
 
-    author = update.author.strip()
-    title = update.title.strip()
+    author = normalize_metadata_text(update.author)
+    title = normalize_metadata_text(update.title)
     year = update.year.strip() if update.year else None
-    narrator = update.narrator.strip() if update.narrator else None
-    series = update.series.strip() if update.series else None
+    narrator = (
+        normalize_metadata_text(update.narrator)
+        if update.narrator
+        else None
+    )
+    series = (
+        normalize_metadata_text(update.series)
+        if update.series
+        else None
+    )
     series_index = (
         update.series_index.strip() if update.series_index else None
     )

@@ -786,6 +786,9 @@ function BookBatchDetail({ batch, moveSummary }: Props) {
     ?? items.find((item) => item.include !== false)?.destination_preview
     ?? "-",
   );
+  const firstIncludedDestination = String(
+    items.find((item) => item.include !== false)?.destination_preview ?? "-",
+  );
   return (
     <div className="batch-detail batch-detail--review">
       <ReviewStateCard batch={batch} />
@@ -853,12 +856,28 @@ function BookBatchDetail({ batch, moveSummary }: Props) {
         </section>
       )}
       <section className="library-destination">
-        <span>{batch.status === "moved" ? "Final destination" : "Destination preview"}</span>
-        <strong>
-          {collection
-            ? readableLibraryPath(collectionDestination)
-            : readableLibraryPath(batch.suggested_destination)}
-        </strong>
+        {collection ? (
+          <>
+            <span>
+              Destination mode: {keepTogether ? "Collection folder" : "Author folders"}
+            </span>
+            <strong>
+              {keepTogether
+                ? readableLibraryPath(collectionDestination)
+                : "Each included book will route to its own destination."}
+            </strong>
+            {!keepTogether && (
+              <small>
+                Previewing first item: {readableLibraryPath(firstIncludedDestination)}
+              </small>
+            )}
+          </>
+        ) : (
+          <>
+            <span>{batch.status === "moved" ? "Final destination" : "Destination preview"}</span>
+            <strong>{readableLibraryPath(batch.suggested_destination)}</strong>
+          </>
+        )}
       </section>
       <DebugDetails batch={batch} moveSummary={moveSummary} />
     </div>

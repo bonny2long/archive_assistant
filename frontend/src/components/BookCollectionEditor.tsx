@@ -75,6 +75,19 @@ function pdfMetadataLimited(item: BookCollectionItemUpdate): boolean {
   );
 }
 
+function pdfMetadataLimitedReason(item: BookCollectionItemUpdate): string {
+  const errors = Array.isArray(item.candidate_runtime?.metadata_reader_errors)
+    ? item.candidate_runtime.metadata_reader_errors.map(String)
+    : [];
+  if (errors.includes("pypdf_not_installed")) {
+    return "PDF metadata limited: pypdf is not installed";
+  }
+  if (errors.includes("pdf_metadata_generic_ignored")) {
+    return "PDF metadata limited: embedded metadata looked generic and was ignored";
+  }
+  return "PDF metadata limited: no reliable embedded author/year found";
+}
+
 function cleanPathPart(value: string): string {
   return value.replace(/[<>:"/\\|?*]/g, "_").trim() || "Unknown";
 }
@@ -124,6 +137,7 @@ function initialItems(batch: BatchSummary): BookCollectionItemUpdate[] {
     series_index: item.series_index ?? null,
     metadata_candidates: item.metadata_candidates ?? {},
     candidate_notes: item.candidate_notes ?? [],
+    candidate_runtime: item.candidate_runtime ?? {},
   }));
 }
 
@@ -172,7 +186,9 @@ function BookRepairCard({
         <div>
           <strong>{reasons.length ? reasons.map(reasonLabel).join(" · ") : "Ready"}</strong>
           {pdfMetadataLimited(item) && (
-            <span className="book-repair-card__limited">PDF metadata limited</span>
+            <span className="book-repair-card__limited">
+              {pdfMetadataLimitedReason(item)}
+            </span>
           )}
           <code>{item.source_file}</code>
         </div>
@@ -540,6 +556,9 @@ export default function BookCollectionEditor({
                     Restore excluded visible items
                   </button>
                 )}
+                <p className="book-bulk-tools__safety">
+                  This excludes items from this batch review only. It does not delete files.
+                </p>
               </div>
             )}
 
