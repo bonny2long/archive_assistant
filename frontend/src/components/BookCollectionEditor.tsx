@@ -474,7 +474,7 @@ export default function BookCollectionEditor({
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <form
-        className="metadata-editor metadata-editor--wide"
+        className="metadata-editor metadata-editor--collection"
         onMouseDown={(event) => event.stopPropagation()}
         onSubmit={(event) => {
           event.preventDefault();

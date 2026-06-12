@@ -446,6 +446,7 @@ export type DevResetResponse = {
   restored_files: number;
   removed_reports: number;
   removed_move_logs: number;
+  removed_library_metadata: number;
   removed_empty_dirs: number;
   cleared_batches: number;
   message: string;

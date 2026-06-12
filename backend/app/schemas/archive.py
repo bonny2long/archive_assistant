@@ -322,6 +322,7 @@ class DevResetResponse(BaseModel):
     restored_files: int
     removed_reports: int
     removed_move_logs: int
+    removed_library_metadata: int
     removed_empty_dirs: int
     cleared_batches: int
     message: str

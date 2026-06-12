@@ -555,7 +555,7 @@ export default function App() {
       showToast(result.message);
       setQaSummary({
         title: "Reset summary",
-        text: `${result.restored_files} files restored · ${result.cleared_batches} batches cleared · ${result.removed_move_logs} move logs removed`,
+        text: `${result.restored_files} files restored · ${result.cleared_batches} batches cleared · ${result.removed_move_logs} move logs removed · ${result.removed_library_metadata} stale library metadata items removed`,
       });
       setTab("all");
       setSelected(new Set());

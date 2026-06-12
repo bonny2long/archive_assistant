@@ -793,9 +793,14 @@ button:focus-visible, input:focus-visible {
   background: rgba(4, 7, 12, 0.78);
   backdrop-filter: blur(4px);
 }
+@media (min-width: 800px) {
+  .modal-backdrop {
+    padding: 1.5rem;
+  }
+}
 .metadata-editor,
 .confirm-modal {
-  width: min(520px, 100%);
+  width: min(600px, 100%);
   padding: 1.25rem;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
@@ -1169,7 +1174,6 @@ button:focus-visible, input:focus-visible {
 .metadata-editor.audiobook-editor {
   width: min(1100px, calc(100vw - 2rem));
   max-width: 1100px;
-  height: min(90vh, 860px);
   max-height: calc(100vh - 2rem);
   min-width: 540px;
 }
@@ -1243,7 +1247,16 @@ button:focus-visible, input:focus-visible {
    Reuses the TV modal's structural shape without the two-panel split.
    ────────────────────────────────────────────────────────────────────────── */
 .metadata-editor--wide {
-  width: min(720px, calc(100vw - 2rem));
+  width: min(860px, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* Collection editors host scrollable repair card lists. */
+.metadata-editor--collection {
+  width: min(1020px, calc(100vw - 2rem));
   max-height: calc(100vh - 2rem);
   padding: 0;
   display: flex;
@@ -1292,15 +1305,22 @@ button:focus-visible, input:focus-visible {
 }
 .editor-grid--full { grid-template-columns: 1fr; }
 .editor-grid label { margin-bottom: 0; }
-.metadata-editor--wide label { display: grid; gap: 5px; margin-bottom: 0; }
-.metadata-editor--wide label span {
+.metadata-editor--wide label,
+.metadata-editor--collection label {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 0;
+}
+.metadata-editor--wide label span,
+.metadata-editor--collection label span {
   color: var(--text-muted);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
-.metadata-editor--wide input {
+.metadata-editor--wide input,
+.metadata-editor--collection input {
   width: 100%;
   padding: 9px 10px;
   border: 1px solid var(--border-strong);
@@ -1309,11 +1329,13 @@ button:focus-visible, input:focus-visible {
   color: var(--text-primary);
   font: inherit;
 }
-.metadata-editor--wide input:focus-visible {
+.metadata-editor--wide input:focus-visible,
+.metadata-editor--collection input:focus-visible {
   outline: 2px solid var(--accent-blue);
   outline-offset: 2px;
 }
-.metadata-editor--wide label > small {
+.metadata-editor--wide label > small,
+.metadata-editor--collection label > small {
   color: var(--accent-blue);
   font-size: 10px;
 }
@@ -1946,6 +1968,12 @@ button:focus-visible, input:focus-visible {
   overflow-wrap: anywhere;
 }
 
+@media (min-width: 960px) {
+  .metadata-editor--collection .book-repair-card__fields {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 900px) {
   .book-repair-card__fields { grid-template-columns: 1fr; }
   .review-summary,
@@ -2055,7 +2083,8 @@ button:focus-visible, input:focus-visible {
   .tv-editor__right {
     overflow-y: auto;
   }
-  .metadata-editor--wide {
+  .metadata-editor--wide,
+  .metadata-editor--collection {
     width: calc(100vw - 1rem);
   }
   .editor-grid {

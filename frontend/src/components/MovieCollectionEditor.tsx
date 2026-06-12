@@ -222,7 +222,7 @@ export default function MovieCollectionEditor({
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <div
-        className="metadata-editor metadata-editor--wide"
+        className="metadata-editor metadata-editor--collection"
         onMouseDown={(e) => e.stopPropagation()}
       >
         {/* ── Header ── */}

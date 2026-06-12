@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +20,7 @@ class DevResetSummary:
     restored_files: int
     removed_reports: int
     removed_move_logs: int
+    removed_library_metadata: int
     removed_empty_dirs: int
     cleared_batches: int
     message: str
@@ -78,6 +80,87 @@ def _remove_move_logs() -> int:
             if path.is_file():
                 path.unlink()
                 removed += 1
+    return removed
+
+
+GENERATED_LIBRARY_MANIFESTS = {
+    "audiobook.json",
+    "book.json",
+    "discography.json",
+    "movie.json",
+    "music-album.json",
+    "tv-show.json",
+}
+
+
+def _destination_has_payload(destination: Path) -> bool:
+    if not destination.exists():
+        return False
+    return any(
+        path.is_file() and "metadata" not in {
+            part.casefold() for part in path.relative_to(destination).parts
+        }
+        for path in destination.rglob("*")
+    )
+
+
+def _remove_orphaned_library_metadata() -> int:
+    removed = 0
+    for root in _media_roots():
+        if not root.exists():
+            continue
+        for manifest in root.rglob("*.json"):
+            if (
+                manifest.name not in GENERATED_LIBRARY_MANIFESTS
+                or manifest.parent.name.casefold() != "metadata"
+            ):
+                continue
+            destination = manifest.parent.parent
+            if _destination_has_payload(destination):
+                continue
+            manifest.unlink()
+            removed += 1
+
+    index_dirs = {
+        settings.music_metadata_dir,
+        settings.movies_metadata_dir,
+        settings.tv_metadata_dir,
+        settings.books_metadata_dir,
+        settings.audiobooks_metadata_dir,
+    }
+    for index_dir in index_dirs:
+        index_path = index_dir / "library-index.json"
+        if not index_path.exists():
+            continue
+        try:
+            loaded = json.loads(index_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            loaded = []
+        entries = loaded if isinstance(loaded, list) else []
+        kept = []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            relative = entry.get("library_path") or entry.get(
+                "destination_path"
+            )
+            if not relative:
+                continue
+            destination = settings.data_root / Path(
+                str(relative).replace("\\", "/")
+            )
+            if _destination_has_payload(destination):
+                kept.append(entry)
+        if kept:
+            if kept != entries:
+                index_path.write_text(
+                    json.dumps(kept, indent=2, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+                removed += len(entries) - len(kept)
+        else:
+            index_path.unlink()
+            removed += max(1, len(entries))
     return removed
 
 
@@ -277,6 +360,7 @@ def reset_test_data(db: Session, *, apply: bool) -> DevResetSummary:
             restored_files=len(restorable) + len(quarantine_plan),
             removed_reports=len(batch_ids),
             removed_move_logs=0,
+            removed_library_metadata=0,
             removed_empty_dirs=0,
             cleared_batches=len(batch_ids),
             message=(
@@ -321,6 +405,7 @@ def reset_test_data(db: Session, *, apply: bool) -> DevResetSummary:
         + _remove_quarantine_reports(batch_ids)
     )
     removed_move_logs = _remove_move_logs()
+    removed_library_metadata = _remove_orphaned_library_metadata()
     removed_empty_dirs = sum(
         _remove_empty_directories(root)
         for root in [*_media_roots(), settings.data_root / "_QUARANTINE"]
@@ -345,12 +430,15 @@ def reset_test_data(db: Session, *, apply: bool) -> DevResetSummary:
         restored_files=restored_files,
         removed_reports=removed_reports,
         removed_move_logs=removed_move_logs,
+        removed_library_metadata=removed_library_metadata,
         removed_empty_dirs=removed_empty_dirs,
         cleared_batches=len(batch_ids),
         message=(
             "All ingest test data reset. "
             f"Restored {restored_files} file(s) and cleared "
-            f"{len(batch_ids)} batch(es). Source files were not deleted."
+            f"{len(batch_ids)} batch(es). Removed "
+            f"{removed_library_metadata} stale library metadata item(s). "
+            "Source files were not deleted."
         ),
     )
 

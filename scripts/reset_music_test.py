@@ -51,6 +51,7 @@ def main() -> int:
     print(f"Files: {summary.restored_files}")
     print(f"Reports: {summary.removed_reports}")
     print(f"Move logs: {summary.removed_move_logs}")
+    print(f"Library metadata: {summary.removed_library_metadata}")
     print(f"Empty directories: {summary.removed_empty_dirs}")
     print(f"Batches: {summary.cleared_batches}")
     return 0
