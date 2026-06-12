@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from datetime import datetime
 import re
 import unicodedata
 import zipfile
@@ -28,7 +29,7 @@ BOOK_ARTWORK_NAMES = {
 BOOK_ARTWORK_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 UNKNOWN_BOOK_VALUES = {"", "unknown", "unknown author", "unknown title", "unkn"}
 BOOK_SERIES_PREFIX_RE = re.compile(
-    r"^(?P<series>.+?)\s+(?P<index>\d+(?:\.\d+)?)\s*-\s*(?P<title>.+)$",
+    r"^(?P<series>.+?)\s+#?(?P<index>\d+(?:\.\d+)?)\s+-\s+(?P<title>.+)$",
     re.I,
 )
 BOOK_NUMBER_PREFIX_RE = re.compile(
@@ -44,6 +45,8 @@ SERIES_SUFFIX_RE = re.compile(
     re.I,
 )
 YEAR_RE = re.compile(r"(?:\(|\[|\b)((?:19|20)\d{2})(?:\)|\]|\b)")
+BOOK_YEAR_RE = re.compile(r"(?:\(|\[|\b)(\d{4})(?:\)|\]|\b)")
+ORDERED_BOOK_PREFIX_RE = re.compile(r"^\d+\s+-\s+(?P<rest>.+)$")
 AUTHOR_HINT_RE = re.compile(
     r"\b(?:by|author)\s+(?P<author>[A-Z][A-Za-z0-9 .,&'\u2019\-]+)$",
     re.I,
@@ -86,10 +89,15 @@ SUBTITLE_AUTHOR_WORDS = {
     "guide",
     "habits",
     "how",
+    "improving",
+    "lessons",
+    "manual",
     "management",
     "mindfulness",
     "performance",
     "psychology",
+    "questions",
+    "reducing",
     "relationship",
     "secrets",
     "strategy",
@@ -97,6 +105,8 @@ SUBTITLE_AUTHOR_WORDS = {
     "stress",
     "survival",
     "to",
+    "understanding",
+    "workbook",
 }
 
 
@@ -202,7 +212,7 @@ def _looks_like_author(value: str) -> bool:
         return False
     normalized = re.sub(r"[^a-z0-9]+", " ", text.casefold()).strip()
     words = re.findall(r"[A-Za-z][A-Za-z.'\u2019\-]*", text)
-    if len(normalized) < 3 or len(words) < 2:
+    if len(normalized) < 3 or len(words) < 2 or len(words) > 6:
         return False
     if re.search(r"\d", text):
         return False
@@ -278,10 +288,13 @@ def _title_after_rejected_author(left: str, right: str) -> str:
 
 
 def _extract_year(text: str) -> tuple[str, str | None]:
-    match = YEAR_RE.search(text)
+    match = BOOK_YEAR_RE.search(text)
     if not match:
         return text.strip(" -_."), None
     year = match.group(1)
+    numeric_year = int(year)
+    if not 1450 <= numeric_year <= datetime.now().year + 1:
+        return text.strip(" -_."), None
     cleaned = (text[:match.start()] + text[match.end():]).strip(" -_.")
     return re.sub(r"\s+", " ", cleaned), year
 
@@ -298,6 +311,10 @@ def parse_book_name(value: str) -> dict:
     text, year = _extract_year(text)
     series = None
     series_index = None
+
+    ordered = ORDERED_BOOK_PREFIX_RE.match(text)
+    if ordered and year and " - " in ordered.group("rest"):
+        text = ordered.group("rest").strip()
 
     book_number = BOOK_NUMBER_PREFIX_RE.match(text)
     if book_number:
@@ -624,12 +641,20 @@ def build_book_metadata_candidates(
     for field in fields:
         file_value = file_guess.get(field)
         if str(file_value or "").casefold() not in UNKNOWN_BOOK_VALUES:
+            candidate_notes = []
+            confidence = 0.68
+            if field == "year" and file_guess.get("year"):
+                confidence = 0.94
+                candidate_notes.append(
+                    "filename publication year preferred over package metadata year"
+                )
             candidate = make_candidate(
                 field,
                 file_value,
                 "filename",
                 "Filename",
-                0.68,
+                confidence,
+                candidate_notes,
             )
             if (
                 candidate
@@ -704,7 +729,11 @@ def build_book_metadata_candidates(
             value,
             f"{source_key}_{field}",
             source_label,
-            0.92 if field in {"title", "author"} else 0.84,
+            (
+                0.72
+                if field == "year" and file_guess.get("year")
+                else 0.92 if field in {"title", "author"} else 0.84
+            ),
         )
         if candidate_runtime is not None and candidate:
             if "garbage PDF document title" in candidate.get("notes", []):

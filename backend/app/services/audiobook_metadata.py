@@ -47,16 +47,7 @@ def is_audiobook_audio_file(path: Path) -> bool:
 
 
 def is_audiobook_artwork(path: Path) -> bool:
-    if path.suffix.casefold() not in AUDIOBOOK_ARTWORK_EXTENSIONS:
-        return False
-    if path.stem.casefold() in {
-        "cover", "folder", "front", "audiobook", "book",
-    }:
-        return True
-    return any(
-        part.casefold() in {"cover", "covers", "artwork", "images"}
-        for part in path.parts
-    )
+    return path.suffix.casefold() in AUDIOBOOK_ARTWORK_EXTENSIONS
 
 
 def is_audiobook_sidecar(path: Path) -> bool:
@@ -258,6 +249,57 @@ def collect_audiobook_files(root: Path) -> dict[str, list[Path]]:
         "artwork": artwork,
         "sidecars": sidecars,
         "other": other,
+    }
+
+
+MULTI_BOOK_INDEX_RE = re.compile(
+    r"^(?P<title>.+?)\s*\(Book\s+(?P<index>\d+(?:\.\d+)?)\)",
+    re.I,
+)
+
+
+def detect_audiobook_collection(source: Path, audio: list[Path]) -> dict:
+    parsed: list[tuple[str, str]] = []
+    for path in audio:
+        cleaned = _strip_audio_noise(path.stem)
+        match = MULTI_BOOK_INDEX_RE.match(cleaned)
+        if match:
+            parsed.append((match.group("index"), match.group("title").strip()))
+    if len(parsed) < 2:
+        return {
+            "audiobook_collection_type": None,
+            "contained_books": [],
+        }
+
+    tokenized = [title.split() for _, title in parsed]
+    common_length = 0
+    for tokens in zip(*tokenized):
+        if len({token.casefold() for token in tokens}) != 1:
+            break
+        common_length += 1
+    source_tokens = re.sub(
+        r"\b(?:trilogy|collection|series|set)\b",
+        "",
+        source.stem,
+        flags=re.I,
+    ).split()
+    if source_tokens:
+        common_length = min(common_length, len(source_tokens))
+
+    contained = []
+    for index, title in parsed:
+        title_tokens = title.split()
+        item_title = " ".join(title_tokens[common_length:]).strip() or title
+        contained.append({
+            "series_index": index,
+            "title": item_title,
+        })
+    contained.sort(key=lambda item: float(item["series_index"]))
+    return {
+        "audiobook_collection_type": (
+            "multi_book_trilogy" if len(contained) == 3 else "multi_book_set"
+        ),
+        "contained_books": contained,
     }
 
 
@@ -493,6 +535,7 @@ def build_audiobook_metadata(source: Path, audiobooks_root: Path) -> dict:
         narrator,
     )
     fmt = audiobook_format_for(audio)
+    collection_preview = detect_audiobook_collection(source, audio)
     destination = audiobook_destination(
         audiobooks_root=audiobooks_root,
         author=author,
@@ -572,5 +615,6 @@ def build_audiobook_metadata(source: Path, audiobooks_root: Path) -> dict:
         "metadata_candidates": metadata_candidates,
         "chapter_candidates": chapter_candidates,
         "artwork_candidates": artwork_candidates,
+        **collection_preview,
         **candidate_summary,
     }

@@ -913,6 +913,9 @@ function AudiobookBatchDetail({ batch, moveSummary }: Props) {
   const audioFiles = Array.isArray(metadata.audio_files)
     ? metadata.audio_files.map(String)
     : [];
+  const containedBooks = Array.isArray(metadata.contained_books)
+    ? metadata.contained_books as Array<Record<string, unknown>>
+    : [];
   return (
     <div className="batch-detail batch-detail--review">
       <ReviewStateCard batch={batch} />
@@ -930,6 +933,27 @@ function AudiobookBatchDetail({ batch, moveSummary }: Props) {
           <span>{batch.status.replace(/_/g, " ")}</span>
         </div>
       </div>
+      {containedBooks.length > 0 && (
+        <section className="track-preview">
+          <div className="track-preview__header">
+            <h3>Detected multi-book audiobook set</h3>
+            <span>{containedBooks.length} books · preview only</span>
+          </div>
+          <div className="track-preview__table">
+            <table>
+              <thead><tr><th>Book</th><th>Title</th></tr></thead>
+              <tbody>
+                {containedBooks.map((book, index) => (
+                  <tr key={`${String(book.series_index ?? index)}:${String(book.title ?? "")}`}>
+                    <td>{String(book.series_index ?? index + 1)}</td>
+                    <td>{String(book.title ?? "Unknown Title")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
       <div className="library-detail__grid movie-detail__cards">
         <section className="library-card">
           <h3>Audiobook</h3>

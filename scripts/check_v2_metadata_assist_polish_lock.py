@@ -1,4 +1,4 @@
-"""Bounded regression proof for the v2.061 metadata assist polish lock."""
+"""Bounded regression proof for the v2.062 metadata assist polish lock."""
 
 from __future__ import annotations
 
@@ -72,7 +72,7 @@ def restore_pypdf(previous: object | None) -> None:
 
 
 def main() -> None:
-    assert METADATA_ASSIST_VERSION == "v2.061"
+    assert METADATA_ASSIST_VERSION == "v2.062"
     assert normalize_metadata_text("Jim  Cobb") == "Jim Cobb"
 
     parsed = book_metadata.parse_book_name(
@@ -162,7 +162,7 @@ def main() -> None:
         book_metadata.read_pdf_metadata = original_read_pdf
     assert built_book["title"] == "Atomic Habits"
     assert built_book["author"] == "Unknown Author"
-    assert built_book["metadata_assist_version"] == "v2.061"
+    assert built_book["metadata_assist_version"] == "v2.062"
     runtime = built_book["candidate_runtime"]
     assert runtime["candidate_filter_active"] is True
     assert runtime["source_labels_removed"] >= 1
@@ -217,7 +217,7 @@ def main() -> None:
     assert built_audio["title"] == "Star Wars The Old Republic Revan"
     assert built_audio["author"] == "Unknown Author"
     assert built_audio["format"] == "MP3"
-    assert built_audio["metadata_assist_version"] == "v2.061"
+    assert built_audio["metadata_assist_version"] == "v2.062"
     assert built_audio["candidate_runtime"]["candidate_filter_active"] is True
     assert built_audio["candidate_runtime"]["generic_audio_tags_hidden"] >= 1
 
@@ -259,7 +259,7 @@ def main() -> None:
     for label in ("Manual author", "Manual narrator", "Manual year"):
         assert label in audiobook_ui, label
 
-    print("v2.061 metadata assist polish lock checks passed")
+    print("v2.062 metadata assist polish lock checks passed")
 
 
 if __name__ == "__main__":

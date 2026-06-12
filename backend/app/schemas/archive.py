@@ -88,6 +88,8 @@ class BatchSummary(BaseModel):
     generic_audio_tag_count: int = 0
     detected_disc_count: int = 0
     candidate_warning_count: int = 0
+    audiobook_collection_type: str | None = None
+    contained_books: list[dict] = Field(default_factory=list)
     metadata_assist_version: str | None = None
     suggested_destination: str | None = None
     suggested_metadata: dict | None = None

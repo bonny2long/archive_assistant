@@ -5,7 +5,7 @@ import unicodedata
 from typing import Any
 
 
-METADATA_ASSIST_VERSION = "v2.061"
+METADATA_ASSIST_VERSION = "v2.062"
 
 GENERIC_UNKNOWN_VALUES = {
     "",
@@ -16,6 +16,18 @@ GENERIC_UNKNOWN_VALUES = {
     "unknown title",
     "untitled",
     "unkn",
+}
+GENERIC_BOOK_METADATA_VALUES = {
+    "[no data]",
+    "no data",
+    "n/a",
+    "unknown",
+    "unknown author",
+    "unknown title",
+    "untitled",
+    "document",
+    "microsoft word - document",
+    "title",
 }
 GENERIC_TRACK_RE = re.compile(
     r"^(?:0*\d+\s*[-_. ]*)?(?:track|chapter|audio|part)\s*0*\d+$",
@@ -122,6 +134,10 @@ def is_generic_unknown_value(value: str) -> bool:
     )
 
 
+def is_generic_book_metadata_value(value: str) -> bool:
+    return normalize_metadata_text(value).casefold() in GENERIC_BOOK_METADATA_VALUES
+
+
 def is_generic_track_value(value: str) -> bool:
     normalized = normalize_metadata_text(value)
     return bool(GENERIC_TRACK_RE.fullmatch(normalized))
@@ -146,6 +162,12 @@ def should_hide_candidate(field: str, value: str, source: str) -> bool:
         and is_garbage_document_title(value)
     ):
         return True
+    if (
+        field in {"title", "author", "year"}
+        and source.startswith(("epub_opf", "pdf_document_info"))
+        and is_generic_book_metadata_value(value)
+    ):
+        return True
     return False
 
 
@@ -167,6 +189,12 @@ def candidate_quality_notes(
         and is_garbage_document_title(value)
     ):
         notes.append("garbage PDF document title")
+    if (
+        field in {"title", "author", "year"}
+        and source.startswith(("epub_opf", "pdf_document_info"))
+        and is_generic_book_metadata_value(value)
+    ):
+        notes.append("generic embedded book metadata ignored")
     return notes
 
 
@@ -196,7 +224,9 @@ def make_candidate(
         normalized_value,
         str(source),
     )
-    if quality_notes:
+    if "generic embedded book metadata ignored" in quality_notes:
+        score = min(score, 0.2)
+    elif quality_notes:
         score = min(score, 0.35)
     return {
         "field": str(field),

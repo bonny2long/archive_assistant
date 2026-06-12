@@ -116,6 +116,8 @@ export type BatchSummary = {
   generic_audio_tag_count?: number;
   detected_disc_count?: number;
   candidate_warning_count?: number;
+  audiobook_collection_type?: string | null;
+  contained_books?: AudiobookContainedBook[];
   metadata_assist_version?: string | null;
   suggested_destination?: string | null;
   suggested_metadata?: SuggestedMetadata | null;
@@ -366,6 +368,11 @@ export type AudiobookMetadataUpdate = {
   series_index?: string | null;
   format?: string | null;
   note?: string | null;
+};
+
+export type AudiobookContainedBook = {
+  series_index: string;
+  title: string;
 };
 
 export type TvMetadataUpdate = {

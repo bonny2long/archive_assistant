@@ -1,4 +1,4 @@
-"""Bounded checks for v2.061 book collection intelligence."""
+"""Bounded checks for v2.062 book collection intelligence."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from app.services.metadata_candidates import METADATA_ASSIST_VERSION  # noqa: E4
 
 
 def main() -> None:
-    assert METADATA_ASSIST_VERSION == "v2.061"
+    assert METADATA_ASSIST_VERSION == "v2.062"
 
     for title in (
         "1-2-3 Magic.epub",
@@ -107,7 +107,7 @@ def main() -> None:
         audiobook_metadata.extract_audio_metadata = original_extract
     assert audio_summary["generic_audio_tag_count"] >= 1
 
-    print("v2.061 collection intelligence checks passed")
+    print("v2.062 collection intelligence checks passed")
 
 
 if __name__ == "__main__":

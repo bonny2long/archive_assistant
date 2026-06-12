@@ -72,6 +72,7 @@ export default function AudiobookMetadataEditor({
   const audioFiles = batch.audio_files ?? [];
   const candidates = batch.metadata_candidates ?? {};
   const chapterCandidates = batch.chapter_candidates ?? [];
+  const containedBooks = batch.contained_books ?? [];
   const chapterRows = chapterCandidates.length > 0
     ? chapterCandidates
     : audioFiles.map((file, index) => ({
@@ -133,10 +134,29 @@ export default function AudiobookMetadataEditor({
               <span>Discs: {batch.detected_disc_count ?? 0}</span>
               <span>Chapter suggestions: {chapterCandidates.length}</span>
               <span>Generic tags hidden: {batch.generic_audio_tag_count ?? 0}</span>
-              <span>Artwork: {batch.artwork_count}</span>
+              <span>Artwork: {batch.artwork_count} matched</span>
               <span>Sidecars: {batch.ignored_sidecar_count}</span>
             </div>
           </div>
+
+          {containedBooks.length > 0 && (
+            <section className="audiobook-set-preview">
+              <div>
+                <strong>
+                  Detected multi-book audiobook set: {containedBooks.length} books
+                </strong>
+                <p>Preview only. Files remain one audiobook batch.</p>
+              </div>
+              <ol>
+                {containedBooks.map((book) => (
+                  <li key={`${book.series_index}:${book.title}`}>
+                    <strong>{book.series_index}</strong>
+                    <span>{book.title}</span>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
 
           <div className={`review-summary ${blockers.length ? "review-summary--warning" : "review-summary--clean"}`}>
             <div>
