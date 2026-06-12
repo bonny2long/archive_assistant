@@ -1,7 +1,7 @@
 import type { BatchSummary } from "../types/archive";
 
-const CURRENT_METADATA_ASSIST_VERSION = "v2.062";
-const CURRENT_METADATA_ASSIST_REVISION = 60;
+const CURRENT_METADATA_ASSIST_VERSION = "v2.063";
+const CURRENT_METADATA_ASSIST_REVISION = 63;
 
 type Props = {
   batch: BatchSummary;

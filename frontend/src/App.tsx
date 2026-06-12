@@ -649,6 +649,19 @@ export default function App() {
           onBulkReject={runBulkReject}
         />
       </div>
+      <footer className="app-footer">
+        <div className="app-footer__identity">
+          <strong>Archive Assistant</strong>
+          <span className="app-footer__version">v2.063</span>
+          <span>Metadata Assist approval readiness</span>
+        </div>
+        <div className="app-footer__notes" aria-label="Application guarantees">
+          <span><i className="ti ti-device-desktop" /> Local-first processing</span>
+          <span><i className="ti ti-user-check" /> Human approval required</span>
+          <span><i className="ti ti-shield-check" /> No automatic moves</span>
+        </div>
+        <small>Deterministic media review for your NAS library.</small>
+      </footer>
       {toast && (
         <Toast
           message={toast.msg}
