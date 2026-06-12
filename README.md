@@ -1,4 +1,4 @@
-# Archive Assistant Scaffold
+# Archive Assistant
 
 Local-first scaffold for Bonny's Archive Assistant -- a self-hosted, NAS-friendly tool for managing personal media archives starting with music.
 
