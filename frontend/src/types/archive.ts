@@ -122,6 +122,7 @@ export type BatchSummary = {
   accepted_unknown_year?: boolean;
   accepted_unknown_narrator?: boolean;
   lookup_later?: boolean;
+  move_manifest?: MoveManifestPointer | null;
   metadata_assist_version?: string | null;
   suggested_destination?: string | null;
   suggested_metadata?: SuggestedMetadata | null;
@@ -436,6 +437,20 @@ export type PaginatedResponse<T> = {
 export type MoveResult = {
   moved: number;
   errors: string[];
+  files_moved: number;
+  failed_moves: number;
+  manifests: Array<MoveManifestPointer & { batch_id: number }>;
+};
+
+export type MoveManifestPointer = {
+  json_path: string;
+  markdown_path?: string | null;
+  created_at: string;
+  manifest_version: string;
+  archive_assistant_version?: string;
+  files_moved: number;
+  artwork_moved: number;
+  failed_moves: number;
 };
 
 export type ScanMusicResponse = {
@@ -511,6 +526,7 @@ export type BatchMoveSummary = {
   completed: number;
   failed: number;
   moves: MoveAction[];
+  manifest?: MoveManifestPointer | null;
 };
 
 export type BatchReviewTrack = {

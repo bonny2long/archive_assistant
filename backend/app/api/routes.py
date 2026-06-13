@@ -326,7 +326,8 @@ def get_batch_files(batch_id: int, db: Session = Depends(get_db)):
 
 @router.get("/batches/{batch_id}/moves", response_model=BatchMoveSummary)
 def get_batch_moves(batch_id: int, db: Session = Depends(get_db)):
-    if not db.get(IngestBatch, batch_id):
+    batch = db.get(IngestBatch, batch_id)
+    if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
 
     actions = (
@@ -354,6 +355,7 @@ def get_batch_moves(batch_id: int, db: Session = Depends(get_db)):
         completed=sum(move.status == "completed" for move in moves),
         failed=sum(move.status == "failed" for move in moves),
         moves=moves,
+        manifest=(batch.metadata_json or {}).get("move_manifest"),
     )
 
 
@@ -1670,8 +1672,40 @@ def send_to_recovery(batch_id: int, db: Session = Depends(get_db)):
 
 @router.post("/move/approved", response_model=MoveResponse)
 def move_approved(db: Session = Depends(get_db)):
+    approved_ids = [
+        value[0]
+        for value in (
+            db.query(IngestBatch.id)
+            .filter(IngestBatch.status == "approved")
+            .all()
+        )
+    ]
     moved, errors = move_approved_batches(db)
-    return MoveResponse(moved=moved, errors=errors)
+    moved_batches = (
+        db.query(IngestBatch)
+        .filter(IngestBatch.id.in_(approved_ids))
+        .all()
+        if approved_ids
+        else []
+    )
+    manifests = []
+    for batch in moved_batches:
+        pointer = (batch.metadata_json or {}).get("move_manifest")
+        if pointer:
+            manifests.append({"batch_id": batch.id, **pointer})
+    return MoveResponse(
+        moved=moved,
+        errors=errors,
+        files_moved=sum(
+            int(item.get("files_moved") or 0)
+            + int(item.get("artwork_moved") or 0)
+            for item in manifests
+        ),
+        failed_moves=sum(
+            int(item.get("failed_moves") or 0) for item in manifests
+        ),
+        manifests=manifests,
+    )
 
 
 @router.get("/library")
@@ -1773,6 +1807,7 @@ def _batch_to_summary(
             meta.get("accepted_unknown_narrator", False)
         ),
         lookup_later=bool(meta.get("lookup_later", False)),
+        move_manifest=meta.get("move_manifest"),
         metadata_assist_version=meta.get("metadata_assist_version"),
         suggested_destination=batch.suggested_destination,
         suggested_metadata=batch.suggested_metadata,

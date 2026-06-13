@@ -94,6 +94,7 @@ class BatchSummary(BaseModel):
     accepted_unknown_year: bool = False
     accepted_unknown_narrator: bool = False
     lookup_later: bool = False
+    move_manifest: dict | None = None
     metadata_assist_version: str | None = None
     suggested_destination: str | None = None
     suggested_metadata: dict | None = None
@@ -305,6 +306,9 @@ class BulkApproveResponse(BaseModel):
 class MoveResponse(BaseModel):
     moved: int
     errors: list[str]
+    files_moved: int = 0
+    failed_moves: int = 0
+    manifests: list[dict] = Field(default_factory=list)
 
 
 class ScanMusicResponse(BaseModel):
@@ -373,6 +377,7 @@ class BatchMoveSummary(BaseModel):
     completed: int
     failed: int
     moves: list[MoveActionOut]
+    manifest: dict | None = None
 
 
 class BatchReviewTrack(BaseModel):

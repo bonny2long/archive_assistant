@@ -25,6 +25,7 @@ from app.services.library_manifest import (
     append_library_index_entry,
     write_library_manifest,
 )
+from app.services.move_manifest import write_move_manifest
 
 
 def _safe_path_part(value: str) -> str:
@@ -54,6 +55,30 @@ def _safe_write_library_metadata(
         )
     except Exception as exc:
         print(f"Failed to update library index for {destination}: {exc}")
+
+
+def _record_move_manifest(
+    db: Session,
+    batch: IngestBatch,
+    failed_files: list[str],
+) -> list[str]:
+    actions = (
+        db.query(MoveAction)
+        .filter(MoveAction.batch_id == batch.id)
+        .order_by(MoveAction.id.asc())
+        .all()
+    )
+    pointer, warnings = write_move_manifest(
+        batch=batch,
+        move_actions=actions,
+        failed_messages=failed_files,
+    )
+    if pointer:
+        metadata = dict(batch.metadata_json or {})
+        metadata["move_manifest"] = pointer
+        batch.metadata_json = metadata
+        db.flush()
+    return warnings
 
 
 def _unique_artwork_destination(
@@ -1959,15 +1984,25 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                     if batch.status != "needs_metadata_review":
                         batch.status = "move_failed"
                     batch.updated_at = now_utc()
+                    manifest_warnings = _record_move_manifest(
+                        db, batch, failed_files
+                    )
                     db.commit()
                     errors.extend(
                         f"Batch {batch.id}: {error}" for error in failed_files
+                    )
+                    errors.extend(
+                        f"Batch {batch.id}: {warning}"
+                        for warning in manifest_warnings
                     )
                     continue
                 batch.status = "move_failed" if failed_files else "moved"
                 batch.updated_at = now_utc()
                 if batch.status == "moved":
                     _lock_metadata_for_move(batch)
+                manifest_warnings = _record_move_manifest(
+                    db, batch, failed_files
+                )
                 metadata = batch.metadata_json or {}
                 if not (
                     db.query(ArchiveItem)
@@ -1994,6 +2029,10 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                     errors.extend(
                         f"Batch {batch.id}: {error}" for error in failed_files
                     )
+                errors.extend(
+                    f"Batch {batch.id}: {warning}"
+                    for warning in manifest_warnings
+                )
                 continue
 
             if batch.detected_type == "video_tv_show":
@@ -2002,15 +2041,25 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                     if batch.status != "needs_metadata_review":
                         batch.status = "move_failed"
                     batch.updated_at = now_utc()
+                    manifest_warnings = _record_move_manifest(
+                        db, batch, failed_files
+                    )
                     db.commit()
                     errors.extend(
                         f"Batch {batch.id}: {error}" for error in failed_files
+                    )
+                    errors.extend(
+                        f"Batch {batch.id}: {warning}"
+                        for warning in manifest_warnings
                     )
                     continue
                 batch.status = "move_failed" if failed_files else "moved"
                 batch.updated_at = now_utc()
                 if batch.status == "moved":
                     _lock_metadata_for_move(batch)
+                manifest_warnings = _record_move_manifest(
+                    db, batch, failed_files
+                )
                 metadata = batch.metadata_json or {}
                 if not (
                     db.query(ArchiveItem)
@@ -2037,6 +2086,10 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                     errors.extend(
                         f"Batch {batch.id}: {error}" for error in failed_files
                     )
+                errors.extend(
+                    f"Batch {batch.id}: {warning}"
+                    for warning in manifest_warnings
+                )
                 continue
 
             if batch.detected_type == "book":
@@ -2045,15 +2098,25 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                     if batch.status != "needs_metadata_review":
                         batch.status = "move_failed"
                     batch.updated_at = now_utc()
+                    manifest_warnings = _record_move_manifest(
+                        db, batch, failed_files
+                    )
                     db.commit()
                     errors.extend(
                         f"Batch {batch.id}: {error}" for error in failed_files
+                    )
+                    errors.extend(
+                        f"Batch {batch.id}: {warning}"
+                        for warning in manifest_warnings
                     )
                     continue
                 batch.status = "move_failed" if failed_files else "moved"
                 batch.updated_at = now_utc()
                 if batch.status == "moved":
                     _lock_metadata_for_move(batch)
+                manifest_warnings = _record_move_manifest(
+                    db, batch, failed_files
+                )
                 metadata = batch.metadata_json or {}
                 book_items = {
                     str(item.get("source_file") or "").casefold(): item
@@ -2092,6 +2155,10 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                     errors.extend(
                         f"Batch {batch.id}: {error}" for error in failed_files
                     )
+                errors.extend(
+                    f"Batch {batch.id}: {warning}"
+                    for warning in manifest_warnings
+                )
                 continue
 
             if batch.detected_type == "audiobook":
@@ -2100,15 +2167,25 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                     if batch.status != "needs_metadata_review":
                         batch.status = "move_failed"
                     batch.updated_at = now_utc()
+                    manifest_warnings = _record_move_manifest(
+                        db, batch, failed_files
+                    )
                     db.commit()
                     errors.extend(
                         f"Batch {batch.id}: {error}" for error in failed_files
+                    )
+                    errors.extend(
+                        f"Batch {batch.id}: {warning}"
+                        for warning in manifest_warnings
                     )
                     continue
                 batch.status = "move_failed" if failed_files else "moved"
                 batch.updated_at = now_utc()
                 if batch.status == "moved":
                     _lock_metadata_for_move(batch)
+                manifest_warnings = _record_move_manifest(
+                    db, batch, failed_files
+                )
                 metadata = batch.metadata_json or {}
                 destination = str(
                     audiobook_destination(
@@ -2143,6 +2220,10 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                     errors.extend(
                         f"Batch {batch.id}: {error}" for error in failed_files
                     )
+                errors.extend(
+                    f"Batch {batch.id}: {warning}"
+                    for warning in manifest_warnings
+                )
                 continue
 
             if batch.detected_type == "music_discography":
@@ -2153,12 +2234,24 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                     if batch.status != "needs_metadata_review":
                         batch.status = "move_failed"
                     batch.updated_at = now_utc()
+                    manifest_warnings = _record_move_manifest(
+                        db, batch, failed_files
+                    )
                     db.commit()
                     errors.extend(f"Batch {batch.id}: {error}" for error in failed_files)
+                    errors.extend(
+                        f"Batch {batch.id}: {warning}"
+                        for warning in manifest_warnings
+                    )
                     continue
 
                 batch.status = "move_failed" if failed_files else "moved"
                 batch.updated_at = now_utc()
+                if batch.status == "moved":
+                    _lock_metadata_for_move(batch)
+                manifest_warnings = _record_move_manifest(
+                    db, batch, failed_files
+                )
                 for dest_path in moved_files:
                     dest = Path(dest_path)
                     if is_artwork_file(dest):
@@ -2185,6 +2278,10 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                 moved += 1
                 if failed_files:
                     errors.extend(f"Batch {batch.id}: {error}" for error in failed_files)
+                errors.extend(
+                    f"Batch {batch.id}: {warning}"
+                    for warning in manifest_warnings
+                )
                 continue
 
             if not batch.suggested_destination:
@@ -2324,9 +2421,14 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                 batch.status = "moved"
 
             batch.updated_at = now_utc()
+            if batch.status == "moved":
+                _lock_metadata_for_move(batch)
             db.flush()
 
             _write_move_log(batch, album_meta, moved_files, failed_files)
+            manifest_warnings = _record_move_manifest(
+                db, batch, failed_files
+            )
             if moved_files and not failed_files:
                 track_count = sum(
                     not is_artwork_file(Path(path)) for path in moved_files
@@ -2413,6 +2515,10 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
             db.commit()
             if moved_files:
                 moved += 1
+            errors.extend(
+                f"Batch {batch.id}: {warning}"
+                for warning in manifest_warnings
+            )
 
         except Exception as exc:
             db.rollback()

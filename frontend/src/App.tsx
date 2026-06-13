@@ -579,9 +579,15 @@ export default function App() {
       await loadBatches();
       const summary = await api.getLibrarySummary();
       setLibrarySummary(summary);
+      const manifestNames = result.manifests
+        .map((manifest) => manifest.markdown_path ?? manifest.json_path)
+        .join(" | ");
       setQaSummary({
-        title: "Move summary",
-        text: `${summary.moved_batches} batches moved · ${summary.moved_files} files · ${summary.failed_moves} failed moves`,
+        title: "Move complete",
+        text: `${result.moved} batches moved | ${result.files_moved} files moved | ${result.failed_moves} failed moves`,
+        warnings: manifestNames
+          ? `Manifests created: ${manifestNames}`
+          : "No move manifests were created.",
       });
     } catch {
       showToast("Move failed", "error");
@@ -652,8 +658,8 @@ export default function App() {
       <footer className="app-footer">
         <div className="app-footer__identity">
           <strong>Archive Assistant</strong>
-          <span className="app-footer__version">v2.063</span>
-          <span>Metadata Assist approval readiness</span>
+          <span className="app-footer__version">v2.064</span>
+          <span>Move manifest audit trail</span>
         </div>
         <div className="app-footer__notes" aria-label="Application guarantees">
           <span><i className="ti ti-device-desktop" /> Local-first processing</span>

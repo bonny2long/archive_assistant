@@ -75,6 +75,10 @@ def _remove_move_logs() -> int:
         "batch-*-movie-move-log.json",
         "batch-*-tv-move-log.json",
         "discography-move-log.json",
+        "move_manifest.json",
+        "move_manifest.md",
+        "*_move_manifest.json",
+        "*_move_manifest.md",
     ):
         for path in settings.data_root.rglob(pattern):
             if path.is_file():
