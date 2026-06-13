@@ -30,7 +30,27 @@ Safe deterministic organizer: scan, classify, guided review, edit, approve, move
 
 ---
 
-## v2 Metadata Assist — Next
+## v2 Metadata Assist — In Progress
+
+### v2.064 Checkpoint
+
+**v2.064 is functionally passing for book/audiobook metadata assist and move
+manifests. Full v2 remains open until music, movie, and TV metadata assist reach
+parity.**
+
+Passing at this checkpoint:
+
+- Book and book-collection metadata candidates and guided repair
+- Audiobook metadata candidates, artwork matching, and multi-book preview
+- Explicit accepted-unknown and lookup-later review decisions
+- JSON and Markdown move manifests with persisted audit pointers
+
+Still open for full v2:
+
+- Music metadata-assist parity
+- Movie metadata-assist parity
+- TV metadata-assist parity
+- Final mixed-media v2 regression and release lock
 
 Scope stays focused on metadata only:
 

@@ -10,6 +10,12 @@ scan → classify → review → edit → approve → move → manifest → inde
 
 **Design philosophy**: deterministic extraction with human approval gates. No silent writes, no deletion, no embedded tag mutation. AI-assisted metadata comes in v2.
 
+### v2 Status
+
+**v2.064 is functionally passing for book/audiobook metadata assist and move
+manifests. Full v2 remains open until music, movie, and TV metadata assist reach
+parity.**
+
 ### Safety rules
 
 - Do not test on your only copy of a file.
@@ -433,7 +439,10 @@ npm run dev
 
 **Current phase**: Core v1 complete, regression-locked, tagged [`archive-assistant-v1-core`](https://github.com/anomalyco/archive-assistant).
 
-**Next**: **v2 Metadata Assist** — EPUB/PDF metadata reading, audiobook chapter/title help, suggestion chips in editors, artwork suggestions, optional online lookup. No silent edits, no deletion, manual approval remains authoritative.
+**Current v2 work**: bring music, movie, and TV metadata assist to parity with
+the functionally passing book/audiobook workflow, then run the final mixed-media
+v2 regression and release lock. No silent edits, no deletion, and manual
+approval remains authoritative.
 
 See [docs/ROADMAP.md](docs/ROADMAP.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for details.
 
