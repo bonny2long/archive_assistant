@@ -208,9 +208,10 @@ button:focus-visible, input:focus-visible {
   font-size: 15px;
   border: none;
   background: transparent;
+  color: var(--text-secondary);
   cursor: pointer;
   border-radius: var(--radius-sm);
-  transition: background 0.15s;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
   line-height: 1;
 }
 .btn-sm:hover { background: var(--bg-hover); }
@@ -2030,6 +2031,26 @@ button:focus-visible, input:focus-visible {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+}
+.acceptance-controls__buttons .btn-sm {
+  min-height: 34px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.acceptance-controls__buttons .btn-sm:hover {
+  border-color: rgba(59, 130, 246, 0.55);
+  background: rgba(59, 130, 246, 0.12);
+  color: #fff;
+}
+.acceptance-controls__buttons .btn-sm--active {
+  border-color: rgba(34, 197, 94, 0.6);
+  background: rgba(34, 197, 94, 0.16);
+  color: #72e69a;
 }
 .book-repair-card__actions {
   padding: 0.65rem 0.75rem;
