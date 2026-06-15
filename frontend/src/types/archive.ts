@@ -58,6 +58,8 @@ export type BatchSummary = {
   video_files?: string[];
   title?: string | null;
   edition?: string | null;
+  resolution?: string | null;
+  source?: string | null;
   original_release_name?: string | null;
   primary_video_file?: string | null;
   artwork_files: string[];
@@ -124,6 +126,7 @@ export type BatchSummary = {
   accepted_unknown_album_artist?: boolean;
   accepted_unknown_album_title?: boolean;
   accepted_unknown_discography_artist?: boolean;
+  accepted_unknown_title?: boolean;
   lookup_later?: boolean;
   move_manifest?: MoveManifestPointer | null;
   metadata_assist_version?: string | null;
@@ -191,6 +194,7 @@ export type SuggestedMetadata = {
   accepted_unknown_album_artist?: boolean;
   accepted_unknown_album_title?: boolean;
   accepted_unknown_discography_artist?: boolean;
+  accepted_unknown_title?: boolean;
   lookup_later?: boolean;
   sources?: Partial<Record<
     "artist" | "album" | "year" | "genre" | "title" | "author" | "narrator" | "series" | "series_index" | "edition" | "format" | "show_title" | "season_number" | "season_title",
@@ -281,6 +285,9 @@ export type MovieMetadataUpdate = {
   year: string | null;
   edition?: string | null;
   format?: string | null;
+  accepted_unknown_title?: boolean;
+  accepted_unknown_year?: boolean;
+  lookup_later?: boolean;
 };
 
 export type MovieCollectionItem = {
@@ -292,16 +299,27 @@ export type MovieCollectionItem = {
   year?: string | null;
   edition?: string | null;
   format?: string | null;
+  resolution?: string | null;
+  source?: string | null;
   destination_preview?: string | null;
+  metadata_candidates?: Record<string, MetadataCandidate[]>;
+  release_cleanup?: Record<string, unknown>;
+  accepted_unknown_title?: boolean;
+  accepted_unknown_year?: boolean;
+  lookup_later?: boolean;
 };
 
 export type MovieCollectionItemUpdate = {
   source_file: string;
   include: boolean;
   title: string;
-  year: string;
+  year: string | null;
   edition?: string | null;
   format?: string | null;
+  metadata_candidates?: Record<string, MetadataCandidate[]>;
+  accepted_unknown_title: boolean;
+  accepted_unknown_year: boolean;
+  lookup_later: boolean;
 };
 
 export type MovieCollectionReviewUpdate = {

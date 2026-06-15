@@ -19,7 +19,7 @@ from app.services.metadata_candidates import (  # noqa: E402
 
 
 def main() -> None:
-    assert METADATA_ASSIST_VERSION == "v2.062"
+    assert METADATA_ASSIST_VERSION == "v2.066"
     for value in (
         "[No data]", "No data", "N/A", "Unknown", "Unknown Title",
         "Untitled", "Document", "Microsoft Word - Document", "Title",

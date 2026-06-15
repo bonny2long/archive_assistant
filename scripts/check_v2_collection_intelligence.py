@@ -16,7 +16,7 @@ from app.services.metadata_candidates import METADATA_ASSIST_VERSION  # noqa: E4
 
 
 def main() -> None:
-    assert METADATA_ASSIST_VERSION == "v2.062"
+    assert METADATA_ASSIST_VERSION == "v2.066"
 
     for title in (
         "1-2-3 Magic.epub",

@@ -557,7 +557,18 @@ def update_movie_metadata(
             "title": title,
             "year": year,
             "edition": edition,
-            "metadata_quality": "good" if year else "weak",
+            "accepted_unknown_title": update.accepted_unknown_title,
+            "accepted_unknown_year": update.accepted_unknown_year,
+            "lookup_later": update.lookup_later,
+            "review_type": "movie",
+            "review_mode": "single_item",
+            "metadata_assist_version": METADATA_ASSIST_VERSION,
+            "metadata_quality": (
+                "accepted_with_unknowns"
+                if update.accepted_unknown_title
+                or update.accepted_unknown_year
+                else "good" if year else "weak"
+            ),
             "metadata_warnings": warnings,
             "confidence": 1.0 if year else 0.65,
         }
@@ -623,16 +634,28 @@ def update_movie_collection_review(
     movie_items = []
     destination_parts = []
     for movie_update in update.movies:
+        existing_item = next(
+            (
+                item
+                for item in metadata.get("movie_items", [])
+                if isinstance(item, dict)
+                and str(item.get("source_file") or "").casefold()
+                == movie_update.source_file.casefold()
+            ),
+            {},
+        )
         title = movie_update.title.strip()
-        year = movie_update.year.strip()
+        year = movie_update.year.strip() if movie_update.year else ""
         edition = movie_update.edition.strip() if movie_update.edition else None
         fmt = movie_update.format.strip().upper() if movie_update.format else None
         include = bool(movie_update.include)
 
+        destination_title = title or "Unknown Movie"
+        destination_year = year or "Unknown Year"
         dest_label = (
-            f"{year} - {title}"
+            f"{destination_year} - {destination_title}"
             if not edition
-            else f"{year} - {title} [{edition}]"
+            else f"{destination_year} - {destination_title} [{edition}]"
         )
         dest = f"Movies/Library/{safe_movie_path_part(dest_label)}"
         destination_parts.append(dest)
@@ -643,10 +666,23 @@ def update_movie_collection_review(
                 "source_key": movie_update.source_file,
                 "source_file": movie_update.source_file,
                 "include": include,
-                "title": title,
-                "year": year,
+                "title": title or "Unknown Movie",
+                "year": year or None,
                 "edition": edition,
                 "format": fmt,
+                "resolution": existing_item.get("resolution"),
+                "source": existing_item.get("source"),
+                "accepted_unknown_title": movie_update.accepted_unknown_title,
+                "accepted_unknown_year": movie_update.accepted_unknown_year,
+                "lookup_later": movie_update.lookup_later,
+                "metadata_candidates": existing_item.get(
+                    "metadata_candidates",
+                    {},
+                ),
+                "release_cleanup": existing_item.get(
+                    "release_cleanup",
+                    {},
+                ),
                 "destination_preview": dest if include else None,
             }
         )
@@ -654,6 +690,7 @@ def update_movie_collection_review(
     metadata["movie_items"] = movie_items
     metadata["review_type"] = "movie_collection"
     metadata["review_mode"] = "item_list"
+    metadata["metadata_assist_version"] = METADATA_ASSIST_VERSION
 
     if update.collection_title:
         metadata["collection_title"] = update.collection_title.strip()
@@ -676,7 +713,15 @@ def update_movie_collection_review(
         metadata["metadata_quality"] = "weak"
         metadata["confidence"] = 0.7
     else:
-        metadata["metadata_quality"] = "reviewed"
+        metadata["metadata_quality"] = (
+            "accepted_with_unknowns"
+            if any(
+                item.get("accepted_unknown_title")
+                or item.get("accepted_unknown_year")
+                for item in movie_items
+            )
+            else "reviewed"
+        )
         metadata["review_confirmed"] = True
         metadata["confidence"] = 1.0
         if batch.status in {"needs_metadata_review", "pending_review"}:
@@ -1805,6 +1850,8 @@ def _batch_to_summary(
         video_files=meta.get("video_files", []),
         title=meta.get("title"),
         edition=meta.get("edition"),
+        resolution=meta.get("resolution"),
+        source=meta.get("source"),
         original_release_name=meta.get("original_release_name"),
         primary_video_file=meta.get("primary_video_file"),
         artwork_files=meta.get("artwork_files", []),
@@ -1881,6 +1928,9 @@ def _batch_to_summary(
         ),
         accepted_unknown_discography_artist=bool(
             meta.get("accepted_unknown_discography_artist", False)
+        ),
+        accepted_unknown_title=bool(
+            meta.get("accepted_unknown_title", False)
         ),
         lookup_later=bool(meta.get("lookup_later", False)),
         move_manifest=meta.get("move_manifest"),

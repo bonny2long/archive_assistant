@@ -35,6 +35,7 @@ from app.services.music_metadata import (
 )
 from app.services.report_writer import write_json_report
 from app.services.video_metadata import (
+    build_movie_metadata_candidates,
     is_ignored_video_sidecar,
     is_movie_artwork,
     is_subtitle_file,
@@ -813,6 +814,14 @@ def _create_movie_batch(db: Session, source: Path) -> IngestBatch | None:
         edition = None
     video_files = [path.name for path in files["video"]]
     video_file_count = len(files["video"])
+    metadata_candidates, movie_candidate_items = build_movie_metadata_candidates(
+        source,
+        files["video"],
+    )
+    item_candidates_by_file = {
+        str(item.get("source_file") or "").casefold(): item
+        for item in movie_candidate_items
+    }
     folder = safe_movie_path_part(
         f"{year or 'Unknown Year'} - {title}"
         if not edition
@@ -825,6 +834,8 @@ def _create_movie_batch(db: Session, source: Path) -> IngestBatch | None:
         "title": title,
         "year": year,
         "edition": edition,
+        "resolution": parsed.get("resolution") or file_parsed.get("resolution"),
+        "source": parsed.get("source") or file_parsed.get("source"),
         "format": main_video.suffix.lstrip(".").upper(),
         "video_file_count": video_file_count,
         "video_files": video_files,
@@ -840,10 +851,84 @@ def _create_movie_batch(db: Session, source: Path) -> IngestBatch | None:
         "original_release_name": original_release_name,
         "primary_video_file": main_video.name,
         "release_tags_removed": release_tags_removed,
+        "release_cleanup": {
+            "original_name": original_release_name,
+            "clean_title": title,
+            "year": year,
+            "removed_tokens": release_tags_removed,
+        },
+        "review_type": (
+            "movie_collection" if video_file_count > 1 else "movie"
+        ),
+        "review_mode": (
+            "item_list" if video_file_count > 1 else "single_item"
+        ),
+        "metadata_assist_version": METADATA_ASSIST_VERSION,
+        "metadata_candidates": metadata_candidates,
+        "artwork_candidates": [
+            {
+                "field": "artwork",
+                "value": path.name,
+                "source": "sidecar_poster",
+                "source_label": "Movie poster sidecar",
+                "confidence": 0.85,
+                "confidence_label": "high",
+                "applied": False,
+                "ignored": False,
+                "notes": [],
+            }
+            for path in files["artwork"]
+        ],
+        "accepted_unknown_title": False,
+        "accepted_unknown_year": False,
+        "lookup_later": False,
         "metadata_quality": "good" if year else "weak",
         "metadata_warnings": warnings,
         "confidence": 0.8 if year else 0.7,
     }
+    if video_file_count > 1:
+        metadata["collection_title"] = (
+            parsed.get("title") if useful_movie_name(parsed) else source.name
+        )
+        metadata["movie_items"] = []
+        for path in files["video"]:
+            item_parsed = parse_movie_name(path.name)
+            item_title = item_parsed.get("title")
+            item_year = item_parsed.get("year")
+            item_edition = item_parsed.get("edition")
+            destination_label = (
+                f"{item_year or 'Unknown Year'} - "
+                f"{item_title or 'Unknown Movie'}"
+            )
+            if item_edition:
+                destination_label += f" [{item_edition}]"
+            candidate_data = item_candidates_by_file.get(
+                path.name.casefold(),
+                {},
+            )
+            metadata["movie_items"].append({
+                "item_kind": "movie",
+                "source_key": path.name,
+                "source_file": path.name,
+                "include": True,
+                "title": item_title,
+                "year": item_year,
+                "edition": item_edition,
+                "format": path.suffix.lstrip(".").upper(),
+                "resolution": item_parsed.get("resolution"),
+                "source": item_parsed.get("source"),
+                "destination_preview": (
+                    f"Movies/Library/{safe_movie_path_part(destination_label)}"
+                ),
+                "metadata_candidates": candidate_data.get(
+                    "metadata_candidates",
+                    {},
+                ),
+                "release_cleanup": candidate_data.get("release_cleanup", {}),
+                "accepted_unknown_title": False,
+                "accepted_unknown_year": False,
+                "lookup_later": False,
+            })
     metadata = build_review_state("video_movie", metadata)
     batch = IngestBatch(
         source_kind="manual-drop",

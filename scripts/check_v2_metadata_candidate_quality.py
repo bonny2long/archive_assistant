@@ -123,7 +123,7 @@ def main() -> None:
         scanner_source
     )
     assert "metadata_assist_version" in scanner_source
-    assert METADATA_ASSIST_VERSION == "v2.062"
+    assert METADATA_ASSIST_VERSION == "v2.066"
 
     print("v2 metadata candidate quality checks passed")
 

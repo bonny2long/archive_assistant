@@ -1,6 +1,8 @@
 import re
 from pathlib import Path
 
+from app.services.metadata_candidates import add_candidate, make_candidate
+
 
 VIDEO_EXTENSIONS = {
     ".mkv",
@@ -51,10 +53,23 @@ EPISODE_ONLY_PATTERN = re.compile(
     re.IGNORECASE,
 )
 RELEASE_TAG_PATTERN = re.compile(
-    r"(?<![a-z0-9])(?:2160p|1080p|720p|4k|bluray|web[ ._-]?dl|webrip|"
-    r"hdrip|dvdrip|x264|x265|hevc|aac|dts|yts(?:[ ._-]?am)?|rarbg|"
-    r"amzn|nf|hmax)(?![a-z0-9])",
+    r"(?<![a-z0-9])(?:2160p|1080p|720p|480p|4k|uhd|hdr10?|dv|"
+    r"bluray|brrip|bdrip|web[ ._-]?dl|web|webrip|hdrip|dvdrip|"
+    r"x264|x265|h264|h265|hevc|aac|dts|truehd|atmos|"
+    r"yify|yts(?:[ ._-]?am)?|rarbg|amzn|nf|max|hmax|hulu)(?![a-z0-9])",
     re.IGNORECASE,
+)
+RESOLUTION_PATTERN = re.compile(
+    r"(?<![a-z0-9])(?P<value>2160p|1080p|720p|480p|4k)(?![a-z0-9])",
+    re.IGNORECASE,
+)
+SOURCE_PATTERN = re.compile(
+    r"(?<![a-z0-9])(?P<value>uhd|bluray|brrip|bdrip|web[ ._-]?dl|web|"
+    r"webrip|hdrip|dvdrip)(?![a-z0-9])",
+    re.IGNORECASE,
+)
+RELEASE_GROUP_PATTERN = re.compile(
+    r"(?:^|[-_. ])(?P<value>[A-Z][A-Z0-9]{2,15})$"
 )
 TV_OAD_PATTERN = re.compile(
     r"(?<![a-z0-9])(?P<type>oad|ova)[ ._-]*(?:e|ep)?(?P<number>\d{1,3})(?![a-z0-9])",
@@ -186,6 +201,11 @@ def _release_tags(value: str) -> list[str]:
         tag = re.sub(r"\s+", " ", tag).strip(" .-_[]()")
         if tag and tag.casefold() not in {item.casefold() for item in tags}:
             tags.append(tag)
+    group_match = RELEASE_GROUP_PATTERN.search(value)
+    if group_match:
+        group = group_match.group("value")
+        if group.casefold() not in {item.casefold() for item in tags}:
+            tags.append(group)
     return tags
 
 
@@ -197,6 +217,9 @@ def parse_movie_name(value: str) -> dict:
     year = year_match.group(1) if year_match else None
     title_source = raw[:year_match.start()] if year_match else raw
     release_tags = _release_tags(raw)
+    release_group_match = RELEASE_GROUP_PATTERN.search(raw)
+    resolution_match = RESOLUTION_PATTERN.search(raw)
+    source_match = SOURCE_PATTERN.search(raw)
     title_source = RELEASE_TAG_PATTERN.sub(" ", title_source)
     title = re.sub(r"[._]+", " ", title_source)
     title = re.sub(r"\s*[-]+\s*", " ", title)
@@ -208,6 +231,16 @@ def parse_movie_name(value: str) -> dict:
             after_year = after_year.replace(tag_match.group(0), "", 1)
         cleaned = re.sub(r"[._]+", " ", after_year)
         cleaned = re.sub(r"\s+", " ", cleaned).strip(" -._()[]")
+        if (
+            cleaned
+            and release_group_match
+            and cleaned.casefold().endswith(
+                release_group_match.group("value").casefold()
+            )
+        ):
+            cleaned = cleaned[
+                : -len(release_group_match.group("value"))
+            ].strip(" -._()[]")
         if cleaned:
             edition = cleaned
     return {
@@ -216,7 +249,104 @@ def parse_movie_name(value: str) -> dict:
         "edition": edition,
         "raw_name": raw,
         "release_tags_removed": release_tags,
+        "resolution": (
+            resolution_match.group("value").upper()
+            if resolution_match
+            else None
+        ),
+        "source": (
+            re.sub(r"[ ._-]+", "-", source_match.group("value")).upper()
+            if source_match
+            else None
+        ),
     }
+
+
+def build_movie_metadata_candidates(
+    source: Path,
+    video_files: list[Path],
+) -> tuple[dict[str, list[dict]], list[dict]]:
+    """Build deterministic local candidates for a movie batch."""
+    candidates: dict[str, list[dict]] = {}
+    item_candidates: list[dict] = []
+
+    def add(
+        field: str,
+        value: object,
+        source_name: str,
+        source_label: str,
+        confidence: float,
+    ) -> None:
+        text = str(value or "").strip()
+        if not text or text.casefold() in {
+            "unknown", "unknown movie", "movie", "video", "videos",
+        }:
+            return
+        add_candidate(
+            candidates,
+            make_candidate(
+                field,
+                text,
+                source_name,
+                source_label,
+                confidence,
+            ),
+        )
+
+    if source.is_dir():
+        folder = parse_movie_name(source.name)
+        add("title", folder.get("title"), "folder_name", "Movie folder name", 0.88)
+        add("year", folder.get("year"), "folder_name", "Movie folder name", 0.88)
+        add("edition", folder.get("edition"), "folder_name", "Movie folder name", 0.7)
+        if source.parent.name.casefold() not in {
+            "_ingest", "ingest", "data", "movies", "library",
+        }:
+            parent = parse_movie_name(source.parent.name)
+            add(
+                "title",
+                parent.get("title"),
+                "parent_folder_name",
+                "Parent folder name",
+                0.55,
+            )
+
+    for video in video_files:
+        parsed = parse_movie_name(video.name)
+        add("title", parsed.get("title"), "filename", "Video filename", 0.86)
+        add("year", parsed.get("year"), "filename", "Video filename", 0.86)
+        add("edition", parsed.get("edition"), "filename", "Video filename", 0.68)
+        add("resolution", parsed.get("resolution"), "video_file_name", "Video filename", 0.8)
+        add("source", parsed.get("source"), "video_file_name", "Video filename", 0.8)
+        add(
+            "format",
+            video.suffix.lstrip(".").upper(),
+            "video_container",
+            "Video container",
+            1.0,
+        )
+        item_candidates.append({
+            "source_file": video.name,
+            "metadata_candidates": {
+                field: [candidate]
+                for field in ("title", "year", "edition", "resolution", "source")
+                if (
+                    candidate := make_candidate(
+                        field,
+                        parsed.get(field),
+                        "filename",
+                        "Video filename",
+                        0.86 if field in {"title", "year"} else 0.7,
+                    )
+                )
+            },
+            "release_cleanup": {
+                "original_name": parsed.get("raw_name"),
+                "clean_title": parsed.get("title"),
+                "year": parsed.get("year"),
+                "removed_tokens": parsed.get("release_tags_removed", []),
+            },
+        })
+    return candidates, item_candidates
 
 
 def useful_movie_name(parsed: dict) -> bool:

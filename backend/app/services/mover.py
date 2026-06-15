@@ -81,6 +81,41 @@ def _record_move_manifest(
     return warnings
 
 
+def _update_movie_library_manifest_pointers(
+    db: Session,
+    batch: IngestBatch,
+) -> None:
+    pointer = (batch.metadata_json or {}).get("move_manifest")
+    if not pointer or batch.detected_type != "video_movie":
+        return
+    actions = (
+        db.query(MoveAction)
+        .filter(
+            MoveAction.batch_id == batch.id,
+            MoveAction.status == "completed",
+        )
+        .all()
+    )
+    manifest_paths = {
+        Path(action.destination_path).parent / "metadata" / "movie.json"
+        for action in actions
+        if Path(action.destination_path).suffix.lower()
+        in {".mkv", ".mp4", ".m4v", ".mov", ".avi", ".webm", ".ts", ".m2ts"}
+    }
+    for path in manifest_paths:
+        if not path.exists():
+            continue
+        try:
+            document = json.loads(path.read_text(encoding="utf-8"))
+            document["move_manifest"] = pointer
+            path.write_text(
+                json.dumps(document, indent=2, ensure_ascii=False, default=str),
+                encoding="utf-8",
+            )
+        except (OSError, ValueError):
+            continue
+
+
 def _unique_artwork_destination(
     preferred: Path,
     reserved: set[str],
@@ -287,6 +322,8 @@ def _move_movie_batch(
                 "title": metadata.get("title") or title,
                 "year": metadata.get("year") or year or None,
                 "edition": metadata.get("edition") or None,
+                "resolution": metadata.get("resolution"),
+                "source": metadata.get("source"),
                 "format": metadata.get("format"),
                 "source_path": batch.source_path,
                 "primary_video_file": (
@@ -306,6 +343,13 @@ def _move_movie_batch(
                     batch.metadata_confirmed
                     or metadata.get("review_confirmed")
                 ),
+                "accepted_unknown_title": bool(
+                    metadata.get("accepted_unknown_title")
+                ),
+                "accepted_unknown_year": bool(
+                    metadata.get("accepted_unknown_year")
+                ),
+                "lookup_later": bool(metadata.get("lookup_later")),
                 "batch_id": batch.id,
             },
             settings.movies_metadata_dir,
@@ -443,6 +487,8 @@ def _move_movie_collection_batch(
                     "year": year,
                     "edition": edition or None,
                     "format": item.get("format"),
+                    "resolution": item.get("resolution"),
+                    "source": item.get("source"),
                     "source_path": str(source),
                     "primary_video_file": destination_file.name,
                     "video_file_count": 1,
@@ -456,16 +502,13 @@ def _move_movie_collection_batch(
                         batch.metadata_confirmed
                         or metadata.get("review_confirmed")
                     ),
-                    "accepted_unknown_author": bool(
-                        metadata.get("accepted_unknown_author")
+                    "accepted_unknown_title": bool(
+                        item.get("accepted_unknown_title")
                     ),
                     "accepted_unknown_year": bool(
-                        metadata.get("accepted_unknown_year")
+                        item.get("accepted_unknown_year")
                     ),
-                    "accepted_unknown_narrator": bool(
-                        metadata.get("accepted_unknown_narrator")
-                    ),
-                    "lookup_later": bool(metadata.get("lookup_later")),
+                    "lookup_later": bool(item.get("lookup_later")),
                     "batch_id": batch.id,
                 },
                 settings.movies_metadata_dir,
@@ -2009,6 +2052,7 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                 manifest_warnings = _record_move_manifest(
                     db, batch, failed_files
                 )
+                _update_movie_library_manifest_pointers(db, batch)
                 metadata = batch.metadata_json or {}
                 if not (
                     db.query(ArchiveItem)

@@ -658,7 +658,7 @@ export default function App() {
       <footer className="app-footer">
         <div className="app-footer__identity">
           <strong>Archive Assistant</strong>
-          <span className="app-footer__version">v2.065</span>
+          <span className="app-footer__version">v2.066</span>
           <span>Move manifest audit trail</span>
         </div>
         <div className="app-footer__notes" aria-label="Application guarantees">

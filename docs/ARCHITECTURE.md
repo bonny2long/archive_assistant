@@ -71,6 +71,11 @@ Candidates remain assistive until saved. Unknown album artist/title values
 require an explicit accepted-unknown decision; missing year remains a warning
 and can be marked for later lookup.
 
+Movie and movie-collection review uses the same contract. The parser extracts
+clean title/year candidates while preserving the original release name and
+removed technical tags for audit. Missing movie year is non-blocking; unknown
+titles require editing or an explicit accepted-unknown decision.
+
 ### 5. Batch merge (`services/batch_merge.py`)
 
 When metadata is saved, the system checks for merge candidates — batches matching by canonical artist, album, compatible year, and format. The smaller batch's files are reassigned to the largest batch, and the smaller batch becomes a `merged` audit row. Archived duplicate candidates are flagged but not merged.

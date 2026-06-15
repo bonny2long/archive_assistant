@@ -108,7 +108,7 @@ def main() -> None:
         "accepted_unknown_year": True,
         "lookup_later": True,
     }
-    assert ARCHIVE_ASSISTANT_VERSION == "v2.065"
+    assert ARCHIVE_ASSISTANT_VERSION == "v2.066"
     assert _confirmed_metadata("music_album", album_metadata)[
         "album_artist"
     ] == "Unknown Artist"

@@ -11,7 +11,7 @@ from app.core.time import serialize_utc
 
 
 MANIFEST_VERSION = "v1"
-ARCHIVE_ASSISTANT_VERSION = "v2.065"
+ARCHIVE_ASSISTANT_VERSION = "v2.066"
 
 
 def _relative(path: Path) -> str:
@@ -69,6 +69,18 @@ def _manifest_paths(
         )
         directory = settings.music_metadata_dir / "move_manifests"
         return directory / f"{stem}.json", directory / f"{stem}.md"
+    if detected_type == "video_movie" and review_type == "movie_collection":
+        title = str(
+            metadata.get("collection_title")
+            or metadata.get("title")
+            or f"batch-{batch_id}"
+        )
+        stem = (
+            f"{created_at.date().isoformat()}_{batch_id}_"
+            f"{_slug(title)}_move_manifest"
+        )
+        directory = settings.movies_metadata_dir / "move_manifests"
+        return directory / f"{stem}.json", directory / f"{stem}.md"
 
     destination = (
         destination_roots[0]
@@ -90,6 +102,32 @@ def _manifest_paths(
 
 
 def _confirmed_metadata(detected_type: str, metadata: dict) -> dict:
+    if detected_type == "video_movie":
+        if (
+            metadata.get("review_type") == "movie_collection"
+            or metadata.get("movie_items")
+        ):
+            return {
+                "collection_title": metadata.get("collection_title"),
+                "items": [
+                    {
+                        key: item.get(key)
+                        for key in (
+                            "source_file", "title", "year", "edition",
+                            "format", "resolution", "source",
+                            "destination_preview",
+                        )
+                    }
+                    for item in metadata.get("movie_items") or []
+                    if isinstance(item, dict) and item.get("include", True)
+                ],
+            }
+        return {
+            key: metadata.get(key)
+            for key in (
+                "title", "year", "edition", "resolution", "source", "format",
+            )
+        }
     if detected_type == "music_album":
         return {
             "album_artist": (
@@ -160,6 +198,36 @@ def _confirmed_metadata(detected_type: str, metadata: dict) -> dict:
 
 
 def _accepted_unknowns(detected_type: str, metadata: dict) -> dict:
+    if detected_type == "video_movie":
+        if (
+            metadata.get("review_type") == "movie_collection"
+            or metadata.get("movie_items")
+        ):
+            return {
+                "items": [
+                    {
+                        "source_file": item.get("source_file"),
+                        "accepted_unknown_title": bool(
+                            item.get("accepted_unknown_title")
+                        ),
+                        "accepted_unknown_year": bool(
+                            item.get("accepted_unknown_year")
+                        ),
+                        "lookup_later": bool(item.get("lookup_later")),
+                    }
+                    for item in metadata.get("movie_items") or []
+                    if isinstance(item, dict) and any((
+                        item.get("accepted_unknown_title"),
+                        item.get("accepted_unknown_year"),
+                        item.get("lookup_later"),
+                    ))
+                ],
+            }
+        return {
+            "title": bool(metadata.get("accepted_unknown_title")),
+            "year": bool(metadata.get("accepted_unknown_year")),
+            "items": [],
+        }
     if detected_type == "music_album":
         return {
             "album_artist": bool(
@@ -231,6 +299,19 @@ def _accepted_unknowns(detected_type: str, metadata: dict) -> dict:
 
 def _lookup_later(detected_type: str, metadata: dict) -> list[dict]:
     values = []
+    if detected_type == "video_movie" and metadata.get("lookup_later"):
+        values.append({
+            "scope": "batch",
+            "title": metadata.get("title"),
+        })
+    if detected_type == "video_movie":
+        for item in metadata.get("movie_items") or []:
+            if isinstance(item, dict) and item.get("lookup_later"):
+                values.append({
+                    "scope": "movie",
+                    "source_file": item.get("source_file"),
+                    "title": item.get("title"),
+                })
     if detected_type in {"music_album", "music_discography"} and metadata.get(
         "lookup_later"
     ):
@@ -284,6 +365,54 @@ def _ignored_sidecars(metadata: dict) -> list[dict]:
 
 
 def _summary(detected_type: str, metadata: dict, manifest: dict) -> dict:
+    if detected_type == "video_movie":
+        if (
+            metadata.get("review_type") == "movie_collection"
+            or metadata.get("movie_items")
+        ):
+            included = [
+                item for item in metadata.get("movie_items") or []
+                if isinstance(item, dict) and item.get("include", True)
+            ]
+            years = sorted({
+                str(item.get("year"))
+                for item in included
+                if str(item.get("year") or "").isdigit()
+            })
+            return {
+                "collection_title": metadata.get("collection_title"),
+                "movie_count": len(included),
+                "year_range": (
+                    years[0] if len(years) == 1
+                    else f"{years[0]}-{years[-1]}" if years else None
+                ),
+                "poster_count": len(manifest["artwork_moved"]),
+                "subtitle_count": len(manifest["subtitles_moved"]),
+                "extra_count": metadata.get("extra_count", 0),
+                "ignored_sidecar_count": len(manifest["sidecars_ignored"]),
+                "files_moved_count": (
+                    len(manifest["files_moved"])
+                    + len(manifest["artwork_moved"])
+                    + len(manifest["subtitles_moved"])
+                ),
+                "failed_move_count": len(manifest["failed_moves"]),
+            }
+        return {
+            "title": metadata.get("title"),
+            "year": metadata.get("year"),
+            "format": metadata.get("format"),
+            "video_file_count": metadata.get("video_file_count", 0),
+            "poster_count": len(manifest["artwork_moved"]),
+            "subtitle_count": len(manifest["subtitles_moved"]),
+            "extra_count": metadata.get("extra_count", 0),
+            "ignored_sidecar_count": len(manifest["sidecars_ignored"]),
+            "files_moved_count": (
+                len(manifest["files_moved"])
+                + len(manifest["artwork_moved"])
+                + len(manifest["subtitles_moved"])
+            ),
+            "failed_move_count": len(manifest["failed_moves"]),
+        }
     if detected_type == "music_album":
         return {
             "album_artist": (
@@ -347,6 +476,7 @@ def _markdown(manifest: dict) -> str:
     accepted = manifest["accepted_unknowns"]
     heading = (
         summary.get("title")
+        or summary.get("collection_title")
         or summary.get("album_title")
         or summary.get("discography_artist")
         or f"Batch {manifest['batch_id']}"
@@ -362,7 +492,7 @@ def _markdown(manifest: dict) -> str:
         "",
         "## Summary",
         "",
-        f"- Title: {summary.get('title') or summary.get('album_title') or summary.get('discography_artist') or 'Unknown'}",
+        f"- Title: {summary.get('title') or summary.get('collection_title') or summary.get('album_title') or summary.get('discography_artist') or 'Unknown'}",
         f"- Author/Artist: {summary.get('author') or summary.get('album_artist') or summary.get('discography_artist') or 'Unknown'}",
         f"- Year: {summary.get('year') or 'Unknown Year'}",
         f"- Format: {summary.get('format') or 'Unknown'}",
@@ -396,14 +526,21 @@ def _markdown(manifest: dict) -> str:
                 f"- {item.get('source_folder') or 'Unknown release'}: "
                 f"{json.dumps(item, sort_keys=True)}"
             )
+    elif "title" in accepted:
+        lines.extend([
+            f"- Movie title: {'accepted as unknown' if accepted['title'] else 'not accepted'}",
+            f"- Movie year: {'accepted as unknown' if accepted['year'] else 'not accepted'}",
+        ])
     elif accepted.get("items"):
         for item in accepted["items"]:
             flags = []
-            if item["accepted_unknown_author"]:
+            if item.get("accepted_unknown_author"):
                 flags.append("unknown author accepted")
-            if item["accepted_unknown_year"]:
+            if item.get("accepted_unknown_title"):
+                flags.append("unknown title accepted")
+            if item.get("accepted_unknown_year"):
                 flags.append("unknown year accepted")
-            if item["lookup_later"]:
+            if item.get("lookup_later"):
                 flags.append("lookup later")
             lines.append(
                 f"- {item.get('source_file') or 'Unknown item'}: "
@@ -433,6 +570,14 @@ def _markdown(manifest: dict) -> str:
         for item in manifest["artwork_moved"]
     )
     if not manifest["artwork_moved"]:
+        lines.append("- None")
+
+    lines.extend(["", "## Subtitles", ""])
+    lines.extend(
+        f"- {item['destination_relative']}"
+        for item in manifest.get("subtitles_moved", [])
+    )
+    if not manifest.get("subtitles_moved"):
         lines.append("- None")
 
     lines.extend(["", "## Notes", ""])
@@ -505,8 +650,14 @@ def write_move_manifest(
 
     destination_roots = []
     if (
-        batch.detected_type == "book"
-        and review_type == "book_collection"
+        (
+            batch.detected_type == "book"
+            and review_type == "book_collection"
+        )
+        or (
+            batch.detected_type == "video_movie"
+            and review_type == "movie_collection"
+        )
         and destinations
     ):
         destination_roots.extend(destinations)
@@ -532,6 +683,7 @@ def write_move_manifest(
         "movie_artwork", "tv_artwork",
     }
     artwork_moved = []
+    subtitles_moved = []
     files_moved = []
     for entry in completed:
         if entry["role"] in artwork_roles:
@@ -548,15 +700,31 @@ def write_move_manifest(
                     if batch.detected_type in {
                         "music_album", "music_discography"
                     }
+                    else "generic_movie_poster_name"
+                    if (
+                        batch.detected_type == "video_movie"
+                        and Path(
+                            str(entry.get("source_relative") or "")
+                        ).stem.casefold()
+                        in {"poster", "cover", "folder", "movie", "front"}
+                    )
                     else "normalized_basename"
                 ),
                 "confidence": 0.9,
             })
+        elif entry["role"] == "subtitle":
+            subtitles_moved.append(entry)
         else:
             files_moved.append(entry)
 
     excluded = []
     for item in metadata.get("book_items") or []:
+        if isinstance(item, dict) and not item.get("include", True):
+            excluded.append({
+                "source_relative": item.get("source_file"),
+                "reason": "excluded_from_batch",
+            })
+    for item in metadata.get("movie_items") or []:
         if isinstance(item, dict) and not item.get("include", True):
             excluded.append({
                 "source_relative": item.get("source_file"),
@@ -587,6 +755,22 @@ def write_move_manifest(
             batch.detected_type, metadata
         ),
         "lookup_later": _lookup_later(batch.detected_type, metadata),
+        "release_cleanup": (
+            {
+                "collection": metadata.get("release_cleanup"),
+                "items": [
+                    {
+                        "source_file": item.get("source_file"),
+                        **dict(item.get("release_cleanup") or {}),
+                    }
+                    for item in metadata.get("movie_items") or []
+                    if isinstance(item, dict)
+                ],
+            }
+            if batch.detected_type == "video_movie"
+            and review_type == "movie_collection"
+            else metadata.get("release_cleanup")
+        ),
         "tracks": [
             {
                 "track_number": (
@@ -608,6 +792,7 @@ def write_move_manifest(
         ],
         "files_moved": files_moved,
         "artwork_moved": artwork_moved,
+        "subtitles_moved": subtitles_moved,
         "sidecars_ignored": _ignored_sidecars(metadata),
         "files_skipped": excluded,
         "failed_moves": failed,

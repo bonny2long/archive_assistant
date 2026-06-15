@@ -23,7 +23,7 @@ from app.services.title_display import destination_title  # noqa: E402
 
 
 def main() -> None:
-    assert METADATA_ASSIST_VERSION == "v2.062"
+    assert METADATA_ASSIST_VERSION == "v2.066"
     assert normalize_metadata_text("Bad\x00  title\nvalue") == "Bad title value"
 
     assert is_garbage_document_title("tmpezE58S\x00")

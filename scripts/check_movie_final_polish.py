@@ -186,7 +186,7 @@ def main() -> int:
         any(item["type"] == "movie_title_missing" for item in meta["blocking_review_items"]),
     )
 
-    # Missing year -> blocking
+    # Missing year -> non-blocking warning in v2.066
     meta = build_review_state("video_movie", {
         "title": "Test Movie",
         "year": "",
@@ -195,8 +195,9 @@ def main() -> int:
         "metadata_warnings": ["movie_year_missing"],
     })
     check(
-        "Missing year -> blocking",
-        any(item["type"] == "movie_year_missing" for item in meta["blocking_review_items"]),
+        "Missing year -> warning",
+        any(item["type"] == "movie_year_missing" for item in meta["non_blocking_review_items"])
+        and not any(item["type"] == "movie_year_missing" for item in meta["blocking_review_items"]),
     )
 
     # Multiple clear editions -> non-blocking warning

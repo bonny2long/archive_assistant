@@ -548,6 +548,19 @@ button:focus-visible, input:focus-visible {
 .album-edit-row__decisions {
   margin-top: 0.4rem;
 }
+.collection-editor__bulk-actions,
+.collection-item-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.collection-editor__bulk-actions {
+  padding: 0.35rem 0 0.75rem;
+}
+.collection-item-card__actions {
+  padding: 0.65rem 0.75rem;
+  border-top: 1px solid var(--border);
+}
 .discography-editor__releases {
   max-height: 58vh;
   overflow-x: auto;

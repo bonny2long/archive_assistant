@@ -47,7 +47,6 @@ Passing at this checkpoint:
 
 Still open for full v2:
 
-- Movie metadata-assist parity
 - TV metadata-assist parity
 - Final mixed-media v2 regression and release lock
 
@@ -61,6 +60,17 @@ Passing at this checkpoint:
 - Explicit accepted-unknown and lookup-later decisions for music
 - Album track detail and artwork evidence in JSON/Markdown move manifests
 - Central discography move manifests under `Music/Metadata/move_manifests`
+
+### v2.066 Movie Metadata Assist
+
+Passing at this checkpoint:
+
+- Local movie candidates from folders, parent folders, filenames, and containers
+- Release-name cleanup with original names and removed tokens retained for audit
+- Single-movie and collection suggestion chips with accepted-unknown controls
+- Warning-only missing years and blocking unknown titles unless explicitly accepted
+- Visible-only collection bulk actions for lookup, unknown years, and exclusion
+- Movie manifests with poster, subtitle, sidecar, cleanup, and per-item proof
 
 Scope stays focused on metadata only:
 

@@ -5,6 +5,8 @@ import type {
   MovieCollectionReviewUpdate,
 } from "../types/archive";
 import ReviewIssuesPanel from "./ReviewIssuesPanel";
+import MetadataAssistStaleWarning from "./MetadataAssistStaleWarning";
+import MetadataSuggestionChips from "./MetadataSuggestionChips";
 
 type Props = {
   batch: BatchSummary;
@@ -40,12 +42,12 @@ type ItemCardProps = {
 
 function CollectionItemCard({ sourceFile, item, onChange }: ItemCardProps) {
   const yearValid =
-    item.year.trim() === "" || /^(19|20)\d{2}$/.test(item.year.trim());
-  const titleValid = item.title.trim() !== "";
+    !item.year || /^(19|20)\d{2}$/.test(item.year.trim());
+  const titleValid = item.title.trim() !== "" || item.accepted_unknown_title;
 
   const destPreview = useMemo(() => {
     if (!item.include) return null;
-    return buildDestPreview(item.title, item.year, item.edition ?? "");
+    return buildDestPreview(item.title, item.year ?? "", item.edition ?? "");
   }, [item.include, item.title, item.year, item.edition]);
 
   return (
@@ -75,6 +77,7 @@ function CollectionItemCard({ sourceFile, item, onChange }: ItemCardProps) {
             autoComplete="off"
             onChange={(e) => onChange({ ...item, title: e.target.value })}
           />
+          <MetadataSuggestionChips label={`Title for ${sourceFile}`} field="title" candidates={item.metadata_candidates?.title ?? []} currentValue={item.title} onApply={(value) => onChange({ ...item, title: value })} maxVisible={2} />
           {item.include && !titleValid && (
             <p className="field-error">Title is required</p>
           )}
@@ -82,11 +85,12 @@ function CollectionItemCard({ sourceFile, item, onChange }: ItemCardProps) {
         <label>
           Year
           <input
-            value={item.year}
+            value={item.year ?? ""}
             disabled={!item.include}
             maxLength={4}
-            onChange={(e) => onChange({ ...item, year: e.target.value })}
+            onChange={(e) => onChange({ ...item, year: e.target.value || null })}
           />
+          <MetadataSuggestionChips label={`Year for ${sourceFile}`} field="year" candidates={item.metadata_candidates?.year ?? []} currentValue={item.year ?? ""} onApply={(value) => onChange({ ...item, year: value })} maxVisible={2} />
           {item.include && !yearValid && (
             <p className="field-error">Must be four-digit year</p>
           )}
@@ -113,6 +117,18 @@ function CollectionItemCard({ sourceFile, item, onChange }: ItemCardProps) {
             }
           />
         </label>
+      </div>
+
+      <div className="collection-item-card__actions acceptance-controls__buttons">
+        <button type="button" className={`btn-sm${item.accepted_unknown_title ? " btn-sm--active" : ""}`} onClick={() => onChange({ ...item, accepted_unknown_title: !item.accepted_unknown_title })}>
+          {item.accepted_unknown_title ? "Unknown Title Accepted" : "Accept Unknown Title"}
+        </button>
+        <button type="button" className={`btn-sm${item.accepted_unknown_year ? " btn-sm--active" : ""}`} onClick={() => onChange({ ...item, accepted_unknown_year: !item.accepted_unknown_year })}>
+          {item.accepted_unknown_year ? "Unknown Year Accepted" : "Accept Unknown Year"}
+        </button>
+        <button type="button" className={`btn-sm${item.lookup_later ? " btn-sm--active" : ""}`} onClick={() => onChange({ ...item, lookup_later: !item.lookup_later })}>
+          {item.lookup_later ? "Lookup Later Marked" : "Lookup Later"}
+        </button>
       </div>
 
       {/* Destination preview */}
@@ -161,6 +177,10 @@ function buildInitialItems(batch: BatchSummary): MovieCollectionItemUpdate[] {
         year: existing.year ?? "",
         edition: existing.edition ?? null,
         format: existing.format ?? null,
+        metadata_candidates: existing.metadata_candidates ?? {},
+        accepted_unknown_title: existing.accepted_unknown_title ?? false,
+        accepted_unknown_year: existing.accepted_unknown_year ?? false,
+        lookup_later: existing.lookup_later ?? false,
       };
     }
     // No prior data — start with empty fields so the user fills them in
@@ -168,9 +188,13 @@ function buildInitialItems(batch: BatchSummary): MovieCollectionItemUpdate[] {
       source_file: sourceFile,
       include: true,
       title: "",
-      year: "",
+      year: null,
       edition: null,
       format: null,
+      metadata_candidates: {},
+      accepted_unknown_title: false,
+      accepted_unknown_year: false,
+      lookup_later: false,
     };
   });
 }
@@ -188,14 +212,27 @@ export default function MovieCollectionEditor({
   const [items, setItems] = useState<MovieCollectionItemUpdate[]>(
     () => buildInitialItems(batch),
   );
+  const [filter, setFilter] = useState<"repair" | "included" | "excluded" | "all">("repair");
 
   const includedCount = items.filter((i) => i.include).length;
   const allValid = items.every(
     (item) =>
       !item.include ||
-      (item.title.trim() !== "" &&
-        /^(19|20)\d{2}$/.test(item.year.trim())),
+      ((item.title.trim() !== "" || item.accepted_unknown_title) &&
+        (!item.year || /^(19|20)\d{2}$/.test(item.year.trim()))),
   );
+  const visibleItems = items.filter((item) => {
+    if (filter === "included") return item.include;
+    if (filter === "excluded") return !item.include;
+    if (filter === "repair") {
+      return item.include && (
+        !item.title.trim()
+        || !item.year
+        || item.lookup_later
+      );
+    }
+    return true;
+  });
 
   const hasBlockers = (batch.blocking_review_items ?? []).length > 0;
 
@@ -276,6 +313,7 @@ export default function MovieCollectionEditor({
             confirmLabel="Confirm collection review"
             onConfirm={onConfirm}
           />
+          <MetadataAssistStaleWarning batch={batch} />
 
           {/* Optional collection label */}
           <div className="editor-grid editor-grid--full">
@@ -289,9 +327,35 @@ export default function MovieCollectionEditor({
             </label>
           </div>
 
+          <div className="collection-editor__bulk-actions">
+            {(["repair", "included", "excluded", "all"] as const).map((value) => (
+              <button type="button" className={`btn-sm${filter === value ? " btn-sm--active" : ""}`} key={value} onClick={() => setFilter(value)}>
+                {value === "repair" ? "Needs repair" : value[0].toUpperCase() + value.slice(1)}
+              </button>
+            ))}
+            <button type="button" className="btn-sm" onClick={() => {
+              const visible = new Set(visibleItems.map((item) => item.source_file));
+              setItems((current) => current.map((item) => visible.has(item.source_file)
+                ? { ...item, accepted_unknown_year: true }
+                : item));
+            }}>Accept unknown years for visible</button>
+            <button type="button" className="btn-sm" onClick={() => {
+              const visible = new Set(visibleItems.map((item) => item.source_file));
+              setItems((current) => current.map((item) => visible.has(item.source_file)
+                ? { ...item, lookup_later: true }
+                : item));
+            }}>Mark visible lookup later</button>
+            <button type="button" className="btn-sm" onClick={() => {
+              const visible = new Set(visibleItems.map((item) => item.source_file));
+              setItems((current) => current.map((item) => visible.has(item.source_file)
+                ? { ...item, include: false }
+                : item));
+            }}>Exclude visible</button>
+          </div>
+
           {/* Per-movie item cards */}
           <div className="collection-item-list">
-            {items.map((item) => (
+            {visibleItems.map((item) => (
               <CollectionItemCard
                 key={item.source_file}
                 sourceFile={item.source_file}
@@ -305,7 +369,7 @@ export default function MovieCollectionEditor({
 
           {!allValid && (
             <p className="metadata-editor__error">
-              All included movies need a title and a valid four-digit year.
+              Included movies need a title or an explicit unknown-title decision. Invalid years must be corrected.
             </p>
           )}
         </div>

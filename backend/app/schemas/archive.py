@@ -33,6 +33,8 @@ class BatchSummary(BaseModel):
     video_files: list[str] = Field(default_factory=list)
     title: str | None = None
     edition: str | None = None
+    resolution: str | None = None
+    source: str | None = None
     original_release_name: str | None = None
     primary_video_file: str | None = None
     artwork_files: list[str] = Field(default_factory=list)
@@ -96,6 +98,7 @@ class BatchSummary(BaseModel):
     accepted_unknown_album_artist: bool = False
     accepted_unknown_album_title: bool = False
     accepted_unknown_discography_artist: bool = False
+    accepted_unknown_title: bool = False
     lookup_later: bool = False
     move_manifest: dict | None = None
     metadata_assist_version: str | None = None
@@ -159,6 +162,9 @@ class MovieMetadataUpdate(BaseModel):
     year: str | None = Field(default=None, pattern=r"^(19|20)\d{2}$")
     edition: str | None = None
     format: str | None = None
+    accepted_unknown_title: bool = False
+    accepted_unknown_year: bool = False
+    lookup_later: bool = False
 
 
 class TvMetadataUpdate(BaseModel):
@@ -198,10 +204,13 @@ class TvEpisodeReviewUpdate(BaseModel):
 class MovieCollectionItemUpdate(BaseModel):
     source_file: str = Field(min_length=1)
     include: bool = True
-    title: str = Field(min_length=1)
-    year: str = Field(pattern=r"^(19|20)\d{2}$")
+    title: str = ""
+    year: str | None = Field(default=None, pattern=r"^(19|20)\d{2}$")
     edition: str | None = None
     format: str | None = None
+    accepted_unknown_title: bool = False
+    accepted_unknown_year: bool = False
+    lookup_later: bool = False
 
 
 class MovieCollectionReviewUpdate(BaseModel):

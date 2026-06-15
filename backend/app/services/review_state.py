@@ -149,11 +149,18 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
             resolved_review_type = "movie"
         meta["review_type"] = resolved_review_type
 
-        if not str(meta.get("title") or "").strip():
+        title = str(meta.get("title") or "").strip()
+        if (
+            (not title or title.casefold() in {"unknown", "unknown movie"})
+            and not meta.get("accepted_unknown_title")
+        ):
             blocking.append(_item("movie_title_missing", "Movie title is required."))
         year = str(meta.get("year") or "")
         if len(year) != 4 or not year.isdigit():
-            blocking.append(_item("movie_year_missing", "A four-digit movie year is required."))
+            non_blocking.append(_item(
+                "movie_year_missing",
+                "Movie year is missing and may be accepted as unknown.",
+            ))
         video_file_count = int(meta.get("video_file_count") or 0)
         if video_file_count > 1:
             # If resolved as movie_collection, the ambiguity is resolved.
@@ -182,7 +189,10 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
                 continue
             included_count += 1
             source_file = str(movie_item.get("source_file") or "")
-            if not str(movie_item.get("title") or "").strip():
+            if (
+                not str(movie_item.get("title") or "").strip()
+                and not movie_item.get("accepted_unknown_title")
+            ):
                 blocking.append(_item(
                     "movie_collection_item_missing_title",
                     "Movie in collection is missing a title.",
@@ -190,9 +200,9 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
                 ))
             raw_year = str(movie_item.get("year") or "")
             if len(raw_year) != 4 or not raw_year.isdigit():
-                blocking.append(_item(
+                non_blocking.append(_item(
                     "movie_collection_item_missing_year",
-                    "Movie in collection is missing a valid year.",
+                    "Movie in collection is missing a year.",
                     file_name=source_file,
                 ))
 

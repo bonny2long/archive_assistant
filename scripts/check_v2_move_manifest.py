@@ -1,4 +1,4 @@
-"""Bounded, isolated checks for v2.064 move manifests."""
+"""Bounded, isolated checks for v2.066 move manifests."""
 
 from __future__ import annotations
 
@@ -107,7 +107,7 @@ def check_audiobook(root: Path) -> None:
     assert json_path.exists()
     assert markdown_path.exists()
     manifest = json.loads(json_path.read_text(encoding="utf-8"))
-    assert manifest["archive_assistant_version"] == "v2.064"
+    assert manifest["archive_assistant_version"] == "v2.066"
     assert manifest["detected_type"] == "audiobook"
     assert len(manifest["files_moved"]) == 1
     assert len(manifest["artwork_moved"]) == 1
@@ -279,7 +279,7 @@ def main() -> None:
         for key, value in original.items():
             setattr(settings, key, value)
 
-    print("v2.064 move manifest checks passed")
+    print("v2.066 move manifest checks passed")
 
 
 if __name__ == "__main__":
