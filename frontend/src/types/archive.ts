@@ -121,6 +121,9 @@ export type BatchSummary = {
   accepted_unknown_author?: boolean;
   accepted_unknown_year?: boolean;
   accepted_unknown_narrator?: boolean;
+  accepted_unknown_album_artist?: boolean;
+  accepted_unknown_album_title?: boolean;
+  accepted_unknown_discography_artist?: boolean;
   lookup_later?: boolean;
   move_manifest?: MoveManifestPointer | null;
   metadata_assist_version?: string | null;
@@ -185,6 +188,9 @@ export type SuggestedMetadata = {
   accepted_unknown_author?: boolean;
   accepted_unknown_year?: boolean;
   accepted_unknown_narrator?: boolean;
+  accepted_unknown_album_artist?: boolean;
+  accepted_unknown_album_title?: boolean;
+  accepted_unknown_discography_artist?: boolean;
   lookup_later?: boolean;
   sources?: Partial<Record<
     "artist" | "album" | "year" | "genre" | "title" | "author" | "narrator" | "series" | "series_index" | "edition" | "format" | "show_title" | "season_number" | "season_title",
@@ -196,10 +202,14 @@ export type SuggestedMetadata = {
 export type BatchMetadataUpdate = {
   artist: string;
   album: string;
-  year: string;
+  year: string | null;
   primary_genre?: string | null;
   format?: string | null;
   note?: string | null;
+  accepted_unknown_album_artist?: boolean;
+  accepted_unknown_album_title?: boolean;
+  accepted_unknown_year?: boolean;
+  lookup_later?: boolean;
 };
 
 export type ReviewItem = {
@@ -232,12 +242,19 @@ export type DiscographyAlbum = {
   year?: string | null;
   format?: string;
   track_count: number;
+  disc_count?: number;
   artwork_count?: number;
   artwork_files?: string[];
   status?: string;
   warnings?: string[];
   release_type?: DiscographyReleaseType;
   include?: boolean;
+  metadata_candidates?: Record<string, MetadataCandidate[]>;
+  track_candidates?: MetadataCandidate[];
+  accepted_unknown_album_artist?: boolean;
+  accepted_unknown_album_title?: boolean;
+  accepted_unknown_year?: boolean;
+  lookup_later?: boolean;
 };
 
 export type DiscographyAlbumUpdate = {
@@ -246,11 +263,17 @@ export type DiscographyAlbumUpdate = {
   year: string | null;
   release_type: DiscographyReleaseType;
   include: boolean;
+  accepted_unknown_album_artist: boolean;
+  accepted_unknown_album_title: boolean;
+  accepted_unknown_year: boolean;
+  lookup_later: boolean;
 };
 
 export type DiscographyMetadataUpdate = {
   artist: string;
   albums?: DiscographyAlbumUpdate[];
+  accepted_unknown_discography_artist?: boolean;
+  lookup_later?: boolean;
 };
 
 export type MovieMetadataUpdate = {

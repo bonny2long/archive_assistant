@@ -11,7 +11,7 @@ from app.core.time import serialize_utc
 
 
 MANIFEST_VERSION = "v1"
-ARCHIVE_ASSISTANT_VERSION = "v2.064"
+ARCHIVE_ASSISTANT_VERSION = "v2.065"
 
 
 def _relative(path: Path) -> str:
@@ -61,6 +61,14 @@ def _manifest_paths(
         )
         directory = settings.books_metadata_dir / "move_manifests"
         return directory / f"{stem}.json", directory / f"{stem}.md"
+    if detected_type == "music_discography":
+        artist = str(metadata.get("artist") or f"batch-{batch_id}")
+        stem = (
+            f"{created_at.date().isoformat()}_{batch_id}_"
+            f"{_slug(artist)}-discography_move_manifest"
+        )
+        directory = settings.music_metadata_dir / "move_manifests"
+        return directory / f"{stem}.json", directory / f"{stem}.md"
 
     destination = (
         destination_roots[0]
@@ -82,6 +90,34 @@ def _manifest_paths(
 
 
 def _confirmed_metadata(detected_type: str, metadata: dict) -> dict:
+    if detected_type == "music_album":
+        return {
+            "album_artist": (
+                metadata.get("album_artist")
+                or metadata.get("albumartist")
+                or metadata.get("artist")
+            ),
+            "album_title": metadata.get("album"),
+            "year": metadata.get("year") or metadata.get("date"),
+            "genre": metadata.get("genre"),
+            "format": metadata.get("format"),
+        }
+    if detected_type == "music_discography":
+        return {
+            "discography_artist": metadata.get("artist"),
+            "albums": [
+                {
+                    key: album.get(key)
+                    for key in (
+                        "source_folder", "album", "year", "release_type",
+                        "format", "disc_count", "track_count",
+                        "artwork_count", "include",
+                    )
+                }
+                for album in metadata.get("albums") or []
+                if isinstance(album, dict) and album.get("include", True)
+            ],
+        }
     if detected_type == "audiobook":
         keys = (
             "author", "title", "year", "narrator", "series",
@@ -124,6 +160,45 @@ def _confirmed_metadata(detected_type: str, metadata: dict) -> dict:
 
 
 def _accepted_unknowns(detected_type: str, metadata: dict) -> dict:
+    if detected_type == "music_album":
+        return {
+            "album_artist": bool(
+                metadata.get("accepted_unknown_album_artist")
+            ),
+            "album_title": bool(
+                metadata.get("accepted_unknown_album_title")
+            ),
+            "year": bool(metadata.get("accepted_unknown_year")),
+            "items": [],
+        }
+    if detected_type == "music_discography":
+        return {
+            "discography_artist": bool(
+                metadata.get("accepted_unknown_discography_artist")
+            ),
+            "items": [
+                {
+                    "source_folder": album.get("source_folder"),
+                    "accepted_unknown_album_artist": bool(
+                        album.get("accepted_unknown_album_artist")
+                    ),
+                    "accepted_unknown_album_title": bool(
+                        album.get("accepted_unknown_album_title")
+                    ),
+                    "accepted_unknown_year": bool(
+                        album.get("accepted_unknown_year")
+                    ),
+                    "lookup_later": bool(album.get("lookup_later")),
+                }
+                for album in metadata.get("albums") or []
+                if isinstance(album, dict) and any((
+                    album.get("accepted_unknown_album_artist"),
+                    album.get("accepted_unknown_album_title"),
+                    album.get("accepted_unknown_year"),
+                    album.get("lookup_later"),
+                ))
+            ],
+        }
     if detected_type == "audiobook":
         return {
             "author": bool(metadata.get("accepted_unknown_author")),
@@ -156,6 +231,21 @@ def _accepted_unknowns(detected_type: str, metadata: dict) -> dict:
 
 def _lookup_later(detected_type: str, metadata: dict) -> list[dict]:
     values = []
+    if detected_type in {"music_album", "music_discography"} and metadata.get(
+        "lookup_later"
+    ):
+        values.append({
+            "scope": "batch",
+            "title": metadata.get("album") or metadata.get("artist"),
+        })
+    if detected_type == "music_discography":
+        for album in metadata.get("albums") or []:
+            if isinstance(album, dict) and album.get("lookup_later"):
+                values.append({
+                    "scope": "album",
+                    "source_folder": album.get("source_folder"),
+                    "title": album.get("album"),
+                })
     if detected_type == "audiobook" and metadata.get("lookup_later"):
         values.append({
             "scope": "batch",
@@ -194,6 +284,31 @@ def _ignored_sidecars(metadata: dict) -> list[dict]:
 
 
 def _summary(detected_type: str, metadata: dict, manifest: dict) -> dict:
+    if detected_type == "music_album":
+        return {
+            "album_artist": (
+                metadata.get("album_artist")
+                or metadata.get("albumartist")
+                or metadata.get("artist")
+            ),
+            "album_title": metadata.get("album"),
+            "year": metadata.get("year") or metadata.get("date"),
+            "format": metadata.get("format"),
+            "disc_count": metadata.get("disc_count", 1),
+            "track_count": metadata.get("track_count", 0),
+            "artwork_count": len(manifest["artwork_moved"]),
+            "ignored_sidecar_count": len(manifest["sidecars_ignored"]),
+            "failed_move_count": len(manifest["failed_moves"]),
+        }
+    if detected_type == "music_discography":
+        return {
+            "discography_artist": metadata.get("artist"),
+            "album_count": metadata.get("album_count", 0),
+            "track_count": metadata.get("track_count", 0),
+            "artwork_count": len(manifest["artwork_moved"]),
+            "ignored_sidecar_count": len(manifest["sidecars_ignored"]),
+            "failed_move_count": len(manifest["failed_moves"]),
+        }
     if detected_type == "audiobook":
         title = metadata.get("title")
         author = metadata.get("author")
@@ -230,7 +345,12 @@ def _summary(detected_type: str, metadata: dict, manifest: dict) -> dict:
 def _markdown(manifest: dict) -> str:
     summary = manifest["summary"]
     accepted = manifest["accepted_unknowns"]
-    heading = summary.get("title") or f"Batch {manifest['batch_id']}"
+    heading = (
+        summary.get("title")
+        or summary.get("album_title")
+        or summary.get("discography_artist")
+        or f"Batch {manifest['batch_id']}"
+    )
     lines = [
         f"# Move Manifest - {heading}",
         "",
@@ -242,8 +362,8 @@ def _markdown(manifest: dict) -> str:
         "",
         "## Summary",
         "",
-        f"- Title: {summary.get('title') or 'Unknown'}",
-        f"- Author: {summary.get('author') or 'Unknown Author'}",
+        f"- Title: {summary.get('title') or summary.get('album_title') or summary.get('discography_artist') or 'Unknown'}",
+        f"- Author/Artist: {summary.get('author') or summary.get('album_artist') or summary.get('discography_artist') or 'Unknown'}",
         f"- Year: {summary.get('year') or 'Unknown Year'}",
         f"- Format: {summary.get('format') or 'Unknown'}",
         f"- Files moved: {len(manifest['files_moved'])}",
@@ -260,6 +380,22 @@ def _markdown(manifest: dict) -> str:
             f"- Year: {'accepted as unknown' if accepted['year'] else 'not accepted'}",
             f"- Narrator: {'accepted as unknown' if accepted['narrator'] else 'not accepted'}",
         ])
+    elif "album_artist" in accepted:
+        lines.extend([
+            f"- Album artist: {'accepted as unknown' if accepted['album_artist'] else 'not accepted'}",
+            f"- Album title: {'accepted as unknown' if accepted['album_title'] else 'not accepted'}",
+            f"- Year: {'accepted as unknown' if accepted['year'] else 'not accepted'}",
+        ])
+    elif "discography_artist" in accepted:
+        lines.append(
+            "- Discography artist: "
+            f"{'accepted as unknown' if accepted['discography_artist'] else 'not accepted'}"
+        )
+        for item in accepted.get("items", []):
+            lines.append(
+                f"- {item.get('source_folder') or 'Unknown release'}: "
+                f"{json.dumps(item, sort_keys=True)}"
+            )
     elif accepted.get("items"):
         for item in accepted["items"]:
             flags = []
@@ -403,10 +539,15 @@ def write_move_manifest(
                 **entry,
                 "matched_to": metadata.get("title")
                 or metadata.get("collection_title")
-                or metadata.get("album"),
+                or metadata.get("album")
+                or metadata.get("artist"),
                 "match_method": (
                     "audiobook_sidecar_artwork"
                     if batch.detected_type == "audiobook"
+                    else "music_sidecar_artwork"
+                    if batch.detected_type in {
+                        "music_album", "music_discography"
+                    }
                     else "normalized_basename"
                 ),
                 "confidence": 0.9,
@@ -446,6 +587,25 @@ def write_move_manifest(
             batch.detected_type, metadata
         ),
         "lookup_later": _lookup_later(batch.detected_type, metadata),
+        "tracks": [
+            {
+                "track_number": (
+                    (item.metadata_json or {}).get("tracknumber")
+                ),
+                "disc_number": (
+                    (item.metadata_json or {}).get("discnumber")
+                ),
+                "title": (item.metadata_json or {}).get("title"),
+                "track_artist": (item.metadata_json or {}).get("artist"),
+                "file_name": item.file_name,
+                "format": item.extension.lstrip(".").upper(),
+            }
+            for item in batch.files
+            if batch.detected_type in {
+                "music_album", "music_discography"
+            }
+            and item.detected_role not in {"artwork"}
+        ],
         "files_moved": files_moved,
         "artwork_moved": artwork_moved,
         "sidecars_ignored": _ignored_sidecars(metadata),

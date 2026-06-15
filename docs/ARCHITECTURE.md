@@ -66,6 +66,11 @@ Each media type has its own PATCH endpoint and editor component:
 
 The `MediaReviewRouter.tsx` component routes each batch to the correct editor based on `detected_type` and `review_type`.
 
+Music album and discography review uses the shared metadata-candidate contract.
+Candidates remain assistive until saved. Unknown album artist/title values
+require an explicit accepted-unknown decision; missing year remains a warning
+and can be marked for later lookup.
+
 ### 5. Batch merge (`services/batch_merge.py`)
 
 When metadata is saved, the system checks for merge candidates — batches matching by canonical artist, album, compatible year, and format. The smaller batch's files are reassigned to the largest batch, and the smaller batch becomes a `merged` audit row. Archived duplicate candidates are flagged but not merged.

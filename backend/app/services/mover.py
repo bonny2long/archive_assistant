@@ -1289,6 +1289,7 @@ def _move_discography_batch(
             {
                 "media_kind": "music_discography",
                 "artist": metadata.get("artist"),
+                "discography_artist": metadata.get("artist"),
                 "release_count": metadata.get(
                     "release_count",
                     sum(release_type_counts.values()),
@@ -1305,6 +1306,11 @@ def _move_discography_batch(
                     batch.metadata_confirmed
                     or metadata.get("review_confirmed")
                 ),
+                "accepted_unknown_discography_artist": bool(
+                    metadata.get("accepted_unknown_discography_artist")
+                ),
+                "lookup_later": bool(metadata.get("lookup_later")),
+                "move_manifest": metadata.get("move_manifest"),
                 "batch_id": batch.id,
             },
             settings.music_metadata_dir,
@@ -2441,6 +2447,11 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                     "music-album.json",
                     {
                         "media_kind": "music_album",
+                        "album_artist": (
+                            album_meta.get("artist")
+                            or album_meta.get("album_artist")
+                        ),
+                        "album_title": album_meta.get("album"),
                         "artist": (
                             album_meta.get("artist")
                             or album_meta.get("album_artist")
@@ -2468,6 +2479,19 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                         "review_confirmed": bool(
                             batch.metadata_confirmed
                             or album_meta.get("review_confirmed")
+                        ),
+                        "accepted_unknown_album_artist": bool(
+                            album_meta.get("accepted_unknown_album_artist")
+                        ),
+                        "accepted_unknown_album_title": bool(
+                            album_meta.get("accepted_unknown_album_title")
+                        ),
+                        "accepted_unknown_year": bool(
+                            album_meta.get("accepted_unknown_year")
+                        ),
+                        "lookup_later": bool(album_meta.get("lookup_later")),
+                        "move_manifest": (
+                            (batch.metadata_json or {}).get("move_manifest")
                         ),
                         "batch_id": batch.id,
                     },

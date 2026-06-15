@@ -93,6 +93,9 @@ class BatchSummary(BaseModel):
     accepted_unknown_author: bool = False
     accepted_unknown_year: bool = False
     accepted_unknown_narrator: bool = False
+    accepted_unknown_album_artist: bool = False
+    accepted_unknown_album_title: bool = False
+    accepted_unknown_discography_artist: bool = False
     lookup_later: bool = False
     move_manifest: dict | None = None
     metadata_assist_version: str | None = None
@@ -141,10 +144,14 @@ class IngestBatchOut(BaseModel):
 class BatchMetadataUpdate(BaseModel):
     artist: str = Field(min_length=1)
     album: str = Field(min_length=1)
-    year: str = Field(pattern=r"^(19|20)\d{2}$")
+    year: str | None = Field(default=None, pattern=r"^(19|20)\d{2}$")
     primary_genre: str | None = None
     format: str | None = None
     note: str | None = None
+    accepted_unknown_album_artist: bool = False
+    accepted_unknown_album_title: bool = False
+    accepted_unknown_year: bool = False
+    lookup_later: bool = False
 
 
 class MovieMetadataUpdate(BaseModel):
@@ -267,11 +274,17 @@ class DiscographyAlbumUpdate(BaseModel):
         "exclude",
     ] = "album"
     include: bool = True
+    accepted_unknown_album_artist: bool = False
+    accepted_unknown_album_title: bool = False
+    accepted_unknown_year: bool = False
+    lookup_later: bool = False
 
 
 class DiscographyMetadataUpdate(BaseModel):
     artist: str = Field(min_length=1)
     albums: list[DiscographyAlbumUpdate] | None = None
+    accepted_unknown_discography_artist: bool = False
+    lookup_later: bool = False
 
 class PaginatedResponse(BaseModel, Generic[T]):
     items: list[T]

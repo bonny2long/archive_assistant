@@ -95,29 +95,48 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
             target.append(_item(warning, warning.replace("_", " ").capitalize()))
 
     if detected_type == "music_album":
-        if not str(meta.get("artist") or meta.get("albumartist") or "").strip():
+        artist = str(meta.get("artist") or meta.get("albumartist") or "").strip()
+        album = str(meta.get("album") or "").strip()
+        if (
+            (not artist or artist.casefold() in {"unknown", "unknown artist", "unkn"})
+            and not meta.get("accepted_unknown_album_artist")
+        ):
             blocking.append(_item("artist_missing", "Artist is required before approval."))
-        if not str(meta.get("album") or "").strip():
+        if (
+            (not album or album.casefold() in {"unknown", "unknown album", "unkn"})
+            and not meta.get("accepted_unknown_album_title")
+        ):
             blocking.append(_item("album_missing", "Album title is required before approval."))
-        if not str(meta.get("year") or meta.get("date") or "")[:4].isdigit():
-            blocking.append(_item("year_missing", "A four-digit year is required before approval."))
+        year = str(meta.get("year") or meta.get("date") or "")[:4]
+        if not year.isdigit():
+            non_blocking.append(_item(
+                "year_missing",
+                "Year is missing. It may be accepted as unknown and reviewed later.",
+            ))
     elif detected_type == "music_discography":
-        if not str(meta.get("artist") or "").strip():
+        artist = str(meta.get("artist") or "").strip()
+        if (
+            (not artist or artist.casefold() in {"unknown", "unknown artist", "unkn"})
+            and not meta.get("accepted_unknown_discography_artist")
+        ):
             blocking.append(_item("artist_missing", "Discography artist is required."))
         for album in meta.get("albums", []):
             if not isinstance(album, dict) or not album.get("include", True):
                 continue
             source = str(album.get("source_folder") or "")
-            if not str(album.get("album") or "").strip():
+            if (
+                not str(album.get("album") or "").strip()
+                and not album.get("accepted_unknown_album_title")
+            ):
                 blocking.append(_item(
                     "album_missing_title",
                     "Included release is missing a title.",
                     source_folder=source,
                 ))
             if not str(album.get("year") or "").strip():
-                blocking.append(_item(
+                non_blocking.append(_item(
                     "album_missing_year",
-                    "Included release is missing a year.",
+                    "Included release is missing a year and may be reviewed later.",
                     source_folder=source,
                 ))
     elif detected_type == "video_movie":

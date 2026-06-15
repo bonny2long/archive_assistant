@@ -12,9 +12,9 @@ scan → classify → review → edit → approve → move → manifest → inde
 
 ### v2 Status
 
-**v2.064 is functionally passing for book/audiobook metadata assist and move
-manifests. Full v2 remains open until music, movie, and TV metadata assist reach
-parity.**
+**v2.065 adds functional music album/discography metadata-assist parity to the
+v2.064 book/audiobook checkpoint. Full v2 remains open until movie and TV
+metadata assist reach parity.**
 
 ### Safety rules
 

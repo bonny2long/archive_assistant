@@ -6,6 +6,8 @@ import type {
   DiscographyReleaseType,
 } from "../types/archive";
 import ReviewIssuesPanel from "./ReviewIssuesPanel";
+import MetadataAssistStaleWarning from "./MetadataAssistStaleWarning";
+import MetadataSuggestionChips from "./MetadataSuggestionChips";
 
 type Props = {
   batch: BatchSummary;
@@ -48,6 +50,10 @@ function initialAlbums(batch: BatchSummary): DiscographyAlbumUpdate[] {
       year: album.year ?? null,
       release_type: releaseType,
       include: album.include !== false && releaseType !== "exclude",
+      accepted_unknown_album_artist: album.accepted_unknown_album_artist ?? false,
+      accepted_unknown_album_title: album.accepted_unknown_album_title ?? false,
+      accepted_unknown_year: album.accepted_unknown_year ?? false,
+      lookup_later: album.lookup_later ?? false,
     };
   });
 }
@@ -79,6 +85,11 @@ export default function DiscographyEditor({
     () => batch.suggested_metadata?.artist ?? batch.artist ?? "",
   );
   const [albums, setAlbums] = useState(() => initialAlbums(batch));
+  const [acceptedUnknownArtist, setAcceptedUnknownArtist] = useState(
+    Boolean(batch.accepted_unknown_discography_artist),
+  );
+  const [lookupLater, setLookupLater] = useState(Boolean(batch.lookup_later));
+  const [filter, setFilter] = useState<"repair" | "included" | "excluded" | "all">("repair");
   const collectionDestination = useMemo(
     () => `Music/Discographies/${sanitizePathPart(artist)}`,
     [artist],
@@ -91,9 +102,17 @@ export default function DiscographyEditor({
     () => new Map(batch.albums.map((album) => [album.source_folder, album])),
     [batch.albums],
   );
-  const valid = artist.trim().length > 0
+  const visibleAlbums = albums.filter((album) => {
+    if (filter === "included") return album.include;
+    if (filter === "excluded") return !album.include;
+    if (filter === "repair") {
+      return album.include && (!album.album.trim() || !album.year || album.lookup_later);
+    }
+    return true;
+  });
+  const valid = (artist.trim().length > 0 || acceptedUnknownArtist)
     && albums.every((album) => (
-      album.album.trim().length > 0
+      (!album.include || album.album.trim().length > 0 || album.accepted_unknown_album_title)
       && (!album.year || /^(19|20)\d{2}$/.test(album.year))
     ));
 
@@ -115,7 +134,12 @@ export default function DiscographyEditor({
         onMouseDown={(event) => event.stopPropagation()}
         onSubmit={(event) => {
           event.preventDefault();
-          if (valid) void onSave({ artist: artist.trim(), albums });
+          if (valid) void onSave({
+            artist: artist.trim() || "Unknown Artist",
+            albums,
+            accepted_unknown_discography_artist: acceptedUnknownArtist,
+            lookup_later: lookupLater,
+          });
         }}
       >
         <div className="metadata-editor__header">
@@ -135,10 +159,18 @@ export default function DiscographyEditor({
             confirmLabel="Confirm release list"
             onConfirm={onConfirm}
           />
+          <MetadataAssistStaleWarning batch={batch} />
           <div className="discography-editor__collection">
             <label>
-              <span>Artist</span>
+              <span>Discography artist</span>
               <input value={artist} autoFocus onChange={(event) => setArtist(event.target.value)} />
+              <MetadataSuggestionChips
+                label="Discography artist"
+                field="album_artist"
+                candidates={batch.metadata_candidates?.album_artist ?? []}
+                currentValue={artist}
+                onApply={setArtist}
+              />
             </label>
             <div className="metadata-editor__preview">
               <span>Destination preview</span>
@@ -146,9 +178,50 @@ export default function DiscographyEditor({
             </div>
           </div>
 
+          <section className="acceptance-controls">
+            <div>
+              <strong>Discography decisions</strong>
+              <p>Accepted unknowns and lookup-later choices remain in the move manifest.</p>
+            </div>
+            <div className="acceptance-controls__buttons">
+              <button type="button" className={`btn-sm${acceptedUnknownArtist ? " btn-sm--active" : ""}`} onClick={() => setAcceptedUnknownArtist((value) => !value)}>
+                {acceptedUnknownArtist ? "Unknown Artist Accepted" : "Accept Unknown Discography Artist"}
+              </button>
+              <button type="button" className={`btn-sm${lookupLater ? " btn-sm--active" : ""}`} onClick={() => setLookupLater((value) => !value)}>
+                {lookupLater ? "Lookup Later Marked" : "Lookup Later"}
+              </button>
+            </div>
+          </section>
+
           <div className="discography-editor__release-summary">
             <strong>Releases</strong>
             <span>{albums.length} releases · {trackCount} tracks</span>
+          </div>
+
+          <div className="discography-editor__bulk-actions">
+            {(["repair", "included", "excluded", "all"] as const).map((value) => (
+              <button type="button" className={`btn-sm${filter === value ? " btn-sm--active" : ""}`} key={value} onClick={() => setFilter(value)}>
+                {value === "repair" ? "Needs repair" : value[0].toUpperCase() + value.slice(1)}
+              </button>
+            ))}
+            <button type="button" className="btn-sm" onClick={() => {
+              const visible = new Set(visibleAlbums.map((album) => album.source_folder));
+              setAlbums((current) => current.map((album) => visible.has(album.source_folder)
+                ? { ...album, accepted_unknown_album_artist: true }
+                : album));
+            }}>Accept unknown artists for visible</button>
+            <button type="button" className="btn-sm" onClick={() => {
+              const visible = new Set(visibleAlbums.map((album) => album.source_folder));
+              setAlbums((current) => current.map((album) => visible.has(album.source_folder)
+                ? { ...album, lookup_later: true }
+                : album));
+            }}>Mark visible lookup later</button>
+            <button type="button" className="btn-sm" onClick={() => {
+              const visible = new Set(visibleAlbums.map((album) => album.source_folder));
+              setAlbums((current) => current.map((album) => visible.has(album.source_folder)
+                ? { ...album, include: false, release_type: "exclude" }
+                : album));
+            }}>Exclude visible</button>
           </div>
 
           <div className="discography-editor__releases">
@@ -160,7 +233,7 @@ export default function DiscographyEditor({
               <span>Destination preview</span>
               <span>Warnings</span>
             </div>
-            {albums.map((album) => {
+            {visibleAlbums.map((album) => {
               const source = albumsBySource.get(album.source_folder);
               const destination = albumDestination(artist, album);
               return (
@@ -188,6 +261,14 @@ export default function DiscographyEditor({
                           year: event.target.value || null,
                         })}
                       />
+                      <MetadataSuggestionChips
+                        label={`Year for ${album.album}`}
+                        field="year"
+                        candidates={source?.metadata_candidates?.year ?? []}
+                        currentValue={album.year ?? ""}
+                        onApply={(value) => updateAlbum(album.source_folder, { year: value })}
+                        maxVisible={1}
+                      />
                   </div>
                   <div className="album-edit-row__title">
                       <input
@@ -196,6 +277,14 @@ export default function DiscographyEditor({
                         onChange={(event) => updateAlbum(album.source_folder, {
                           album: event.target.value,
                         })}
+                      />
+                      <MetadataSuggestionChips
+                        label={`Title for ${album.source_folder}`}
+                        field="album_title"
+                        candidates={source?.metadata_candidates?.album_title ?? []}
+                        currentValue={album.album}
+                        onApply={(value) => updateAlbum(album.source_folder, { album: value })}
+                        maxVisible={1}
                       />
                   </div>
                   <div>
@@ -219,10 +308,24 @@ export default function DiscographyEditor({
                     {destination}
                   </code>
                   <div className="album-edit-row__warnings">
-                    <small>{source?.track_count ?? 0} track(s)</small>
+                    <small>
+                      {source?.track_count ?? 0} track(s) · {source?.disc_count ?? 1} disc(s) · {source?.format ?? "Unknown"}
+                    </small>
+                    <small>Artwork: {source?.artwork_count ?? 0}</small>
                     {source?.warnings?.length
                       ? source.warnings.map((warning) => <span key={warning}>{warning.replace(/_/g, " ")}</span>)
                       : <small>No warnings</small>}
+                    <div className="album-edit-row__decisions">
+                      <button type="button" className={`btn-sm${album.accepted_unknown_album_title ? " btn-sm--active" : ""}`} onClick={() => updateAlbum(album.source_folder, { accepted_unknown_album_title: !album.accepted_unknown_album_title })}>
+                        Unknown title
+                      </button>
+                      <button type="button" className={`btn-sm${album.accepted_unknown_year ? " btn-sm--active" : ""}`} onClick={() => updateAlbum(album.source_folder, { accepted_unknown_year: !album.accepted_unknown_year })}>
+                        Unknown year
+                      </button>
+                      <button type="button" className={`btn-sm${album.lookup_later ? " btn-sm--active" : ""}`} onClick={() => updateAlbum(album.source_folder, { lookup_later: !album.lookup_later })}>
+                        Lookup later
+                      </button>
+                    </div>
                   </div>
                 </div>
               );

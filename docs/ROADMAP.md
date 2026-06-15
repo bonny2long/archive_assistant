@@ -47,10 +47,20 @@ Passing at this checkpoint:
 
 Still open for full v2:
 
-- Music metadata-assist parity
 - Movie metadata-assist parity
 - TV metadata-assist parity
 - Final mixed-media v2 regression and release lock
+
+### v2.065 Music Metadata Assist
+
+Passing at this checkpoint:
+
+- Local music candidates from folders, parent folders, filenames, embedded tags, and artwork
+- DJ/mixtape guards that prevent weak VA tags from replacing stronger folder context
+- Album and discography suggestion chips and guided repair controls
+- Explicit accepted-unknown and lookup-later decisions for music
+- Album track detail and artwork evidence in JSON/Markdown move manifests
+- Central discography move manifests under `Music/Metadata/move_manifests`
 
 Scope stays focused on metadata only:
 

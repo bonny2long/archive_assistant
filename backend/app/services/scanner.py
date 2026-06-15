@@ -10,6 +10,7 @@ from app.models.archive import IngestBatch, IngestFile
 from app.services.checksum import file_sha256
 from app.services.music_metadata import (
     album_group_key,
+    build_music_metadata_candidates,
     build_suggested_metadata,
     canonical_artist_key,
     clean_compilation_artist,
@@ -54,6 +55,8 @@ from app.services.video_metadata import (
 from app.services.review_state import build_review_state
 from app.services.metadata_candidates import (
     METADATA_ASSIST_VERSION,
+    add_candidate,
+    make_candidate,
     preferred_candidate_value,
 )
 from app.services.title_display import clean_display_title, destination_title
@@ -1617,7 +1620,13 @@ def _create_discography_batch(
 
     for child, paths in sorted(child_groups.items(), key=lambda item: item[0].name.lower()):
         folder = parse_music_folder_name(child.name)
-        track_metadata = [file_metadata[str(path)] for path in paths]
+        track_metadata = [
+            {
+                **file_metadata[str(path)],
+                "source_filename": path.name,
+            }
+            for path in paths
+        ]
         album = folder.get("album") or child.name
         year = folder.get("year")
         extensions = {path.suffix.lower() for path in paths}
@@ -1627,6 +1636,10 @@ def _create_discography_batch(
         }
         formats.update(child_formats)
         album_format = ", ".join(sorted(child_formats))
+        disc_count = len({
+            int(metadata.get("discnumber") or 1)
+            for metadata in track_metadata
+        })
         child_warnings = []
         release_tags = music_folder_release_tags(child.name)
         if not year:
@@ -1665,13 +1678,16 @@ def _create_discography_batch(
             child_warnings.append("album_title_from_folder_cleanup")
         if len(extensions) > 1:
             child_warnings.append("mixed_formats")
-        if {"album_missing_year", "album_missing_title"} & set(child_warnings):
+        if "album_missing_title" in child_warnings:
             warnings.append("child_album_metadata_missing")
-        child_blocking = bool(
-            {"album_missing_year", "album_missing_title"} & set(child_warnings)
-        )
+        child_blocking = "album_missing_title" in child_warnings
         artwork_paths = _artwork_files(child)
         ignored_sidecars = _ignored_music_sidecars(child)
+        album_candidates, track_candidates = build_music_metadata_candidates(
+            child,
+            track_metadata,
+            compilation=release_type == "compilation",
+        )
 
         album_summaries.append(
             {
@@ -1681,6 +1697,7 @@ def _create_discography_batch(
                 "year": year,
                 "format": album_format,
                 "track_count": len(paths),
+                "disc_count": disc_count,
                 "artwork_count": len(artwork_paths),
                 "artwork_files": [path.name for path in artwork_paths],
                 "ignored_sidecar_count": len(ignored_sidecars),
@@ -1692,6 +1709,12 @@ def _create_discography_batch(
                 ),
                 "warnings": list(dict.fromkeys(child_warnings)),
                 "release_tags_removed": release_tags,
+                "metadata_candidates": album_candidates,
+                "track_candidates": track_candidates,
+                "accepted_unknown_album_artist": False,
+                "accepted_unknown_album_title": False,
+                "accepted_unknown_year": False,
+                "lookup_later": False,
             }
         )
         for path in paths:
@@ -1753,6 +1776,11 @@ def _create_discography_batch(
     collection_sidecars = _ignored_music_sidecars(parent)
     metadata = {
         "artist": artist,
+        "review_type": "music_discography",
+        "review_mode": "album_list",
+        "metadata_assist_version": METADATA_ASSIST_VERSION,
+        "accepted_unknown_discography_artist": False,
+        "lookup_later": False,
         "collection_type": "discography",
         "album_count": len(album_summaries),
         "release_count": len(album_summaries),
@@ -1775,6 +1803,28 @@ def _create_discography_batch(
         "metadata_warnings": list(dict.fromkeys(warnings)),
         "confidence": 0.6 if blocking else 1.0,
     }
+    metadata_candidates: dict[str, list[dict]] = {}
+    add_candidate(
+        metadata_candidates,
+        make_candidate(
+            "album_artist",
+            parent_artist,
+            "parent_folder_name",
+            "Discography folder name",
+            0.9,
+        ),
+    )
+    add_candidate(
+        metadata_candidates,
+        make_candidate(
+            "album_artist",
+            embedded_artist,
+            "audio_tag_albumartist",
+            "Common embedded album artist tag",
+            0.92,
+        ),
+    )
+    metadata["metadata_candidates"] = metadata_candidates
     metadata = build_review_state("music_discography", metadata)
     batch = IngestBatch(
         source_kind="manual-drop",
@@ -2001,7 +2051,13 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
             file_metadata[str(path)].get("discnumber", 1)
             for path in paths
         }
-        track_metadata = [file_metadata[str(path)] for path in paths]
+        track_metadata = [
+            {
+                **file_metadata[str(path)],
+                "source_filename": path.name,
+            }
+            for path in paths
+        ]
         album_meta = {
             "artist": _representative_value(
                 track_metadata, "albumartist", sample_meta["albumartist"]
@@ -2047,6 +2103,39 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
             track_metadata,
             album_meta,
         )
+        metadata_candidates, track_candidates = build_music_metadata_candidates(
+            source_path,
+            track_metadata,
+            compilation=bool(
+                suggested_metadata.get("compilation")
+                or album_meta.get("is_compilation")
+            ),
+        )
+        album_meta.update({
+            "review_type": "music_album",
+            "review_mode": "single_album",
+            "metadata_assist_version": METADATA_ASSIST_VERSION,
+            "metadata_candidates": metadata_candidates,
+            "track_candidates": track_candidates,
+            "accepted_unknown_album_artist": False,
+            "accepted_unknown_album_title": False,
+            "accepted_unknown_year": False,
+            "lookup_later": False,
+        })
+        album_meta["artwork_candidates"] = [
+            {
+                "field": "artwork",
+                "value": path.name,
+                "source": "music_sidecar_artwork",
+                "source_label": "Music sidecar artwork",
+                "confidence": 0.9,
+                "confidence_label": "high",
+                "applied": False,
+                "ignored": False,
+                "notes": [],
+            }
+            for path in artwork_paths
+        ]
         folder_display_artist, folder_artist_cleanup = (
             compilation_artist_cleanup_from_folder(source_path.name)
         )

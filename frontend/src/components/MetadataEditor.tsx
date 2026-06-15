@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import type { BatchMetadataUpdate, BatchSummary } from "../types/archive";
+import MetadataAssistStaleWarning from "./MetadataAssistStaleWarning";
+import MetadataSuggestionChips from "./MetadataSuggestionChips";
 
 type Props = {
   batch: BatchSummary;
@@ -70,13 +72,16 @@ function buildLiveMusicIssues(params: {
   year: string;
   genre: string;
   originalWarnings: string[];
+  acceptedUnknownArtist: boolean;
+  acceptedUnknownAlbum: boolean;
+  acceptedUnknownYear: boolean;
 }) {
   const blockers: string[] = [];
   const warnings: string[] = [];
 
-  if (isUnknown(params.artist)) warnings.push("artist_missing");
-  if (isUnknown(params.album)) blockers.push("album_missing");
-  if (!/^(19|20)\d{2}$/.test(params.year.trim())) blockers.push("year_missing");
+  if (isUnknown(params.artist) && !params.acceptedUnknownArtist) blockers.push("artist_missing");
+  if (isUnknown(params.album) && !params.acceptedUnknownAlbum) blockers.push("album_missing");
+  if (!/^(19|20)\d{2}$/.test(params.year.trim())) warnings.push("year_missing");
   if (isUnknown(params.genre)) warnings.push("genre_missing");
 
   const liveFieldWarnings = new Set([
@@ -109,6 +114,17 @@ export default function MusicAlbumReviewEditor({
   const [note, setNote] = useState(
     () => String(batch.suggested_metadata?.note ?? ""),
   );
+  const [acceptedUnknownArtist, setAcceptedUnknownArtist] = useState(
+    Boolean(batch.accepted_unknown_album_artist),
+  );
+  const [acceptedUnknownAlbum, setAcceptedUnknownAlbum] = useState(
+    Boolean(batch.accepted_unknown_album_title),
+  );
+  const [acceptedUnknownYear, setAcceptedUnknownYear] = useState(
+    Boolean(batch.accepted_unknown_year),
+  );
+  const [lookupLater, setLookupLater] = useState(Boolean(batch.lookup_later));
+  const candidates = batch.metadata_candidates ?? {};
 
   const preview = useMemo(() => {
     const root = destinationRoot(batch.suggested_destination);
@@ -130,13 +146,28 @@ export default function MusicAlbumReviewEditor({
       year,
       genre,
       originalWarnings: batch.metadata_warnings ?? [],
+      acceptedUnknownArtist,
+      acceptedUnknownAlbum,
+      acceptedUnknownYear,
     }),
-    [artist, album, year, genre, batch.metadata_warnings],
+    [
+      artist,
+      album,
+      year,
+      genre,
+      batch.metadata_warnings,
+      acceptedUnknownArtist,
+      acceptedUnknownAlbum,
+      acceptedUnknownYear,
+    ],
   );
 
-  const valid = !isUnknown(artist)
-    && !isUnknown(album)
-    && /^(19|20)\d{2}$/.test(year.trim());
+  const artistReady = !isUnknown(artist) || acceptedUnknownArtist;
+  const albumReady = !isUnknown(album) || acceptedUnknownAlbum;
+  const yearReady = /^(19|20)\d{2}$/.test(year.trim())
+    || acceptedUnknownYear
+    || year.trim() === "";
+  const valid = artistReady && albumReady && yearReady;
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -147,12 +178,16 @@ export default function MusicAlbumReviewEditor({
           event.preventDefault();
           if (!valid) return;
           void onSave({
-            artist: artist.trim(),
-            album: album.trim(),
-            year: year.trim(),
+            artist: isUnknown(artist) ? "Unknown Artist" : artist.trim(),
+            album: isUnknown(album) ? "Unknown Album" : album.trim(),
+            year: /^(19|20)\d{2}$/.test(year.trim()) ? year.trim() : null,
             primary_genre: genre.trim() || null,
             format: batch.format ?? "MP3",
             note: note.trim() || null,
+            accepted_unknown_album_artist: acceptedUnknownArtist,
+            accepted_unknown_album_title: acceptedUnknownAlbum,
+            accepted_unknown_year: acceptedUnknownYear,
+            lookup_later: lookupLater,
           });
         }}
       >
@@ -169,6 +204,7 @@ export default function MusicAlbumReviewEditor({
 
         {/* ── Body ── */}
         <div className="editor-shell__body">
+          <MetadataAssistStaleWarning batch={batch} />
           {(liveIssues.blockers.length > 0 || liveIssues.warnings.length > 0) && (
             <section className="review-issues">
               <div className="review-issues__summary">
@@ -202,26 +238,51 @@ export default function MusicAlbumReviewEditor({
             </section>
           )}
 
+          <section className="acceptance-controls">
+            <div>
+              <strong>Accepted unknown metadata</strong>
+              <p>Explicit choices remain visible in the move manifest.</p>
+            </div>
+            <div className="acceptance-controls__buttons">
+              <button type="button" className={`btn-sm${acceptedUnknownArtist ? " btn-sm--active" : ""}`} onClick={() => setAcceptedUnknownArtist((value) => !value)}>
+                {acceptedUnknownArtist ? "Unknown Artist Accepted" : "Accept Unknown Artist"}
+              </button>
+              <button type="button" className={`btn-sm${acceptedUnknownAlbum ? " btn-sm--active" : ""}`} onClick={() => setAcceptedUnknownAlbum((value) => !value)}>
+                {acceptedUnknownAlbum ? "Unknown Album Accepted" : "Accept Unknown Album Title"}
+              </button>
+              <button type="button" className={`btn-sm${acceptedUnknownYear ? " btn-sm--active" : ""}`} onClick={() => setAcceptedUnknownYear((value) => !value)}>
+                {acceptedUnknownYear ? "Unknown Year Accepted" : "Accept Unknown Year"}
+              </button>
+              <button type="button" className={`btn-sm${lookupLater ? " btn-sm--active" : ""}`} onClick={() => setLookupLater((value) => !value)}>
+                {lookupLater ? "Lookup Later Marked" : "Lookup Later"}
+              </button>
+            </div>
+          </section>
+
           <div className="editor-grid">
             <label>
-              <span>Artist</span>
+              <span>Album artist</span>
               <input value={artist} onChange={(event) => setArtist(event.target.value)} autoFocus />
               {suggestionSource(batch, "artist") && <small>{suggestionSource(batch, "artist")}</small>}
+              <MetadataSuggestionChips label="Album artist" field="album_artist" candidates={candidates.album_artist ?? []} currentValue={artist} onApply={setArtist} />
             </label>
             <label>
-              <span>Album</span>
+              <span>Album title</span>
               <input value={album} onChange={(event) => setAlbum(event.target.value)} />
               {suggestionSource(batch, "album") && <small>{suggestionSource(batch, "album")}</small>}
+              <MetadataSuggestionChips label="Album title" field="album_title" candidates={candidates.album_title ?? []} currentValue={album} onApply={setAlbum} />
             </label>
             <label>
               <span>Year</span>
               <input value={year} maxLength={4} onChange={(event) => setYear(event.target.value)} />
               {suggestionSource(batch, "year") && <small>{suggestionSource(batch, "year")}</small>}
+              <MetadataSuggestionChips label="Year" field="year" candidates={candidates.year ?? []} currentValue={year} onApply={setYear} />
             </label>
             <label>
               <span>Genre</span>
               <input value={genre} onChange={(event) => setGenre(event.target.value)} />
               {suggestionSource(batch, "genre") && <small>{suggestionSource(batch, "genre")}</small>}
+              <MetadataSuggestionChips label="Genre" field="genre" candidates={candidates.genre ?? []} currentValue={genre} onApply={setGenre} />
             </label>
           </div>
 
@@ -238,7 +299,7 @@ export default function MusicAlbumReviewEditor({
             <div><small>Album folder</small><strong>{preview.albumFolder || "-"}</strong></div>
             <div><small>Full path</small><code>{preview.fullPath}</code></div>
           </div>
-          {!valid && <p className="metadata-editor__error">Artist, album, and a four-digit year are required.</p>}
+          {!valid && <p className="metadata-editor__error">Album artist and title must be supplied or explicitly accepted as unknown. Invalid years must be corrected or accepted.</p>}
         </div>
 
         {/* ── Footer ── */}

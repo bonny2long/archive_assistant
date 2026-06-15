@@ -403,8 +403,20 @@ def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Sessio
         meta["artist_cleanup"] = artist_cleanup
         meta["is_compilation"] = True
     meta["album"] = update.album.strip()
-    meta["year"] = update.year.strip()
-    meta["date"] = update.year.strip()
+    year = update.year.strip() if update.year else ""
+    meta["year"] = year
+    meta["date"] = year
+    meta["accepted_unknown_album_artist"] = (
+        update.accepted_unknown_album_artist
+    )
+    meta["accepted_unknown_album_title"] = (
+        update.accepted_unknown_album_title
+    )
+    meta["accepted_unknown_year"] = update.accepted_unknown_year
+    meta["lookup_later"] = update.lookup_later
+    meta["review_type"] = "music_album"
+    meta["review_mode"] = "single_album"
+    meta["metadata_assist_version"] = METADATA_ASSIST_VERSION
     meta.pop("metadata_alerts", None)
     if update.primary_genre is not None:
         meta["genre"] = update.primary_genre.strip() or "Unknown"
@@ -416,6 +428,13 @@ def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Sessio
     # Re-evaluate quality
     quality_res = evaluate_music_album_metadata(meta)
     meta.update(quality_res)
+    if any((
+        update.accepted_unknown_album_artist,
+        update.accepted_unknown_album_title,
+        update.accepted_unknown_year,
+    )):
+        meta["metadata_quality"] = "accepted_with_unknowns"
+        meta["confidence"] = max(float(meta.get("confidence") or 0), 0.75)
     if artist_cleanup:
         warnings = list(meta.get("metadata_warnings", []))
         warnings.extend(["compilation_detected", "compilation_prefix_removed"])
@@ -449,8 +468,8 @@ def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Sessio
             "genre": "manual correction",
         },
     }
-    batch.confidence = quality_res["confidence"]
-    batch.metadata_confirmed = True
+    batch.confidence = meta["confidence"]
+    batch.metadata_confirmed = not bool(meta["blocking_review_items"])
 
     if not meta["blocking_review_items"]:
         batch.status = "pending_review"
@@ -1101,6 +1120,13 @@ def update_discography_metadata(
     artist = update.artist.strip()
     metadata = dict(batch.metadata_json or {})
     metadata["artist"] = artist
+    metadata["accepted_unknown_discography_artist"] = (
+        update.accepted_unknown_discography_artist
+    )
+    metadata["lookup_later"] = update.lookup_later
+    metadata["review_type"] = "music_discography"
+    metadata["review_mode"] = "album_list"
+    metadata["metadata_assist_version"] = METADATA_ASSIST_VERSION
     updates_by_source = {
         item.source_folder: item
         for item in (update.albums or [])
@@ -1118,12 +1144,26 @@ def update_discography_metadata(
             album_copy["year"] = correction.year
             album_copy["release_type"] = correction.release_type
             album_copy["include"] = included
+            album_copy["accepted_unknown_album_artist"] = (
+                correction.accepted_unknown_album_artist
+            )
+            album_copy["accepted_unknown_album_title"] = (
+                correction.accepted_unknown_album_title
+            )
+            album_copy["accepted_unknown_year"] = (
+                correction.accepted_unknown_year
+            )
+            album_copy["lookup_later"] = correction.lookup_later
             album_warnings = [
                 warning
                 for warning in album_copy.get("warnings", [])
                 if warning not in {"album_missing_year", "album_missing_title"}
             ]
-            if included and not correction.year:
+            if (
+                included
+                and not correction.year
+                and not correction.accepted_unknown_year
+            ):
                 album_warnings.append("album_missing_year")
             album_copy["warnings"] = list(dict.fromkeys(album_warnings))
             album_copy["status"] = (
@@ -1156,6 +1196,16 @@ def update_discography_metadata(
         album_metadata["year"] = correction.year
         album_metadata["release_type"] = correction.release_type
         album_metadata["include"] = included
+        album_metadata["accepted_unknown_album_artist"] = (
+            correction.accepted_unknown_album_artist
+        )
+        album_metadata["accepted_unknown_album_title"] = (
+            correction.accepted_unknown_album_title
+        )
+        album_metadata["accepted_unknown_year"] = (
+            correction.accepted_unknown_year
+        )
+        album_metadata["lookup_later"] = correction.lookup_later
         track_metadata["_discography_album"] = album_metadata
         ingest_file.metadata_json = track_metadata
     warnings = [
@@ -1182,15 +1232,32 @@ def update_discography_metadata(
     blocking = any(
         album.get("include", True)
         and (
-            not album.get("album")
-            or not album.get("year")
+            (
+                not album.get("album")
+                and not album.get("accepted_unknown_album_title")
+            )
         )
         for album in albums
     )
     if blocking:
         warnings.append("child_album_metadata_missing")
     metadata["metadata_warnings"] = warnings
-    metadata["metadata_quality"] = "weak" if blocking else "good"
+    accepted_unknowns = bool(
+        update.accepted_unknown_discography_artist
+        or any(
+            album.get("accepted_unknown_album_artist")
+            or album.get("accepted_unknown_album_title")
+            or album.get("accepted_unknown_year")
+            for album in albums
+        )
+    )
+    metadata["metadata_quality"] = (
+        "weak"
+        if blocking
+        else "accepted_with_unknowns"
+        if accepted_unknowns
+        else "good"
+    )
     metadata["confidence"] = 0.6 if blocking else 1.0
     metadata["review_confirmed"] = True
     metadata = build_review_state(batch.detected_type, metadata)
@@ -1201,7 +1268,7 @@ def update_discography_metadata(
         "sources": {"artist": "manual correction"},
     }
     batch.suggested_destination = str(settings.music_discographies_dir / artist)
-    batch.metadata_confirmed = True
+    batch.metadata_confirmed = not bool(metadata["blocking_review_items"])
     batch.confidence = metadata["confidence"]
     batch.status = (
         "needs_metadata_review"
@@ -1805,6 +1872,15 @@ def _batch_to_summary(
         ),
         accepted_unknown_narrator=bool(
             meta.get("accepted_unknown_narrator", False)
+        ),
+        accepted_unknown_album_artist=bool(
+            meta.get("accepted_unknown_album_artist", False)
+        ),
+        accepted_unknown_album_title=bool(
+            meta.get("accepted_unknown_album_title", False)
+        ),
+        accepted_unknown_discography_artist=bool(
+            meta.get("accepted_unknown_discography_artist", False)
         ),
         lookup_later=bool(meta.get("lookup_later", False)),
         move_manifest=meta.get("move_manifest"),

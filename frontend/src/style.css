@@ -535,6 +535,18 @@ button:focus-visible, input:focus-visible {
   color: var(--text-muted);
   font-size: 11px;
 }
+.discography-editor__bulk-actions,
+.album-edit-row__decisions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.discography-editor__bulk-actions {
+  padding: 0.35rem 0 0.75rem;
+}
+.album-edit-row__decisions {
+  margin-top: 0.4rem;
+}
 .discography-editor__releases {
   max-height: 58vh;
   overflow-x: auto;
