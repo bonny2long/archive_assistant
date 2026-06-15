@@ -8,10 +8,10 @@ from typing import Iterable
 
 from app.core.config import settings
 from app.core.time import serialize_utc
+from app.core.version import ARCHIVE_ASSISTANT_VERSION
 
 
 MANIFEST_VERSION = "v1"
-ARCHIVE_ASSISTANT_VERSION = "v2.066"
 
 
 def _relative(path: Path) -> str:
@@ -651,12 +651,14 @@ def write_move_manifest(
     destination_roots = []
     if (
         (
-            batch.detected_type == "book"
-            and review_type == "book_collection"
-        )
-        or (
-            batch.detected_type == "video_movie"
-            and review_type == "movie_collection"
+            (
+                batch.detected_type == "book"
+                and review_type == "book_collection"
+            )
+            or (
+                batch.detected_type == "video_movie"
+                and review_type == "movie_collection"
+            )
         )
         and destinations
     ):

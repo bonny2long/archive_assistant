@@ -4,8 +4,7 @@ import re
 import unicodedata
 from typing import Any
 
-
-METADATA_ASSIST_VERSION = "v2.066"
+from app.core.version import METADATA_ASSIST_VERSION
 
 GENERIC_UNKNOWN_VALUES = {
     "",

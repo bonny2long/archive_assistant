@@ -107,7 +107,7 @@ def check_audiobook(root: Path) -> None:
     assert json_path.exists()
     assert markdown_path.exists()
     manifest = json.loads(json_path.read_text(encoding="utf-8"))
-    assert manifest["archive_assistant_version"] == "v2.066"
+    assert manifest["archive_assistant_version"] == "v2.066B"
     assert manifest["detected_type"] == "audiobook"
     assert len(manifest["files_moved"]) == 1
     assert len(manifest["artwork_moved"]) == 1

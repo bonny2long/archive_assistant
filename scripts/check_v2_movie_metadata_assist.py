@@ -104,7 +104,7 @@ def main() -> None:
             "removed_tokens": parsed["release_tags_removed"],
         },
     }
-    assert ARCHIVE_ASSISTANT_VERSION == "v2.066"
+    assert ARCHIVE_ASSISTANT_VERSION == "v2.066B"
     assert _confirmed_metadata("video_movie", metadata)["source"] == "WEB-DL"
     assert _accepted_unknowns("video_movie", metadata) == {
         "title": False,
