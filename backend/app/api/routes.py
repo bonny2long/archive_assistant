@@ -632,7 +632,6 @@ def update_movie_collection_review(
 
     # Normalize movie_items from the submitted update
     movie_items = []
-    destination_parts = []
     for movie_update in update.movies:
         existing_item = next(
             (
@@ -644,13 +643,16 @@ def update_movie_collection_review(
             ),
             {},
         )
-        title = movie_update.title.strip()
-        year = movie_update.year.strip() if movie_update.year else ""
+        title = (movie_update.title or "").strip()
+        year = movie_update.year.strip() if movie_update.year else None
         edition = movie_update.edition.strip() if movie_update.edition else None
         fmt = movie_update.format.strip().upper() if movie_update.format else None
         include = bool(movie_update.include)
+        accepted_unknown_title = bool(movie_update.accepted_unknown_title)
+        accepted_unknown_year = bool(movie_update.accepted_unknown_year)
+        lookup_later = bool(movie_update.lookup_later)
 
-        destination_title = title or "Unknown Movie"
+        destination_title = title or "Unknown Title"
         destination_year = year or "Unknown Year"
         dest_label = (
             f"{destination_year} - {destination_title}"
@@ -658,7 +660,11 @@ def update_movie_collection_review(
             else f"{destination_year} - {destination_title} [{edition}]"
         )
         dest = f"Movies/Library/{safe_movie_path_part(dest_label)}"
-        destination_parts.append(dest)
+        destination_allowed = (
+            include
+            and bool(title or accepted_unknown_title)
+            and bool(year or accepted_unknown_year)
+        )
 
         movie_items.append(
             {
@@ -666,15 +672,15 @@ def update_movie_collection_review(
                 "source_key": movie_update.source_file,
                 "source_file": movie_update.source_file,
                 "include": include,
-                "title": title or "Unknown Movie",
-                "year": year or None,
+                "title": title,
+                "year": year,
                 "edition": edition,
                 "format": fmt,
                 "resolution": existing_item.get("resolution"),
                 "source": existing_item.get("source"),
-                "accepted_unknown_title": movie_update.accepted_unknown_title,
-                "accepted_unknown_year": movie_update.accepted_unknown_year,
-                "lookup_later": movie_update.lookup_later,
+                "accepted_unknown_title": accepted_unknown_title,
+                "accepted_unknown_year": accepted_unknown_year,
+                "lookup_later": lookup_later,
                 "metadata_candidates": existing_item.get(
                     "metadata_candidates",
                     {},
@@ -683,7 +689,7 @@ def update_movie_collection_review(
                     "release_cleanup",
                     {},
                 ),
-                "destination_preview": dest if include else None,
+                "destination_preview": dest if destination_allowed else None,
             }
         )
 

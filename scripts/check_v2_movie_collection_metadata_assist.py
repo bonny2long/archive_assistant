@@ -49,8 +49,21 @@ def main() -> None:
     })
     assert state["blocking_review_items"] == []
     assert any(
-        item["type"] == "movie_collection_item_missing_year"
+        item["type"] == "movie_collection_item_unknown_year_accepted"
         for item in state["non_blocking_review_items"]
+    )
+
+    items[1]["accepted_unknown_year"] = False
+    state = build_review_state("video_movie", {
+        "title": "Black Panther Collection",
+        "review_type": "movie_collection",
+        "video_file_count": 2,
+        "movie_items": items,
+        "metadata_warnings": [],
+    })
+    assert any(
+        item["type"] == "movie_collection_item_missing_year"
+        for item in state["blocking_review_items"]
     )
     print("v2.066 movie collection metadata assist checks passed")
 

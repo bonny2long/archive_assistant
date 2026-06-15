@@ -417,8 +417,9 @@ def _move_movie_collection_batch(
         if not item:
             continue
 
-        title = str(item.get("title") or "Unknown Movie").strip()
-        year = str(item.get("year") or "Unknown Year")[:4]
+        title = str(item.get("title") or "Unknown Title").strip()
+        raw_year = str(item.get("year") or "").strip()
+        year = raw_year if len(raw_year) == 4 and raw_year.isdigit() else "Unknown Year"
         edition = str(item.get("edition") or "").strip()
         dest_label = (
             f"{year} - {title}"

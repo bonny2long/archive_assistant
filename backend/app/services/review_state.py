@@ -149,18 +149,19 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
             resolved_review_type = "movie"
         meta["review_type"] = resolved_review_type
 
-        title = str(meta.get("title") or "").strip()
-        if (
-            (not title or title.casefold() in {"unknown", "unknown movie"})
-            and not meta.get("accepted_unknown_title")
-        ):
-            blocking.append(_item("movie_title_missing", "Movie title is required."))
-        year = str(meta.get("year") or "")
-        if len(year) != 4 or not year.isdigit():
-            non_blocking.append(_item(
-                "movie_year_missing",
-                "Movie year is missing and may be accepted as unknown.",
-            ))
+        if resolved_review_type != "movie_collection":
+            title = str(meta.get("title") or "").strip()
+            if (
+                (not title or title.casefold() in {"unknown", "unknown movie"})
+                and not meta.get("accepted_unknown_title")
+            ):
+                blocking.append(_item("movie_title_missing", "Movie title is required."))
+            year = str(meta.get("year") or "")
+            if len(year) != 4 or not year.isdigit():
+                non_blocking.append(_item(
+                    "movie_year_missing",
+                    "Movie year is missing and may be accepted as unknown.",
+                ))
         video_file_count = int(meta.get("video_file_count") or 0)
         if video_file_count > 1:
             # If resolved as movie_collection, the ambiguity is resolved.
@@ -189,22 +190,46 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
                 continue
             included_count += 1
             source_file = str(movie_item.get("source_file") or "")
+            title = str(movie_item.get("title") or "").strip()
+            accepted_unknown_title = bool(
+                movie_item.get("accepted_unknown_title")
+            )
+            accepted_unknown_year = bool(
+                movie_item.get("accepted_unknown_year")
+            )
             if (
-                not str(movie_item.get("title") or "").strip()
-                and not movie_item.get("accepted_unknown_title")
+                (not title or title.casefold() in {
+                    "unknown",
+                    "unknown movie",
+                    "unknown title",
+                })
+                and not accepted_unknown_title
             ):
                 blocking.append(_item(
                     "movie_collection_item_missing_title",
                     "Movie in collection is missing a title.",
                     file_name=source_file,
                 ))
-            raw_year = str(movie_item.get("year") or "")
-            if len(raw_year) != 4 or not raw_year.isdigit():
+            elif not title and accepted_unknown_title:
                 non_blocking.append(_item(
-                    "movie_collection_item_missing_year",
-                    "Movie in collection is missing a year.",
+                    "movie_collection_item_unknown_title_accepted",
+                    "Unknown movie title was explicitly accepted.",
                     file_name=source_file,
                 ))
+            raw_year = str(movie_item.get("year") or "")
+            if len(raw_year) != 4 or not raw_year.isdigit():
+                if accepted_unknown_year:
+                    non_blocking.append(_item(
+                        "movie_collection_item_unknown_year_accepted",
+                        "Unknown movie year was explicitly accepted.",
+                        file_name=source_file,
+                    ))
+                else:
+                    blocking.append(_item(
+                        "movie_collection_item_missing_year",
+                        "Movie in collection is missing a year.",
+                        file_name=source_file,
+                    ))
 
         # At least one movie must be included
         if has_movie_items and included_count == 0:

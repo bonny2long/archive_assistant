@@ -24,6 +24,15 @@ function approvalTitle(batch: BatchSummary): string {
   return getBatchDisplayTitle(batch);
 }
 
+function approvalStatus(batch: BatchSummary): string {
+  if (isApprovable(batch)) return "Ready to approve";
+  if (batch.blocking_review_items.length > 0) {
+    return "Blocked - fix review first";
+  }
+  if (batch.status === "approved") return "Already approved - skipped";
+  return `${batch.status.replace(/_/g, " ")} - skipped`;
+}
+
 export default function BulkApproveModal({
   batches,
   loading,
@@ -58,13 +67,7 @@ export default function BulkApproveModal({
               <i className={`ti ti-${isApprovable(batch) ? "disc" : "alert-triangle"}`} />
               <span>
                 <strong>{approvalTitle(batch)}</strong>
-                <small>
-                  {isApprovable(batch)
-                    ? "ready to approve"
-                    : batch.blocking_review_items.length > 0
-                      ? `${batch.blocking_review_items.length} blocking review item(s)`
-                      : batch.status.replace(/_/g, " ")}
-                </small>
+                <small>{approvalStatus(batch)}</small>
               </span>
             </div>
           ))}

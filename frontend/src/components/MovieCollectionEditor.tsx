@@ -32,6 +32,51 @@ function buildDestPreview(
   return `Movies/Library/${sanitizePath(folder)}`;
 }
 
+export function parseMovieFilename(sourceFile: string): {
+  title: string;
+  year: string | null;
+  edition: string | null;
+  format: string | null;
+} {
+  const fileName = sourceFile.split(/[\\/]/).pop() ?? sourceFile;
+  const extensionMatch = fileName.match(/\.([a-z0-9]{2,5})$/i);
+  const format = extensionMatch?.[1]?.toUpperCase() ?? null;
+  const stem = extensionMatch
+    ? fileName.slice(0, -extensionMatch[0].length)
+    : fileName;
+  const yearMatches = Array.from(
+    stem.matchAll(/(?:^|\D)((?:19|20)\d{2})(?!\d)/g),
+  );
+  const yearMatch = yearMatches.length > 0
+    ? yearMatches[yearMatches.length - 1]
+    : undefined;
+  const year = yearMatch?.[1] ?? null;
+  const yearIndex = yearMatch?.index ?? -1;
+  const titleSource = yearIndex >= 0 ? stem.slice(0, yearIndex) : stem;
+  const title = titleSource
+    .replace(/[._]+/g, " ")
+    .replace(/\s*-\s*/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  let edition: string | null = null;
+  if (yearMatch) {
+    edition = stem
+      .slice(yearIndex + yearMatch[0].length)
+      .replace(
+        /\b(?:2160p|1080p|720p|480p|4k|uhd|hdr10?|dv|bluray|brrip|bdrip|web[ ._-]?dl|web|webrip|hdrip|dvdrip|x264|x265|h264|h265|hevc|aac|dts|truehd|atmos)\b/gi,
+        " ",
+      )
+      .replace(/\b\d\.\d\b/g, " ")
+      .replace(/\b(?:BONE|YIFY|YTS|RARBG)\b/gi, " ")
+      .replace(/[._]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim() || null;
+  }
+
+  return { title, year, edition, format };
+}
+
 // ── Single item card ─────────────────────────────────────────────────────────
 
 type ItemCardProps = {
@@ -75,7 +120,13 @@ function CollectionItemCard({ sourceFile, item, onChange }: ItemCardProps) {
             value={item.title}
             disabled={!item.include}
             autoComplete="off"
-            onChange={(e) => onChange({ ...item, title: e.target.value })}
+            onChange={(e) => onChange({
+              ...item,
+              title: e.target.value,
+              accepted_unknown_title: e.target.value.trim()
+                ? false
+                : item.accepted_unknown_title,
+            })}
           />
           <MetadataSuggestionChips label={`Title for ${sourceFile}`} field="title" candidates={item.metadata_candidates?.title ?? []} currentValue={item.title} onApply={(value) => onChange({ ...item, title: value })} maxVisible={2} />
           {item.include && !titleValid && (
@@ -88,7 +139,13 @@ function CollectionItemCard({ sourceFile, item, onChange }: ItemCardProps) {
             value={item.year ?? ""}
             disabled={!item.include}
             maxLength={4}
-            onChange={(e) => onChange({ ...item, year: e.target.value || null })}
+            onChange={(e) => onChange({
+              ...item,
+              year: e.target.value || null,
+              accepted_unknown_year: e.target.value.trim()
+                ? false
+                : item.accepted_unknown_year,
+            })}
           />
           <MetadataSuggestionChips label={`Year for ${sourceFile}`} field="year" candidates={item.metadata_candidates?.year ?? []} currentValue={item.year ?? ""} onApply={(value) => onChange({ ...item, year: value })} maxVisible={2} />
           {item.include && !yearValid && (
@@ -169,14 +226,17 @@ function buildInitialItems(batch: BatchSummary): MovieCollectionItemUpdate[] {
   return videoFiles.map((sourceFile) => {
     const key = sourceFile.toLowerCase();
     const existing = existingByFile.get(key);
+    const parsed = parseMovieFilename(sourceFile);
     if (existing) {
       return {
         source_file: sourceFile,
         include: existing.include ?? true,
-        title: existing.title ?? "",
-        year: existing.year ?? "",
-        edition: existing.edition ?? null,
-        format: existing.format ?? null,
+        title: existing.title
+          || (existing.accepted_unknown_title ? "" : parsed.title),
+        year: existing.year
+          || (existing.accepted_unknown_year ? null : parsed.year),
+        edition: existing.edition ?? parsed.edition,
+        format: existing.format ?? parsed.format,
         metadata_candidates: existing.metadata_candidates ?? {},
         accepted_unknown_title: existing.accepted_unknown_title ?? false,
         accepted_unknown_year: existing.accepted_unknown_year ?? false,
@@ -187,10 +247,10 @@ function buildInitialItems(batch: BatchSummary): MovieCollectionItemUpdate[] {
     return {
       source_file: sourceFile,
       include: true,
-      title: "",
-      year: null,
-      edition: null,
-      format: null,
+      title: parsed.title,
+      year: parsed.year,
+      edition: parsed.edition,
+      format: parsed.format,
       metadata_candidates: {},
       accepted_unknown_title: false,
       accepted_unknown_year: false,
@@ -215,26 +275,27 @@ export default function MovieCollectionEditor({
   const [filter, setFilter] = useState<"repair" | "included" | "excluded" | "all">("repair");
 
   const includedCount = items.filter((i) => i.include).length;
-  const allValid = items.every(
+  const allValid = includedCount > 0 && items.every(
     (item) =>
       !item.include ||
       ((item.title.trim() !== "" || item.accepted_unknown_title) &&
-        (!item.year || /^(19|20)\d{2}$/.test(item.year.trim()))),
+        (
+          (Boolean(item.year) && /^(19|20)\d{2}$/.test(item.year!.trim()))
+          || (!item.year && item.accepted_unknown_year)
+        )),
   );
   const visibleItems = items.filter((item) => {
     if (filter === "included") return item.include;
     if (filter === "excluded") return !item.include;
     if (filter === "repair") {
       return item.include && (
-        !item.title.trim()
-        || !item.year
+        (!item.title.trim() && !item.accepted_unknown_title)
+        || (!item.year && !item.accepted_unknown_year)
         || item.lookup_later
       );
     }
     return true;
   });
-
-  const hasBlockers = (batch.blocking_review_items ?? []).length > 0;
 
   const handleItemChange = (
     sourceFile: string,
@@ -369,7 +430,7 @@ export default function MovieCollectionEditor({
 
           {!allValid && (
             <p className="metadata-editor__error">
-              Included movies need a title or an explicit unknown-title decision. Invalid years must be corrected.
+              Include at least one movie. Each included movie needs a title and year, or an explicit accepted-unknown decision.
             </p>
           )}
         </div>

@@ -230,6 +230,12 @@ def parse_movie_name(value: str) -> dict:
         for tag_match in RELEASE_TAG_PATTERN.finditer(after_year):
             after_year = after_year.replace(tag_match.group(0), "", 1)
         cleaned = re.sub(r"[._]+", " ", after_year)
+        cleaned = re.sub(
+            r"(?<!\d)(?:2[ .]0|5[ .]1|7[ .]1)(?!\d)",
+            " ",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
         cleaned = re.sub(r"\s+", " ", cleaned).strip(" -._()[]")
         if (
             cleaned
