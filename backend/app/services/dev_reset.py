@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -60,6 +61,36 @@ def _is_within(path: Path, root: Path) -> bool:
         return True
     except ValueError:
         return False
+
+
+def _enforce_script_test_root() -> None:
+    test_root = os.environ.get("ARCHIVE_ASSISTANT_RESET_TEST_ROOT")
+    if not test_root:
+        return
+    root = Path(test_root).resolve()
+    guarded_paths = [
+        settings.data_root,
+        settings.ingest_root,
+        settings.reports_dir,
+        settings.quarantine_reports_dir,
+        settings.quarantine_unknown_dir,
+        settings.quarantine_unsupported_dir,
+        settings.quarantine_discography_dir,
+        *_media_roots(),
+        settings.data_root / "_QUARANTINE",
+        settings.data_root / "_RECOVERY",
+    ]
+    outside = [
+        path
+        for path in guarded_paths
+        if not _is_within(path, root)
+    ]
+    if outside:
+        raise DevResetBlockedError([
+            "Reset safety script refused to run outside temp test root: "
+            f"test_root={root}; outside_paths="
+            + ", ".join(str(path) for path in outside)
+        ])
 
 
 def _remove_empty_directories(root: Path) -> int:
@@ -485,6 +516,7 @@ def _remove_quarantine_reports(batch_ids: list[int]) -> int:
 
 
 def reset_test_data(db: Session, *, apply: bool) -> DevResetSummary:
+    _enforce_script_test_root()
     batches = db.query(IngestBatch).order_by(IngestBatch.id.asc()).all()
     batch_ids = [batch.id for batch in batches]
     moves = (

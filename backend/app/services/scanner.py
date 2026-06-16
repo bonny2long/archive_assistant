@@ -208,7 +208,7 @@ def classify_ingest_item(path: Path) -> str:
             return "video_movie"
         if is_book_file(path):
             return "book"
-        return "unsupported_file"
+        return "unknown_type"
     if not path.is_dir():
         return "unknown_type"
     if _is_ignored_sidecar_only_folder(path):
@@ -263,6 +263,10 @@ def classify_ingest_item(path: Path) -> str:
     if audio_files and not video_files and looks_like_audiobook_source(path):
         return "audiobook"
     return "music_album"
+
+
+def is_skipped_root_unsupported_file(path: Path, classification: str) -> bool:
+    return path.is_file() and classification == "unknown_type"
 
 
 def _root_music_audio_files() -> list[Path]:
@@ -1341,6 +1345,12 @@ def repair_stale_media_batches(
                 source,
                 reason="empty_source_leftover",
             )
+        if classification == "unknown_type" and source.is_file():
+            _merge_active_quarantine_rows_for_source(
+                db,
+                source,
+                reason="unsupported_root_file_skipped",
+            )
         if classification == "ignored_sidecar_only_folder":
             _merge_active_quarantine_rows_for_source(
                 db,
@@ -2026,6 +2036,8 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
     for item, classification in classifications.items():
         if classification != "unknown_type":
             continue
+        if item.is_file():
+            continue
         batch = _create_unknown_batch(db, item, classification)
         if batch:
             unknown_batches.append(batch)
@@ -2038,6 +2050,11 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
         item
         for item, classification in classifications.items()
         if classification == "unsupported_file"
+    ]
+    skipped_root_unsupported = [
+        item
+        for item, classification in classifications.items()
+        if is_skipped_root_unsupported_file(item, classification)
     ]
     _retire_noisy_unsupported_batches(db, music_roots, loose_unsupported)
     _update_existing_music_sidecars(db, music_roots)
@@ -2053,10 +2070,10 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
             skipped_duplicates=0,
             batches=batches,
             unknown_items=sum(
-                classification == "unknown_type"
-                for classification in classifications.values()
+                classification == "unknown_type" and item.is_dir()
+                for item, classification in classifications.items()
             ),
-            unsupported_files=len(loose_unsupported),
+            unsupported_files=len(loose_unsupported) + len(skipped_root_unsupported),
             ignored_system_files=sum(
                 classification == "ignored_system_folder"
                 for classification in classifications.values()
@@ -2411,10 +2428,10 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
             for classification in classifications.values()
         ),
         unknown_items=sum(
-            classification == "unknown_type"
-            for classification in classifications.values()
+            classification == "unknown_type" and item.is_dir()
+            for item, classification in classifications.items()
         ),
-        unsupported_files=len(loose_unsupported),
+        unsupported_files=len(loose_unsupported) + len(skipped_root_unsupported),
         ignored_system_files=sum(
             classification == "ignored_system_folder"
             for classification in classifications.values()
