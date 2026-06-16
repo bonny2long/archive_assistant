@@ -1331,6 +1331,20 @@ def update_discography_metadata(
     return _batch_to_summary(batch, action_message="Discography metadata saved.")
 
 
+def _clear_stale_move_lock_for_review(batch: IngestBatch) -> None:
+    if batch.detected_type != "video_tv_show":
+        return
+    if batch.status not in {"pending_review", "needs_metadata_review"}:
+        return
+
+    metadata = dict(batch.metadata_json or {})
+    metadata.pop("metadata_locked_for_move", None)
+    metadata.pop("metadata_locked_at", None)
+    batch.metadata_json = metadata
+    batch.approved_at = None
+    batch.approved_by = None
+
+
 @router.patch("/batches/{batch_id}/tv-metadata", response_model=BatchSummary)
 def update_tv_metadata(
     batch_id: int,
@@ -1450,13 +1464,14 @@ def update_tv_metadata(
     batch.suggested_destination = str(
         settings.tv_dir / safe_tv_path_part(show_title)
     )
-    batch.metadata_confirmed = True
+    batch.metadata_confirmed = not bool(metadata["blocking_review_items"])
     batch.confidence = metadata["confidence"]
     batch.status = (
         "needs_metadata_review"
         if metadata["blocking_review_items"]
         else "pending_review"
     )
+    _clear_stale_move_lock_for_review(batch)
     batch.updated_at = now_utc()
     db.commit()
     return _batch_to_summary(batch, action_message="TV metadata saved.")
@@ -1543,11 +1558,10 @@ def update_tv_episode_review(
     else:
         metadata["metadata_quality"] = "reviewed"
         metadata["review_confirmed"] = True
-        if batch.status in {"needs_metadata_review", "pending_review"}:
-            batch.status = "pending_review"
+        batch.status = "pending_review"
 
     batch.metadata_json = metadata
-    batch.metadata_confirmed = True
+    batch.metadata_confirmed = not bool(metadata.get("blocking_review_items"))
     batch.suggested_metadata = {
         "show_title": metadata.get("show_title"),
         "year": metadata.get("year"),
@@ -1561,6 +1575,7 @@ def update_tv_episode_review(
         settings.tv_dir / safe_tv_path_part(show_title_safe)
     )
     batch.confidence = metadata.get("confidence", 1.0)
+    _clear_stale_move_lock_for_review(batch)
     batch.updated_at = now_utc()
     db.commit()
     return _batch_to_summary(batch, action_message="TV episode review saved.")
