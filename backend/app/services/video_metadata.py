@@ -56,6 +56,7 @@ RELEASE_TAG_PATTERN = re.compile(
     r"(?<![a-z0-9])(?:2160p|1080p|720p|480p|4k|uhd|hdr10?|dv|"
     r"bluray|brrip|bdrip|web[ ._-]?dl|web|webrip|hdrip|dvdrip|"
     r"x264|x265|h264|h265|hevc|aac|dts|truehd|atmos|"
+    r"mp4|mkv|10bits?|"
     r"yify|yts(?:[ ._-]?am)?|rarbg|amzn|nf|max|hmax|hulu)(?![a-z0-9])",
     re.IGNORECASE,
 )
@@ -168,6 +169,7 @@ def parse_tv_folder_name(value: str) -> dict:
     )
     title = YEAR_PATTERN.sub(" ", raw)
     title = TV_FOLDER_SEASON_PATTERN.sub(" ", title)
+    title = RELEASE_TAG_PATTERN.sub(" ", title)
     title = re.sub(r"[._]+", " ", title)
     title = re.sub(r"\s*[-]+\s*", " ", title)
     title = re.sub(r"\s+", " ", title).strip(" -._()[]")
