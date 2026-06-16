@@ -20,6 +20,7 @@ class DevResetSummary:
     restored_tracks: int
     restored_files: int
     recovered_media_files: int
+    untracked_library_media_files: int
     removed_reports: int
     removed_move_logs: int
     removed_library_metadata: int
@@ -373,13 +374,6 @@ def reset_test_data(db: Session, *, apply: bool) -> DevResetSummary:
     quarantine_plan, quarantine_errors = _quarantine_restore_plan(batches)
     errors = [*_validate_moves(moves), *quarantine_errors]
     untracked_media = _untracked_library_media(moves)
-    if untracked_media:
-        sample = ", ".join(str(path) for path in untracked_media[:3])
-        errors.append(
-            f"{len(untracked_media)} managed library media file(s) have no "
-            f"completed move record. Reset will not clear the database. "
-            f"Examples: {sample}"
-        )
     if errors:
         raise DevResetBlockedError(errors)
 
@@ -394,6 +388,7 @@ def reset_test_data(db: Session, *, apply: bool) -> DevResetSummary:
             restored_tracks=len(restorable),
             restored_files=len(restorable) + len(quarantine_plan),
             recovered_media_files=0,
+            untracked_library_media_files=len(untracked_media),
             removed_reports=len(batch_ids),
             removed_move_logs=0,
             removed_library_metadata=0,
@@ -442,12 +437,6 @@ def reset_test_data(db: Session, *, apply: bool) -> DevResetSummary:
 
     completion_errors = _validate_restore_completion(moves, quarantine_plan)
     remaining_untracked_media = _untracked_library_media(moves)
-    if remaining_untracked_media:
-        sample = ", ".join(str(path) for path in remaining_untracked_media[:3])
-        completion_errors.append(
-            f"{len(remaining_untracked_media)} untracked media file(s) remain "
-            f"in managed libraries after restore. Examples: {sample}"
-        )
     if completion_errors:
         db.rollback()
         raise DevResetBlockedError(completion_errors)
@@ -482,6 +471,7 @@ def reset_test_data(db: Session, *, apply: bool) -> DevResetSummary:
         restored_tracks=restored_tracks,
         restored_files=restored_files,
         recovered_media_files=recovered_media_files,
+        untracked_library_media_files=len(remaining_untracked_media),
         removed_reports=removed_reports,
         removed_move_logs=removed_move_logs,
         removed_library_metadata=removed_library_metadata,
@@ -493,7 +483,9 @@ def reset_test_data(db: Session, *, apply: bool) -> DevResetSummary:
             f"{len(batch_ids)} batch(es). Removed "
             f"{removed_library_metadata} stale library metadata item(s). "
             f"Recovered {recovered_media_files} existing ingest media file(s) "
-            "to _RECOVERY. Source files were not deleted."
+            "to _RECOVERY. Preserved "
+            f"{len(remaining_untracked_media)} untracked library media file(s). "
+            "Source files were not deleted."
         ),
     )
 

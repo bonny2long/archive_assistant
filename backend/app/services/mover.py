@@ -1005,13 +1005,14 @@ def _move_tv_batch(
                     batch.metadata_confirmed
                     or metadata.get("review_confirmed")
                 ),
-                "accepted_unknown_author": bool(
-                    item.get("accepted_unknown_author")
+                "accepted_unknown_show_title": bool(
+                    metadata.get("accepted_unknown_show_title")
                 ),
                 "accepted_unknown_year": bool(
-                    item.get("accepted_unknown_year")
+                    metadata.get("accepted_unknown_year")
                 ),
-                "lookup_later": bool(item.get("lookup_later")),
+                "lookup_later": bool(metadata.get("lookup_later")),
+                "move_manifest": metadata.get("move_manifest"),
                 "batch_id": batch.id,
             },
             settings.tv_metadata_dir,

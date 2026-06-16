@@ -358,6 +358,7 @@ class DevResetResponse(BaseModel):
     restored_tracks: int
     restored_files: int
     recovered_media_files: int = 0
+    untracked_library_media_files: int = 0
     removed_reports: int
     removed_move_logs: int
     removed_library_metadata: int
