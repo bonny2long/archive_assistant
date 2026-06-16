@@ -73,7 +73,7 @@ RELEASE_GROUP_PATTERN = re.compile(
     r"(?:^|[-_. ])(?P<value>[A-Z][A-Z0-9]{2,15})$"
 )
 TV_OAD_PATTERN = re.compile(
-    r"(?<![a-z0-9])(?P<type>oad|ova)[ ._-]*(?:e|ep)?(?P<number>\d{1,3})(?![a-z0-9])",
+    r"(?<![a-z0-9])(?P<type>oad|ova|oav)[ ._-]*(?:e|ep)?(?P<number>\d{1,3})(?![a-z0-9])",
     re.IGNORECASE,
 )
 TV_SPECIAL_PATTERN = re.compile(
@@ -429,31 +429,8 @@ def parse_tv_episode_name(value: str) -> dict:
         })
         return result
 
-    # 2. OAD/OVA pattern
-    oad_match = TV_OAD_PATTERN.search(raw)
-    if oad_match:
-        oad_type = oad_match.group("type").lower()
-        number = int(oad_match.group("number"))
-        dest_group = "oad" if oad_type == "oad" else "ova"
-        special_label = f"{oad_type.upper()}{number:02d}"
-        show_title, episode_title = _extract_titles(
-            raw, oad_match.start(), oad_match.end()
-        )
-        result.update({
-            "season_number": None,
-            "episode_number": None,
-            "episode_code": special_label,
-            "episode_title": episode_title,
-            "show_title": show_title,
-            "year": year,
-            "confidence": 0.8,
-            "is_special": True,
-            "destination_group": dest_group,
-            "special_label": special_label,
-        })
-        return result
-
-    # 3. Special/SP pattern
+    # 2. Special/SP pattern before SxxPxx so final-chapter names that contain
+    # both tokens keep the user-facing "Special N" label.
     special_match = TV_SPECIAL_PATTERN.search(raw)
     if special_match:
         number = int(special_match.group("number"))
@@ -475,35 +452,19 @@ def parse_tv_episode_name(value: str) -> dict:
         })
         return result
 
-    # 4. Standard SxxExx or Xxx pattern
-    match = TV_CODE_PATTERN.search(raw) or TV_X_PATTERN.search(raw)
-
-    # 5. Part pattern (SxxPxx)
-    part_match = TV_PART_PATTERN.search(raw) if not match else None
-
-    season_match = SEASON_PATTERN.search(raw)
-    episode_match = EPISODE_ONLY_PATTERN.search(raw)
-
-    season_number = int(match.group("season")) if match else (
-        int(part_match.group("season")) if part_match else (
-            int(season_match.group("season")) if season_match else None
-        )
-    )
-    episode_number = int(match.group("episode")) if match else (
-        int(part_match.group("part")) if part_match else (
-            int(episode_match.group("episode")) if episode_match else None
-        )
-    )
-
+    # 3. Part pattern (SxxPxx)
+    part_match = TV_PART_PATTERN.search(raw)
     if part_match:
-        special_label = f"S{season_number:02d}P{part_match.group('part')}"
+        season_number = int(part_match.group("season"))
+        part_number = int(part_match.group("part"))
+        special_label = f"S{season_number:02d}P{part_number:02d}"
         show_title, episode_title = _extract_titles(
             raw, part_match.start(), part_match.end()
         )
         result.update({
             "season_number": season_number,
-            "episode_number": episode_number,
-            "episode_code": f"S{season_number:02d}E{episode_number:02d}",
+            "episode_number": part_number,
+            "episode_code": special_label,
             "episode_title": episode_title,
             "show_title": show_title,
             "year": year,
@@ -513,6 +474,44 @@ def parse_tv_episode_name(value: str) -> dict:
             "special_label": special_label,
         })
         return result
+
+    # 4. OAD/OVA/OAV pattern
+    oad_match = TV_OAD_PATTERN.search(raw)
+    if oad_match:
+        oad_type = oad_match.group("type").lower()
+        label_type = "OVA" if oad_type == "oav" else oad_type.upper()
+        number = int(oad_match.group("number"))
+        dest_group = "oad" if oad_type == "oad" else "ova"
+        special_label = f"{label_type}{number:02d}"
+        show_title, episode_title = _extract_titles(
+            raw, oad_match.start(), oad_match.end()
+        )
+        result.update({
+            "season_number": None,
+            "episode_number": None,
+            "episode_code": special_label,
+            "episode_title": episode_title,
+            "show_title": show_title,
+            "year": year,
+            "confidence": 0.8,
+            "is_special": True,
+            "destination_group": dest_group,
+            "special_label": special_label,
+        })
+        return result
+
+    # 5. Standard SxxExx or Xxx pattern
+    match = TV_CODE_PATTERN.search(raw) or TV_X_PATTERN.search(raw)
+
+    season_match = SEASON_PATTERN.search(raw)
+    episode_match = EPISODE_ONLY_PATTERN.search(raw)
+
+    season_number = int(match.group("season")) if match else (
+        int(season_match.group("season")) if season_match else None
+    )
+    episode_number = int(match.group("episode")) if match else (
+        int(episode_match.group("episode")) if episode_match else None
+    )
 
     token_match = match or episode_match
     if token_match:

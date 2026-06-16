@@ -386,6 +386,7 @@ def _tv_episode_metadata(path: Path, root: Path) -> dict:
     if (
         parsed["season_number"] is not None
         and parsed["episode_number"] is not None
+        and not parsed.get("is_special")
     ):
         parsed["episode_code"] = (
             f"S{int(parsed['season_number']):02d}"
@@ -532,6 +533,8 @@ def _tv_batch_data(source: Path) -> dict | None:
     if not show_title:
         show_title = "Unknown TV Show"
         warnings.append("tv_show_title_missing")
+    for episode in [*episodes, *special_episodes]:
+        episode["show_title"] = show_title
 
     parse_failed = any(
         episode.get("season_number") is None
@@ -683,8 +686,30 @@ def _apply_tv_batch_data(
     db.flush()
 
     files = data["files"]
+    canonical_file_metadata = {
+        item.get("relative_source"): item
+        for season in data["metadata"].get("seasons", [])
+        for item in season.get("episodes", [])
+        if isinstance(item, dict) and item.get("relative_source")
+    }
+    canonical_file_metadata.update({
+        item.get("relative_source"): item
+        for item in data["metadata"].get("special_episodes", [])
+        if isinstance(item, dict) and item.get("relative_source")
+    })
+    canonical_file_metadata.update({
+        item.get("relative_source"): item
+        for item in data["metadata"].get("subtitles", [])
+        if isinstance(item, dict) and item.get("relative_source")
+    })
     episode_rows = [
-        (path, _tv_episode_metadata(path, source))
+        (
+            path,
+            canonical_file_metadata.get(
+                str(path.relative_to(source)),
+                _tv_episode_metadata(path, source),
+            ),
+        )
         for path in files["video"]
     ]
     role_rows = (
