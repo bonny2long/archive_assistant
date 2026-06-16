@@ -7,3 +7,6 @@ dist/
 .env
 .DS_Store
 data/ 
+*.db-journal
+*.db-wal
+*.db-shm
