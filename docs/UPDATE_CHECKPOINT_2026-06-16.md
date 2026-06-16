@@ -1,7 +1,8 @@
 # Update Checkpoint - 2026-06-16
 
 Use this before continuing app work. It captures the current known-good state
-after the Severance reset recovery and TV folder title cleanup.
+after the Severance reset recovery, TV folder title cleanup, and Shingeki-style
+TV specials/anime scan-review work.
 
 ## Branch
 
@@ -9,7 +10,11 @@ Current branch:
 
 `v2_tv_retry_clean`
 
-Latest commit:
+Current latest checkpoint commit:
+
+`88b4239 fix tv specials anime review and move flow`
+
+Earlier Severance title cleanup commit:
 
 `7584bcc fix tv folder title cleanup`
 
@@ -118,3 +123,88 @@ shows the Severance batch as:
 - Specials: 0
 
 Do not approve or move until the scan output is reviewed.
+
+## Major TV Specials Checkpoint
+
+Checkpoint commit:
+
+`88b4239 fix tv specials anime review and move flow`
+
+Confirmed Shingeki-style scan/review state:
+
+- Batch type is `video_tv_show`.
+- Batch show title is `Shingeki no Kyojin`.
+- Status is `pending_review`.
+- Normal episodes count is `86`.
+- Specials count is `11`.
+- Total video count is `97`.
+- `video_file_count == episode_count + special_episode_count`.
+- `unresolved_video_count` is `0`.
+- `blocking_review_items` is empty.
+- `metadata_warnings` is empty.
+- OADs are recognized with destination group `oad`.
+- OVA/OAV-style items are recognized with destination group `ova`.
+- `S01E13.5` is recognized as a special.
+- Final Chapters `Special 1` and `Special 2` are recognized as specials.
+- Final Chapters specials keep labels `Special 1` and `Special 2`.
+- Batch metadata, `metadata_json.seasons[*].episodes[*]`,
+  `metadata_json.special_episodes[*]`, and hydrated `files[*].metadata_json`
+  all use canonical show title `Shingeki no Kyojin`.
+
+Important behavior preserved:
+
+- No reset logic changes are needed.
+- No script temp fallback changes are needed.
+- No approval logic changes are needed.
+- No move should be run until explicitly requested.
+- Missing episode titles remain non-blocking.
+- Specials are not counted as unresolved videos.
+- No false `tv_review_count_mismatch` blocker is present when normal episodes
+  plus specials equal total video count.
+
+Verified commands for this checkpoint:
+
+```powershell
+.\backend\.venv\Scripts\python.exe .\scripts\check_tv_specials_anime_scan_review.py
+```
+
+```powershell
+.\backend\.venv\Scripts\python.exe .\scripts\check_tv_folder_title_cleanup.py
+```
+
+```powershell
+.\backend\.venv\Scripts\python.exe .\scripts\check_root_ingest.py
+```
+
+```powershell
+$env:PYTHONPATH='backend'; $env:DEBUG='true'; .\backend\.venv\Scripts\python.exe .\scripts\check_reset_safety.py
+```
+
+```powershell
+python -m compileall backend/app scripts
+```
+
+```powershell
+git diff --check
+```
+
+```powershell
+$env:DEBUG='true'; .\backend\.venv\Scripts\python.exe .\scripts\check_tv_final_polish.py
+```
+
+```powershell
+.\backend\.venv\Scripts\python.exe .\scripts\check_tv_review_contract_no_regression.py
+```
+
+## Remaining Decision
+
+Before calling TV metadata assist parity complete, decide whether to add one
+small permanent regression script specifically for the full Shingeki case:
+
+- 86 normal episodes.
+- 11 specials.
+- 97 total videos.
+- 0 unresolved videos.
+- Empty blockers.
+- Canonical item-level and hydrated file-row show titles.
+- No approval or move.
