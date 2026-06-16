@@ -4,29 +4,55 @@ from __future__ import annotations
 
 import faulthandler
 import os
+import subprocess
 import shutil
 import sys
+import time
 from pathlib import Path
-from tempfile import mkdtemp
 
 
-print("check: before imports", flush=True)
-faulthandler.enable()
-faulthandler.dump_traceback_later(15, repeat=True)
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_ROOT = PROJECT_ROOT / "backend"
-os.environ["DEBUG"] = "true"
-sys.path.insert(0, str(BACKEND_ROOT))
-print("check: after imports", flush=True)
+CHILD_ENV = "ARCHIVE_ASSISTANT_ROOT_INGEST_CHECK_CHILD"
+TIMEOUT_SECONDS = 30
+TEMP_ROOTS = [Path(r"C:\tmp"), PROJECT_ROOT / ".tmp"]
 
 
 def cleanup_old_temp_folders() -> None:
-    tmp_root = Path(r"C:\tmp")
-    if not tmp_root.exists():
-        return
-    for path in tmp_root.glob("archive-root-ingest-*"):
-        if path.is_dir():
-            shutil.rmtree(path, ignore_errors=True)
+    for tmp_root in TEMP_ROOTS:
+        if not tmp_root.exists():
+            continue
+        for path in tmp_root.glob("archive-root-ingest-*"):
+            if path.is_dir():
+                shutil.rmtree(path, ignore_errors=True)
+
+
+def make_temp_root(prefix: str) -> Path:
+    denied_roots = []
+    for tmp_root in TEMP_ROOTS:
+        try:
+            tmp_root.mkdir(parents=True, exist_ok=True)
+        except PermissionError:
+            denied_roots.append(tmp_root)
+            continue
+        for attempt in range(100):
+            candidate = (
+                tmp_root
+                / f"{prefix}{os.getpid()}-{time.monotonic_ns()}-{attempt}"
+            )
+            try:
+                candidate.mkdir()
+                return candidate
+            except FileExistsError:
+                continue
+            except PermissionError:
+                denied_roots.append(tmp_root)
+                break
+    raise RuntimeError(
+        "Could not create temp folder under "
+        + ", ".join(str(root) for root in TEMP_ROOTS)
+        + f"; permission denied for: {', '.join(str(root) for root in denied_roots)}"
+    )
 
 
 def check(label: str, condition: bool) -> int:
@@ -39,12 +65,19 @@ def touch(path: Path) -> None:
     path.write_bytes(b"root-ingest-check")
 
 
-def main() -> int:
+def run_checks() -> int:
+    print("check: before imports", flush=True)
+    faulthandler.enable()
+    faulthandler.dump_traceback_later(15, repeat=False)
+    os.environ["DEBUG"] = "true"
+    sys.path.insert(0, str(BACKEND_ROOT))
+    print("check: after imports", flush=True)
+
     failures = 0
     print("check: before temp root setup", flush=True)
     cleanup_old_temp_folders()
     print("check: setup temp root", flush=True)
-    root = Path(mkdtemp(prefix="archive-root-ingest-", dir=r"C:\tmp"))
+    root = make_temp_root("archive-root-ingest-")
     try:
         print(f"root ingest check temp: {root}", flush=True)
         print("check: scan root ingest classification", flush=True)
@@ -108,11 +141,45 @@ def main() -> int:
             classify_ingest_item(legacy) == "ignored_system_folder",
         )
     finally:
+        faulthandler.cancel_dump_traceback_later()
         print("check: before cleanup", flush=True)
         shutil.rmtree(root, ignore_errors=True)
         print("check: after cleanup", flush=True)
 
     return 1 if failures else 0
+
+
+def main() -> int:
+    if os.environ.get(CHILD_ENV) == "1":
+        return run_checks()
+
+    env = {**os.environ, CHILD_ENV: "1"}
+    try:
+        completed = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve())],
+            cwd=PROJECT_ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            timeout=TIMEOUT_SECONDS,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        if exc.stdout:
+            print(exc.stdout, end="")
+        if exc.stderr:
+            print(exc.stderr, end="", file=sys.stderr)
+        print(
+            f"FAIL check_root_ingest.py timed out after {TIMEOUT_SECONDS}s",
+            flush=True,
+        )
+        return 124
+
+    if completed.stdout:
+        print(completed.stdout, end="")
+    if completed.stderr:
+        print(completed.stderr, end="", file=sys.stderr)
+    return completed.returncode
 
 
 if __name__ == "__main__":
