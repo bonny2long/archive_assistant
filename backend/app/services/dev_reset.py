@@ -14,6 +14,18 @@ from app.services.music_metadata import is_audio_file
 from app.services.video_metadata import is_video_file
 
 
+IGNORED_RESET_SIDECAR_EXTENSIONS = {
+    ".txt",
+    ".nfo",
+    ".url",
+    ".sfv",
+    ".md",
+    ".log",
+    ".m3u",
+    ".md5",
+}
+
+
 @dataclass(frozen=True)
 class DevResetSummary:
     status: str
@@ -27,6 +39,13 @@ class DevResetSummary:
     removed_empty_dirs: int
     cleared_batches: int
     message: str
+
+
+@dataclass(frozen=True)
+class OrphanLibraryRestore:
+    library_root: Path
+    ingest_root: Path
+    files: tuple[tuple[Path, Path], ...]
 
 
 class DevResetBlockedError(Exception):
@@ -270,6 +289,112 @@ def _untracked_library_media(moves: list[MoveAction]) -> list[Path]:
     return sorted(set(untracked))
 
 
+def _is_sidecar_only_ingest_folder(path: Path) -> bool:
+    if not path.is_dir():
+        return False
+    files = [child for child in path.rglob("*") if child.is_file()]
+    if not files:
+        return False
+    return all(
+        child.suffix.casefold() in IGNORED_RESET_SIDECAR_EXTENSIONS
+        and not is_audio_file(child)
+        and not is_video_file(child)
+        for child in files
+    )
+
+
+def _match_tokens(value: str) -> set[str]:
+    ignored = {
+        "1080p",
+        "2160p",
+        "720p",
+        "480p",
+        "4k",
+        "bluray",
+        "web",
+        "webrip",
+        "hdtv",
+        "mp4",
+        "mkv",
+        "season",
+        "series",
+        "tv",
+    }
+    tokens = []
+    current = []
+    for char in value.casefold():
+        if char.isalnum():
+            current.append(char)
+        elif current:
+            tokens.append("".join(current))
+            current = []
+    if current:
+        tokens.append("".join(current))
+    return {
+        token
+        for token in tokens
+        if len(token) > 2 and token not in ignored and not token.isdigit()
+    }
+
+
+def _sidecar_ingest_match(show_folder: Path) -> Path | None:
+    if not settings.ingest_root.exists():
+        return None
+    show_tokens = _match_tokens(show_folder.name)
+    if not show_tokens:
+        return None
+    candidates = []
+    for candidate in settings.ingest_root.iterdir():
+        if not _is_sidecar_only_ingest_folder(candidate):
+            continue
+        candidate_tokens = _match_tokens(candidate.name)
+        if show_tokens.issubset(candidate_tokens):
+            candidates.append(candidate)
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def _orphan_tv_library_restore_plan(
+    moves: list[MoveAction],
+) -> list[OrphanLibraryRestore]:
+    if not settings.tv_dir.exists():
+        return []
+    tracked_destinations = {
+        Path(move.destination_path).resolve()
+        for move in moves
+        if move.status == "completed"
+    }
+    plan = []
+    for show_folder in settings.tv_dir.iterdir():
+        if not show_folder.is_dir():
+            continue
+        media_files = [
+            path
+            for path in show_folder.rglob("*")
+            if path.is_file() and is_video_file(path)
+        ]
+        if not media_files:
+            continue
+        if any(path.resolve() in tracked_destinations for path in media_files):
+            continue
+        ingest_folder = _sidecar_ingest_match(show_folder)
+        if not ingest_folder:
+            continue
+        plan.append(
+            OrphanLibraryRestore(
+                library_root=show_folder,
+                ingest_root=ingest_folder,
+                files=tuple(
+                    (
+                        source,
+                        ingest_folder / source.relative_to(show_folder),
+                    )
+                    for source in media_files
+                ),
+            )
+        )
+    return plan
+
+
 def _validate_restore_completion(
     moves: list[MoveAction],
     quarantine_plan: list[tuple[Path, Path]],
@@ -373,6 +498,8 @@ def reset_test_data(db: Session, *, apply: bool) -> DevResetSummary:
 
     quarantine_plan, quarantine_errors = _quarantine_restore_plan(batches)
     errors = [*_validate_moves(moves), *quarantine_errors]
+    orphan_tv_plan = _orphan_tv_library_restore_plan(moves)
+    orphan_tv_file_count = sum(len(item.files) for item in orphan_tv_plan)
     untracked_media = _untracked_library_media(moves)
     if errors:
         raise DevResetBlockedError(errors)
@@ -386,7 +513,9 @@ def reset_test_data(db: Session, *, apply: bool) -> DevResetSummary:
         return DevResetSummary(
             status="dry_run",
             restored_tracks=len(restorable),
-            restored_files=len(restorable) + len(quarantine_plan),
+            restored_files=(
+                len(restorable) + len(quarantine_plan) + orphan_tv_file_count
+            ),
             recovered_media_files=0,
             untracked_library_media_files=len(untracked_media),
             removed_reports=len(batch_ids),
@@ -396,7 +525,8 @@ def reset_test_data(db: Session, *, apply: bool) -> DevResetSummary:
             cleared_batches=len(batch_ids),
             message=(
                 "Dry run only. "
-                f"Would restore {len(restorable) + len(quarantine_plan)} "
+                f"Would restore "
+                f"{len(restorable) + len(quarantine_plan) + orphan_tv_file_count} "
                 "file(s) to ingest and "
                 f"clear {len(batch_ids)} ingest batch(es)."
             ),
@@ -410,6 +540,10 @@ def reset_test_data(db: Session, *, apply: bool) -> DevResetSummary:
     ] + [
         original
         for _, original in quarantine_plan
+    ] + [
+        destination
+        for orphan in orphan_tv_plan
+        for _, destination in orphan.files
     ]
     for target in sorted(
         {path for path in restore_targets if path.exists()},
@@ -435,7 +569,23 @@ def reset_test_data(db: Session, *, apply: bool) -> DevResetSummary:
         shutil.move(str(quarantine_source), str(original))
         restored_files += 1
 
+    for orphan in orphan_tv_plan:
+        for library_source, ingest_destination in orphan.files:
+            ingest_destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(library_source), str(ingest_destination))
+            restored_files += 1
+
     completion_errors = _validate_restore_completion(moves, quarantine_plan)
+    for orphan in orphan_tv_plan:
+        for library_source, ingest_destination in orphan.files:
+            if not ingest_destination.exists():
+                completion_errors.append(
+                    f"Restored orphan TV file is missing: {ingest_destination}"
+                )
+            if library_source.exists():
+                completion_errors.append(
+                    f"Orphan TV library source still exists after restore: {library_source}"
+                )
     remaining_untracked_media = _untracked_library_media(moves)
     if completion_errors:
         db.rollback()

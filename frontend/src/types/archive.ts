@@ -503,6 +503,7 @@ export type ScanMusicResponse = {
   unknown_items: number;
   unsupported_files: number;
   ignored_system_files: number;
+  ignored_sidecar_only_folders: number;
   artwork_files_found: number;
   movie_batches_found: number;
   tv_shows_found: number;

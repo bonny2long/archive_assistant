@@ -111,6 +111,7 @@ def scan_music(db: Session = Depends(get_db)):
         unknown_items=result.unknown_items,
         unsupported_files=result.unsupported_files,
         ignored_system_files=result.ignored_system_files,
+        ignored_sidecar_only_folders=result.ignored_sidecar_only_folders,
         artwork_files_found=result.artwork_files_found,
         movie_batches_found=result.movie_batches_found,
         tv_shows_found=result.tv_shows_found,

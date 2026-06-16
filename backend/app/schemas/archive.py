@@ -342,6 +342,7 @@ class ScanMusicResponse(BaseModel):
     unknown_items: int = 0
     unsupported_files: int = 0
     ignored_system_files: int = 0
+    ignored_sidecar_only_folders: int = 0
     artwork_files_found: int = 0
     movie_batches_found: int = 0
     tv_shows_found: int = 0

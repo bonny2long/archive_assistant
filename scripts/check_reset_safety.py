@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
+import shutil
 from pathlib import Path
 
 from sqlalchemy import create_engine
@@ -76,6 +77,7 @@ def make_session():
 
 
 def test_loose_ingest_media_is_preserved(root: Path) -> None:
+    print("check: loose ingest media is preserved", flush=True)
     db = make_session()
     loose = settings.ingest_root / "loose-real-file.mkv"
     loose.parent.mkdir(parents=True, exist_ok=True)
@@ -92,6 +94,7 @@ def test_loose_ingest_media_is_preserved(root: Path) -> None:
 
 
 def test_restore_collision_goes_to_recovery(root: Path) -> None:
+    print("check: restore collision goes to recovery", flush=True)
     db = make_session()
     source = settings.ingest_root / "Rick and Morty - S06E01.mkv"
     destination = settings.tv_dir / "Rick and Morty" / "Season 06" / source.name
@@ -133,16 +136,53 @@ def test_restore_collision_goes_to_recovery(root: Path) -> None:
     db.close()
 
 
+def test_orphan_tv_library_restores_to_sidecar_ingest_folder(root: Path) -> None:
+    print("check: orphan TV library restores to sidecar ingest folder", flush=True)
+    db = make_session()
+    ingest_folder = settings.ingest_root / "Severance Season 1 Mp4 1080p"
+    sidecar = ingest_folder / "Read Me.txt"
+    library_file = (
+        settings.tv_dir
+        / "Severance"
+        / "Season 01"
+        / "S01E01.mp4"
+    )
+    sidecar.parent.mkdir(parents=True, exist_ok=True)
+    library_file.parent.mkdir(parents=True, exist_ok=True)
+    sidecar.write_text("release note", encoding="utf-8")
+    library_file.write_bytes(b"orphan tv media")
+
+    summary = reset_test_data(db, apply=True)
+
+    restored = ingest_folder / "Season 01" / "S01E01.mp4"
+    assert summary.status == "ok"
+    assert summary.restored_files == 1
+    assert restored.exists()
+    assert restored.read_bytes() == b"orphan tv media"
+    assert sidecar.exists()
+    assert sidecar.read_text(encoding="utf-8") == "release note"
+    assert not library_file.exists()
+    db.close()
+
+
 def main() -> None:
     Path(r"C:\tmp").mkdir(parents=True, exist_ok=True)
-    root = Path(tempfile.mkdtemp(prefix="archive-reset-safety-", dir=r"C:\tmp"))
-    original = configure(root)
-    try:
-        test_loose_ingest_media_is_preserved(root)
-        test_restore_collision_goes_to_recovery(root)
-    finally:
-        for key, value in original.items():
-            setattr(settings, key, value)
+    checks = [
+        test_loose_ingest_media_is_preserved,
+        test_restore_collision_goes_to_recovery,
+        test_orphan_tv_library_restores_to_sidecar_ingest_folder,
+    ]
+    for check in checks:
+        root = Path(
+            tempfile.mkdtemp(prefix="archive-reset-safety-", dir=r"C:\tmp")
+        )
+        original = configure(root)
+        try:
+            check(root)
+        finally:
+            for key, value in original.items():
+                setattr(settings, key, value)
+            shutil.rmtree(root, ignore_errors=True)
     print("reset safety checks passed")
 
 

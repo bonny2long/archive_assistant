@@ -531,7 +531,7 @@ export default function App() {
       setQaSummary({
         title: "Scan summary",
         text: `Movies found: ${result.movie_batches_found}${tvCounts} | Audiobooks found: ${result.audiobook_batches_found} | Music albums found: ${result.music_albums_found} | Discographies found: ${result.discographies_found} | Unknown items: ${result.unknown_items} | Unsupported files: ${result.unsupported_files}`,
-        warnings: `Audiobook files found: ${result.audiobook_files_found} | Ignored system files: ${result.ignored_system_files} | Artwork files found: ${result.artwork_files_found} | Subtitle files found: ${result.subtitle_files_found} | ${warnings.filter((warning) => warning === "release_folder_grouping_used").length} release-folder grouping used`,
+        warnings: `Audiobook files found: ${result.audiobook_files_found} | Ignored system files: ${result.ignored_system_files} | Sidecar-only folders skipped: ${result.ignored_sidecar_only_folders} | Artwork files found: ${result.artwork_files_found} | Subtitle files found: ${result.subtitle_files_found} | ${warnings.filter((warning) => warning === "release_folder_grouping_used").length} release-folder grouping used`,
       });
       showToast(`Scan complete - ${result.created} new, ${result.skipped_duplicates} skipped duplicate(s)`);
     } catch {

@@ -45,6 +45,10 @@ def main() -> int:
         unknown = root / "notes.txt"
         unknown.write_text("not media", encoding="utf-8")
 
+        sidecar_only = root / "Severance Season 1 Mp4 1080p"
+        sidecar_only.mkdir()
+        (sidecar_only / "Read Me.txt").write_text("source note", encoding="utf-8")
+
         legacy = root / "music"
         touch(legacy / "Old Album" / "01.mp3")
 
@@ -63,6 +67,10 @@ def main() -> int:
         failures += check(
             "unknown file is skipped safely",
             classify_ingest_item(unknown) == "unknown_type",
+        )
+        failures += check(
+            "sidecar-only folder is skipped without quarantine",
+            classify_ingest_item(sidecar_only) == "ignored_sidecar_only_folder",
         )
         failures += check(
             "legacy music container is not the scan target",

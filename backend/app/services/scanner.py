@@ -91,6 +91,7 @@ class ScanMusicResult:
     unknown_items: int = 0
     unsupported_files: int = 0
     ignored_system_files: int = 0
+    ignored_sidecar_only_folders: int = 0
     artwork_files_found: int = 0
     movie_batches_found: int = 0
     tv_shows_found: int = 0
@@ -135,6 +136,17 @@ RECOGNIZED_MEDIA_TYPES = {
 
 QUARANTINE_TYPES = {"unknown_type", "unsupported_file"}
 
+IGNORED_SIDECAR_ONLY_EXTENSIONS = {
+    ".txt",
+    ".nfo",
+    ".url",
+    ".sfv",
+    ".md",
+    ".log",
+    ".m3u",
+    ".md5",
+}
+
 ACTIVE_REVIEW_STATUSES = {
     "needs_quarantine_review",
     "quarantined",
@@ -172,6 +184,18 @@ def _is_empty_source_leftover(path: Path) -> bool:
     return path.is_dir() and not _has_any_real_files(path)
 
 
+def _is_ignored_sidecar_only_folder(path: Path) -> bool:
+    if not path.is_dir():
+        return False
+    files = _all_files(path)
+    if not files:
+        return False
+    return all(
+        file.suffix.casefold() in IGNORED_SIDECAR_ONLY_EXTENSIONS
+        for file in files
+    )
+
+
 def classify_ingest_item(path: Path) -> str:
     if path.name.casefold() in IGNORED_INGEST_NAMES:
         return "ignored_system_folder"
@@ -187,6 +211,8 @@ def classify_ingest_item(path: Path) -> str:
         return "unsupported_file"
     if not path.is_dir():
         return "unknown_type"
+    if _is_ignored_sidecar_only_folder(path):
+        return "ignored_sidecar_only_folder"
 
     audio_files = [
         candidate
@@ -1315,6 +1341,12 @@ def repair_stale_media_batches(
                 source,
                 reason="empty_source_leftover",
             )
+        if classification == "ignored_sidecar_only_folder":
+            _merge_active_quarantine_rows_for_source(
+                db,
+                source,
+                reason="ignored_sidecar_only_folder",
+            )
 
     stale_rows = (
         db.query(IngestBatch)
@@ -2029,6 +2061,10 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
                 classification == "ignored_system_folder"
                 for classification in classifications.values()
             ),
+            ignored_sidecar_only_folders=sum(
+                classification == "ignored_sidecar_only_folder"
+                for classification in classifications.values()
+            ),
             movie_batches_found=sum(
                 classification == "video_movie"
                 for classification in classifications.values()
@@ -2381,6 +2417,10 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
         unsupported_files=len(loose_unsupported),
         ignored_system_files=sum(
             classification == "ignored_system_folder"
+            for classification in classifications.values()
+        ),
+        ignored_sidecar_only_folders=sum(
+            classification == "ignored_sidecar_only_folder"
             for classification in classifications.values()
         ),
         artwork_files_found=sum(
