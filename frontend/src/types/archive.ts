@@ -518,6 +518,7 @@ export type DevResetResponse = {
   status: string;
   restored_tracks: number;
   restored_files: number;
+  recovered_media_files?: number;
   removed_reports: number;
   removed_move_logs: number;
   removed_library_metadata: number;

@@ -545,7 +545,8 @@ export default function App() {
     const confirmed = window.confirm(
       "Reset all local ingest test data? This restores moved and quarantined "
       + "media to _INGEST, clears every review batch, archive row, report, "
-      + "and move log. Database tables and source files are preserved.",
+      + "and move log. Reset preserves media files. Media moved out of active "
+      + "test folders will be placed in _RECOVERY.",
     );
     if (!confirmed) return;
 
@@ -555,7 +556,7 @@ export default function App() {
       showToast(result.message);
       setQaSummary({
         title: "Reset summary",
-        text: `${result.restored_files} files restored · ${result.cleared_batches} batches cleared · ${result.removed_move_logs} move logs removed · ${result.removed_library_metadata} stale library metadata items removed`,
+        text: `${result.restored_files} files restored · ${result.recovered_media_files ?? 0} existing ingest media files moved to _RECOVERY · ${result.cleared_batches} batches cleared · ${result.removed_move_logs} move logs removed · ${result.removed_library_metadata} stale library metadata items removed`,
       });
       setTab("all");
       setSelected(new Set());

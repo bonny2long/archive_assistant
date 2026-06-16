@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -18,6 +19,7 @@ class DevResetSummary:
     status: str
     restored_tracks: int
     restored_files: int
+    recovered_media_files: int
     removed_reports: int
     removed_move_logs: int
     removed_library_metadata: int
@@ -58,6 +60,39 @@ def _remove_empty_directories(root: Path) -> int:
     return removed
 
 
+def _reset_recovery_root() -> Path:
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return settings.data_root / "_RECOVERY" / f"reset-{stamp}"
+
+
+def _count_payload_files(path: Path) -> int:
+    if path.is_file():
+        return 1
+    if path.is_dir():
+        return sum(1 for child in path.rglob("*") if child.is_file())
+    return 0
+
+
+def _move_existing_ingest_path_to_recovery(
+    path: Path,
+    recovery_root: Path,
+) -> int:
+    if not path.exists():
+        return 0
+    if not _is_within(path, settings.ingest_root):
+        raise DevResetBlockedError([f"Recovery source is outside ingest: {path}"])
+    relative = path.resolve().relative_to(settings.ingest_root.resolve())
+    destination = recovery_root / relative
+    if destination.exists():
+        raise DevResetBlockedError([
+            f"Recovery destination already exists: {destination}"
+        ])
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    count = _count_payload_files(path)
+    shutil.move(str(path), str(destination))
+    return count
+
+
 def _remove_batch_reports(batch_ids: list[int]) -> int:
     removed = 0
     for batch_id in batch_ids:
@@ -81,6 +116,11 @@ def _remove_move_logs() -> int:
         "*_move_manifest.md",
     ):
         for path in settings.data_root.rglob(pattern):
+            if (
+                _is_within(path, settings.ingest_root)
+                or _is_within(path, settings.data_root / "_RECOVERY")
+            ):
+                continue
             if path.is_file():
                 path.unlink()
                 removed += 1
@@ -200,9 +240,7 @@ def _validate_moves(moves: list[MoveAction]) -> list[str]:
         if source in seen_sources:
             errors.append(f"Duplicate restore target: {source}")
         seen_sources.add(source)
-        if source.exists() and destination.exists():
-            errors.append(f"Both restore paths exist; refusing to overwrite: {source}")
-        elif not source.exists() and not destination.exists():
+        if not source.exists() and not destination.exists():
             errors.append(
                 "Neither restore path exists; keeping database records for "
                 f"manual recovery: {source} <- {destination}"
@@ -305,13 +343,6 @@ def _quarantine_restore_plan(
     for quarantine_source, original in plan:
         if not _is_within(original, settings.ingest_root):
             errors.append(f"Restore destination is outside ingest: {original}")
-        if original.exists():
-            empty_directory = (
-                original.is_dir()
-                and not any(path.is_file() for path in original.rglob("*"))
-            )
-            if not empty_directory:
-                errors.append(f"Restore destination already exists: {original}")
     return plan, errors
 
 
@@ -362,6 +393,7 @@ def reset_test_data(db: Session, *, apply: bool) -> DevResetSummary:
             status="dry_run",
             restored_tracks=len(restorable),
             restored_files=len(restorable) + len(quarantine_plan),
+            recovered_media_files=0,
             removed_reports=len(batch_ids),
             removed_move_logs=0,
             removed_library_metadata=0,
@@ -375,6 +407,25 @@ def reset_test_data(db: Session, *, apply: bool) -> DevResetSummary:
             ),
         )
 
+    recovery_root = _reset_recovery_root()
+    recovered_media_files = 0
+    restore_targets = [
+        Path(move.source_path)
+        for move in restorable
+    ] + [
+        original
+        for _, original in quarantine_plan
+    ]
+    for target in sorted(
+        {path for path in restore_targets if path.exists()},
+        key=lambda path: len(path.parts),
+        reverse=True,
+    ):
+        recovered_media_files += _move_existing_ingest_path_to_recovery(
+            target,
+            recovery_root,
+        )
+
     restored_tracks = 0
     for move in restorable:
         source = Path(move.source_path)
@@ -385,8 +436,6 @@ def reset_test_data(db: Session, *, apply: bool) -> DevResetSummary:
     restored_files = restored_tracks
 
     for quarantine_source, original in quarantine_plan:
-        if original.exists() and original.is_dir():
-            original.rmdir()
         original.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(quarantine_source), str(original))
         restored_files += 1
@@ -432,6 +481,7 @@ def reset_test_data(db: Session, *, apply: bool) -> DevResetSummary:
         status="ok",
         restored_tracks=restored_tracks,
         restored_files=restored_files,
+        recovered_media_files=recovered_media_files,
         removed_reports=removed_reports,
         removed_move_logs=removed_move_logs,
         removed_library_metadata=removed_library_metadata,
@@ -442,7 +492,8 @@ def reset_test_data(db: Session, *, apply: bool) -> DevResetSummary:
             f"Restored {restored_files} file(s) and cleared "
             f"{len(batch_ids)} batch(es). Removed "
             f"{removed_library_metadata} stale library metadata item(s). "
-            "Source files were not deleted."
+            f"Recovered {recovered_media_files} existing ingest media file(s) "
+            "to _RECOVERY. Source files were not deleted."
         ),
     )
 

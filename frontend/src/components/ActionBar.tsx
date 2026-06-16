@@ -41,7 +41,12 @@ export default function ActionBar({
           <i className={`ti ti-circle-arrow-right ${loadingAction === "move" ? "spinner" : ""}`} /> Move approved
         </button>
         {devToolsEnabled && (
-          <button className="btn btn--warning" disabled={disabled} onClick={() => void onReset()}>
+          <button
+            className="btn btn--warning"
+            disabled={disabled}
+            title="Reset preserves media files. Media moved out of active test folders will be placed in _RECOVERY."
+            onClick={() => void onReset()}
+          >
             <i className={`ti ti-restore ${loadingAction === "reset" ? "spinner" : ""}`} /> Reset test data
           </button>
         )}
