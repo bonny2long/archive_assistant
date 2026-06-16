@@ -12,6 +12,14 @@ Current branch:
 
 Current latest checkpoint commit:
 
+`70e1876 docs: add update checkpoint documentation for TV folder cleanup and anime specials recovery`
+
+TV anime specials regression commit:
+
+`d3fc1c9 add tv anime specials regression`
+
+TV specials implementation checkpoint commit:
+
 `88b4239 fix tv specials anime review and move flow`
 
 Earlier Severance title cleanup commit:
@@ -196,15 +204,48 @@ $env:DEBUG='true'; .\backend\.venv\Scripts\python.exe .\scripts\check_tv_final_p
 .\backend\.venv\Scripts\python.exe .\scripts\check_tv_review_contract_no_regression.py
 ```
 
-## Remaining Decision
+## Permanent Anime Specials Regression
 
-Before calling TV metadata assist parity complete, decide whether to add one
-small permanent regression script specifically for the full Shingeki case:
+Permanent script:
+
+`scripts/check_tv_anime_specials_regression.py`
+
+This script creates tiny non-zero `.mkv` fixture files in a temp ingest root and
+does not use, move, approve, or commit real media.
+
+It protects the full Shingeki-style scan/review case:
 
 - 86 normal episodes.
 - 11 specials.
 - 97 total videos.
 - 0 unresolved videos.
 - Empty blockers.
+- Empty metadata warnings.
+- OAD files recognized as `destination_group == "oad"`.
+- OVA/OAV files recognized as specials.
+- `S01E13.5` recognized as a special from inside `Season 01`.
+- Final Chapters `Special 1` and `Special 2` recognized as specials from a
+  Season 4-style folder.
 - Canonical item-level and hydrated file-row show titles.
+- No quarantine row.
 - No approval or move.
+
+Verified command:
+
+```powershell
+.\backend\.venv\Scripts\python.exe .\scripts\check_tv_anime_specials_regression.py
+```
+
+## TV V2 Parity Status
+
+TV metadata assist parity is complete for the currently known v2 TV cases:
+
+- Severance restored generic episode filenames.
+- TV folder title cleanup from release/container tokens.
+- Normal TV scan, review, approval, move, and manifest flow.
+- Shingeki-style anime episodes, specials, OAD/OVA/OAV, fractional episode
+  specials, Final Chapters specials, review counts, and hydrated file metadata.
+
+Freeze TV behavior here unless a real new bug appears. Future v2 metadata
+assist work should be final polish/documentation or other media domains, not
+new TV core behavior.
