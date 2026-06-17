@@ -18,6 +18,7 @@ import type {
   MoveResult,
   PaginatedResponse,
   ScanMusicResponse,
+  SystemPathsResponse,
   SystemTimeResponse,
   TvMetadataUpdate,
   TvEpisodeReviewUpdate,
@@ -80,6 +81,7 @@ async function request<T>(path: string, method = "GET", body?: unknown): Promise
 export const api = {
   health: () => request<HealthResponse>("/health"),
   systemTime: () => request<SystemTimeResponse>("/system/time"),
+  systemPaths: () => request<SystemPathsResponse>("/system/paths"),
   listBatches: () => request<PaginatedResponse<BatchSummary>>("/batches?page_size=100"),
   listPending: () => request<PaginatedResponse<BatchSummary>>("/batches/pending?page_size=100"),
   getBatch: (id: number) => request<IngestBatch>(`/batches/${id}`),

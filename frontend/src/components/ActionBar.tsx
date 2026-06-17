@@ -8,6 +8,7 @@ type Props = {
   loadingAction: ActionKey | null;
   devToolsEnabled: boolean;
   serverTime?: string | null;
+  ingestPath?: string | null;
 };
 
 export default function ActionBar({
@@ -18,6 +19,7 @@ export default function ActionBar({
   loadingAction,
   devToolsEnabled,
   serverTime,
+  ingestPath,
 }: Props) {
   const disabled = loadingAction !== null;
 
@@ -26,6 +28,9 @@ export default function ActionBar({
       <div>
         <div className="action-bar__title">Archive Assistant</div>
         <div className="action-bar__subtitle">Archive ingest dashboard</div>
+        <div className="action-bar__system-path">
+          Scanning ingest: {ingestPath || "unknown - check backend"}
+        </div>
         {devToolsEnabled && serverTime && (
           <div className="action-bar__system-time">{serverTime}</div>
         )}

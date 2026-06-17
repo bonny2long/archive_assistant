@@ -178,6 +178,7 @@ button:focus-visible, input:focus-visible {
 }
 .action-bar__title { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
 .action-bar__subtitle { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.action-bar__system-path { margin-top: 2px; color: var(--text-muted); font-size: 10px; max-width: 760px; word-break: break-all; }
 .action-bar__system-time { margin-top: 2px; color: var(--text-muted); font-size: 10px; }
 .action-bar__buttons { display: flex; gap: 0.5rem; }
 

@@ -99,6 +99,25 @@ def system_time():
     }
 
 
+@router.get("/system/paths")
+def system_paths():
+    def path_value(path: Path) -> str:
+        return str(path.resolve())
+
+    return {
+        "data_root": path_value(settings.data_root),
+        "ingest_root": path_value(settings.ingest_root),
+        "reports_dir": path_value(settings.reports_dir),
+        "move_logs_dir": path_value(settings.move_logs_dir),
+        "movies_dir": path_value(settings.movies_dir),
+        "tv_dir": path_value(settings.tv_dir),
+        "music_flac_dir": path_value(settings.music_flac_dir),
+        "music_mp3_dir": path_value(settings.music_mp3_dir),
+        "books_dir": path_value(settings.books_dir),
+        "audiobooks_dir": path_value(settings.audiobooks_dir),
+    }
+
+
 @router.post("/scan/music", response_model=ScanMusicResponse)
 def scan_music(db: Session = Depends(get_db)):
     result = scan_music_ingest(db)

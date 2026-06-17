@@ -111,16 +111,16 @@ curl -X PATCH http://127.0.0.1:8000/api/batches/1/metadata \
 
 ## Supported Media Types
 
-| Type | Detection | Review | Move | Manifest | Index |
-|---|---|---|---|---|---|---|
-| Music album | Yes | Yes | Yes | Yes | Yes |
-| Music discography | Yes | Yes | Yes | Yes | Yes |
-| Movie | Yes | Yes | Yes | Yes | Yes |
-| Movie collection | Yes | Yes | Yes | Yes | Yes |
-| TV show (season) | Yes | Yes | Yes | Yes | Yes |
-| Book | Yes | Yes | Yes | Yes | Yes |
-| Book collection | Yes | Yes | Yes | Yes | Yes |
-| Audiobook | Yes | Yes | Yes | Yes | Yes |
+| Type              | Detection | Review | Move | Manifest | Index |
+| ----------------- | --------- | ------ | ---- | -------- | ----- |
+| Music album       | Yes       | Yes    | Yes  | Yes      | Yes   |
+| Music discography | Yes       | Yes    | Yes  | Yes      | Yes   |
+| Movie             | Yes       | Yes    | Yes  | Yes      | Yes   |
+| Movie collection  | Yes       | Yes    | Yes  | Yes      | Yes   |
+| TV show (season)  | Yes       | Yes    | Yes  | Yes      | Yes   |
+| Book              | Yes       | Yes    | Yes  | Yes      | Yes   |
+| Book collection   | Yes       | Yes    | Yes  | Yes      | Yes   |
+| Audiobook         | Yes       | Yes    | Yes  | Yes      | Yes   |
 
 Unknown or unsupported files route to quarantine review instead of blocking the scan.
 
@@ -130,12 +130,12 @@ Unknown or unsupported files route to quarantine review instead of blocking the 
 
 Each scanned batch is classified into quality levels. The criteria vary by media type, but the principle is the same:
 
-| Level | Meaning |
-|---|---|
-| **good** | All required fields present and valid |
-| **fair** | Some metadata present, one or more fields missing |
-| **weak** | Required fields missing; derived from folder-name fallback |
-| **broken** | No usable metadata could be extracted |
+| Level      | Meaning                                                    |
+| ---------- | ---------------------------------------------------------- |
+| **good**   | All required fields present and valid                      |
+| **fair**   | Some metadata present, one or more fields missing          |
+| **weak**   | Required fields missing; derived from folder-name fallback |
+| **broken** | No usable metadata could be extracted                      |
 
 - **good / fair** → placed in `pending_review` immediately
 - **weak / broken** → placed in `needs_metadata_review` or `metadata_recovery`; correction required before approval
@@ -146,25 +146,25 @@ Each scanned batch is classified into quality levels. The criteria vary by media
 
 Settings are defined in `backend/app/core/config.py` using `pydantic-settings`. Loaded from environment or a `.env` file (gitignored).
 
-| Setting | Default | Description |
-|---|---|---|
-| `app_name` | `"Archive Assistant"` | FastAPI application title |
-| `debug` | `True` | Enable debug mode |
-| `dev_tools_enabled` | `True` | Show reset tools when debug is also on |
-| `data_root` | `project_root / "data"` | Root data directory |
-| `ingest_root` | `data/_INGEST/` | Root intake zone |
-| `reports_dir` | `data/_REPORTS/ingest-reports/` | JSON scan reports |
-| `move_logs_dir` | `data/_REPORTS/move-logs/` | Move action logs |
-| `music_flac_dir` | `data/Music/Library/FLAC/` | FLAC music destination |
-| `music_mp3_dir` | `data/Music/Library/MP3/` | MP3 music destination |
-| `music_discographies_dir` | `data/Music/Discographies/` | Discography destination |
-| `movies_dir` | `data/Movies/Library/` | Movie destination |
-| `tv_dir` | `data/TV/Library/` | TV show destination |
-| `books_dir` | `data/Books/` | Book destination |
-| `audiobooks_dir` | `data/Audiobooks/Library/` | Audiobook destination |
-| `quarantine_reports_dir` | `data/_REPORTS/quarantine-reports/` | Quarantine reports |
-| `archive_assistant_timezone` | `America/Chicago` | Display timezone |
-| `database_url` | `sqlite:///.../archive_assistant.db` | SQLite connection string |
+| Setting                      | Default                              | Description                            |
+| ---------------------------- | ------------------------------------ | -------------------------------------- |
+| `app_name`                   | `"Archive Assistant"`                | FastAPI application title              |
+| `debug`                      | `True`                               | Enable debug mode                      |
+| `dev_tools_enabled`          | `True`                               | Show reset tools when debug is also on |
+| `data_root`                  | `project_root / "data"`              | Root data directory                    |
+| `ingest_root`                | `data/_INGEST/`                      | Root intake zone                       |
+| `reports_dir`                | `data/_REPORTS/ingest-reports/`      | JSON scan reports                      |
+| `move_logs_dir`              | `data/_REPORTS/move-logs/`           | Move action logs                       |
+| `music_flac_dir`             | `data/Music/Library/FLAC/`           | FLAC music destination                 |
+| `music_mp3_dir`              | `data/Music/Library/MP3/`            | MP3 music destination                  |
+| `music_discographies_dir`    | `data/Music/Discographies/`          | Discography destination                |
+| `movies_dir`                 | `data/Movies/Library/`               | Movie destination                      |
+| `tv_dir`                     | `data/TV/Library/`                   | TV show destination                    |
+| `books_dir`                  | `data/Books/`                        | Book destination                       |
+| `audiobooks_dir`             | `data/Audiobooks/Library/`           | Audiobook destination                  |
+| `quarantine_reports_dir`     | `data/_REPORTS/quarantine-reports/`  | Quarantine reports                     |
+| `archive_assistant_timezone` | `America/Chicago`                    | Display timezone                       |
+| `database_url`               | `sqlite:///.../archive_assistant.db` | SQLite connection string               |
 
 ---
 
@@ -287,48 +287,48 @@ Icons: [Tabler Icons](https://tabler.io/icons) (CDN).
 
 Available scripts (`cd frontend`):
 
-| Command | Description |
-|---|---|
-| `npm run dev` | Vite dev server with hot-reload |
-| `npm run build` | Type-check and production build |
-| `npm run preview` | Preview production build |
+| Command           | Description                     |
+| ----------------- | ------------------------------- |
+| `npm run dev`     | Vite dev server with hot-reload |
+| `npm run build`   | Type-check and production build |
+| `npm run preview` | Preview production build        |
 
 ---
 
 ## API Endpoints
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/api/health` | Service health check |
-| `GET` | `/api/system/time` | Server timezone and clock |
-| `GET` | `/api/batches` | List all batches (paginated) |
-| `GET` | `/api/batches/pending` | List pending-review batches |
-| `GET` | `/api/batches/needs-metadata-review` | Batches needing metadata review |
-| `GET` | `/api/batches/{id}` | Get batch details |
-| `GET` | `/api/batches/{id}/files` | Get batch files |
-| `GET` | `/api/batches/{id}/review` | Expanded review (tracks, warnings, destination) |
-| `GET` | `/api/batches/{id}/moves` | Per-file move history |
-| `GET` | `/api/library/summary` | Library and workflow totals |
-| `PATCH` | `/api/batches/{id}/metadata` | Update music album metadata |
-| `PATCH` | `/api/batches/{id}/movie-metadata` | Update movie metadata |
-| `PATCH` | `/api/batches/{id}/movie-collection-review` | Review movie collection |
-| `PATCH` | `/api/batches/{id}/book-metadata` | Update book metadata |
-| `PATCH` | `/api/batches/{id}/book-collection-review` | Review book collection |
-| `PATCH` | `/api/batches/{id}/audiobook-metadata` | Update audiobook metadata |
-| `PATCH` | `/api/batches/{id}/tv-metadata` | Update TV show metadata |
-| `PATCH` | `/api/batches/{id}/tv-episode-review` | Episode-level TV review |
-| `PATCH` | `/api/batches/{id}/discography` | Update discography artist |
-| `PATCH` | `/api/batches/{id}/review-confirmation` | Confirm/remove review |
-| `POST` | `/api/batches/{id}/approve` | Approve a batch |
-| `POST` | `/api/batches/{id}/send-to-recovery` | Send to metadata recovery |
-| `POST` | `/api/batches/{id}/reject` | Reject a batch |
-| `POST` | `/api/batches/bulk-approve` | Bulk approve by IDs |
-| `POST` | `/api/approve-selected` | Approve selected batches with skip reporting |
-| `POST` | `/api/batches/{id}/merge` | Merge batches |
-| `POST` | `/api/scan/music` | Scan all ingest media |
-| `POST` | `/api/move/approved` | Move all approved batches |
-| `POST` | `/api/dev/reset/test-data` | Reset test data (debug mode only) |
-| `POST` | `/api/dev/reset/music-test` | Legacy alias |
+| Method  | Path                                        | Description                                     |
+| ------- | ------------------------------------------- | ----------------------------------------------- |
+| `GET`   | `/api/health`                               | Service health check                            |
+| `GET`   | `/api/system/time`                          | Server timezone and clock                       |
+| `GET`   | `/api/batches`                              | List all batches (paginated)                    |
+| `GET`   | `/api/batches/pending`                      | List pending-review batches                     |
+| `GET`   | `/api/batches/needs-metadata-review`        | Batches needing metadata review                 |
+| `GET`   | `/api/batches/{id}`                         | Get batch details                               |
+| `GET`   | `/api/batches/{id}/files`                   | Get batch files                                 |
+| `GET`   | `/api/batches/{id}/review`                  | Expanded review (tracks, warnings, destination) |
+| `GET`   | `/api/batches/{id}/moves`                   | Per-file move history                           |
+| `GET`   | `/api/library/summary`                      | Library and workflow totals                     |
+| `PATCH` | `/api/batches/{id}/metadata`                | Update music album metadata                     |
+| `PATCH` | `/api/batches/{id}/movie-metadata`          | Update movie metadata                           |
+| `PATCH` | `/api/batches/{id}/movie-collection-review` | Review movie collection                         |
+| `PATCH` | `/api/batches/{id}/book-metadata`           | Update book metadata                            |
+| `PATCH` | `/api/batches/{id}/book-collection-review`  | Review book collection                          |
+| `PATCH` | `/api/batches/{id}/audiobook-metadata`      | Update audiobook metadata                       |
+| `PATCH` | `/api/batches/{id}/tv-metadata`             | Update TV show metadata                         |
+| `PATCH` | `/api/batches/{id}/tv-episode-review`       | Episode-level TV review                         |
+| `PATCH` | `/api/batches/{id}/discography`             | Update discography artist                       |
+| `PATCH` | `/api/batches/{id}/review-confirmation`     | Confirm/remove review                           |
+| `POST`  | `/api/batches/{id}/approve`                 | Approve a batch                                 |
+| `POST`  | `/api/batches/{id}/send-to-recovery`        | Send to metadata recovery                       |
+| `POST`  | `/api/batches/{id}/reject`                  | Reject a batch                                  |
+| `POST`  | `/api/batches/bulk-approve`                 | Bulk approve by IDs                             |
+| `POST`  | `/api/approve-selected`                     | Approve selected batches with skip reporting    |
+| `POST`  | `/api/batches/{id}/merge`                   | Merge batches                                   |
+| `POST`  | `/api/scan/music`                           | Scan all ingest media                           |
+| `POST`  | `/api/move/approved`                        | Move all approved batches                       |
+| `POST`  | `/api/dev/reset/test-data`                  | Reset test data (debug mode only)               |
+| `POST`  | `/api/dev/reset/music-test`                 | Legacy alias                                    |
 
 Interactive docs are disabled by default. Enable with `API_DOCS_ENABLED=true` in `backend/.env`.
 
@@ -412,7 +412,7 @@ python -m venv .venv
 pip install -r requirements.txt
 python -m app.db.init_db
 source .venv/bin/activate   # Windows: .venv\Scripts\Activate.ps1
-uvicorn app.main:app --reload
+python -m uvicorn app.main:app --reload
 ```
 
 ### Frontend
@@ -425,13 +425,13 @@ npm run dev
 
 ### Troubleshooting
 
-| Issue | Likely fix |
-|---|---|
-| Port 8000 already in use | `uvicorn app.main:app --reload --port 8001` |
-| Port 5173 already in use | Vite auto-switches to next available port |
-| Database errors on startup | Run `python -m app.db.init_db` |
+| Issue                         | Likely fix                                            |
+| ----------------------------- | ----------------------------------------------------- |
+| Port 8000 already in use      | `uvicorn app.main:app --reload --port 8001`           |
+| Port 5173 already in use      | Vite auto-switches to next available port             |
+| Database errors on startup    | Run `python -m app.db.init_db`                        |
 | Files not appearing in ingest | Ensure folders are direct children of `data/_INGEST/` |
-| CORS errors in browser | Backend on 8000, frontend on 5173 |
+| CORS errors in browser        | Backend on 8000, frontend on 5173                     |
 
 ---
 

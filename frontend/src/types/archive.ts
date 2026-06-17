@@ -515,6 +515,19 @@ export type ScanMusicResponse = {
   audiobook_files_found: number;
 };
 
+export type SystemPathsResponse = {
+  data_root: string;
+  ingest_root: string;
+  reports_dir: string;
+  move_logs_dir: string;
+  movies_dir: string;
+  tv_dir: string;
+  music_flac_dir: string;
+  music_mp3_dir: string;
+  books_dir: string;
+  audiobooks_dir: string;
+};
+
 export type DevResetResponse = {
   status: string;
   restored_tracks: number;

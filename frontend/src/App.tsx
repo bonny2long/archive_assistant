@@ -70,6 +70,7 @@ export default function App() {
   const [librarySummary, setLibrarySummary] = useState<LibrarySummaryData>(EMPTY_LIBRARY_SUMMARY);
   const [qaSummary, setQaSummary] = useState<QaSummary | null>(null);
   const [systemTime, setSystemTime] = useState<SystemTimeResponse | null>(null);
+  const [ingestPath, setIngestPath] = useState<string | null>(null);
 
   const showToast = useCallback((msg: string, type: ToastState["type"] = "info") => {
     setToast({ msg, type });
@@ -124,6 +125,9 @@ export default function App() {
         setSystemTime(time);
       })
       .catch(() => configureArchiveTimezone(null));
+    void api.systemPaths()
+      .then((paths) => setIngestPath(paths.ingest_root))
+      .catch(() => setIngestPath(null));
   }, [loadBatches]);
 
   const filtered = batches.filter((batch) => {
@@ -609,6 +613,7 @@ export default function App() {
         serverTime={systemTime
           ? `Server time: ${formatArchiveTime(systemTime.server_utc)} ${archiveTimezone()}`
           : null}
+        ingestPath={ingestPath}
       />
       <div className="app-content">
         <LibrarySummary summary={librarySummary} />
