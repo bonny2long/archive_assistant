@@ -5,19 +5,23 @@ This local setup lets Archive Assistant scan Intake Watcher's completed handoff 
 Archive Assistant should scan only Intake Watcher's ready folder:
 
 ```text
-C:/Users/BonnyMakaniankhondo/Documents/GitHub/NAS/intake-watcher/data/_INGEST/ready
+C:/Users/BonnyMakaniankhondo/Documents/GitHub/NAS/intake-watccher/data/_INGEST/ready
 ```
 
 Do not point Archive Assistant at Intake Watcher's `incoming` folder.
 
 ## Backend Startup
 
-Run this in the same PowerShell session that starts the Archive Assistant backend. The environment variable must be set before `uvicorn` starts.
+The local backend now has `backend\.env` with:
+
+```env
+INGEST_ROOT=C:/Users/BonnyMakaniankhondo/Documents/GitHub/NAS/intake-watccher/data/_INGEST/ready
+```
+
+Start the backend from the backend folder so that `.env` is loaded:
 
 ```powershell
 cd C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\archive-assistant-scaffold\archive-assistant-scaffold\backend
-
-$env:INGEST_ROOT="C:/Users/BonnyMakaniankhondo/Documents/GitHub/NAS/intake-watcher/data/_INGEST/ready"
 
 python -c "from app.core.config import settings; print('INGEST_ROOT=', settings.ingest_root)"
 
@@ -40,21 +44,19 @@ Before opening the UI, verify the backend sees the intended ingest path:
 ```powershell
 cd C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\archive-assistant-scaffold\archive-assistant-scaffold\backend
 
-$env:INGEST_ROOT="C:/Users/BonnyMakaniankhondo/Documents/GitHub/NAS/intake-watcher/data/_INGEST/ready"
-
 python -c "from app.core.config import settings; print(settings.ingest_root); print(settings.ingest_root.exists())"
 ```
 
 Expected output:
 
 ```text
-C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\intake-watcher\data\_INGEST\ready
+C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\intake-watccher\data\_INGEST\ready
 True
 ```
 
 If it prints `False`, the path is wrong or the folder does not exist.
 
-If it prints Archive Assistant's own `data/_INGEST`, the environment variable was not loaded by the backend process.
+If it prints Archive Assistant's own `data/_INGEST`, the backend did not load `backend\.env`. Start the backend from the `backend` folder or set `INGEST_ROOT` manually before starting `uvicorn`.
 
 ## UI Check
 
