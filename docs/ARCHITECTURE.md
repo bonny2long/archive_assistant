@@ -1,115 +1,125 @@
 # Archive Assistant Architecture
 
-## Core principle
+## Purpose
 
-Deterministic extraction first. Human approval before write actions. AI metadata assist comes later.
+Archive Assistant is the controlled media organizer in Bonny's NAS workflow.
+It scans stable ingest folders, creates review batches, supports metadata review, requires approval, moves approved media, and writes manifests/logs.
 
-## Services
-
-- **FastAPI** backend (Python 3.12+)
-- **SQLite** database (SQLAlchemy ORM); PostgreSQL target for NAS
-- **React + TypeScript** dashboard (Vite)
-- **Python workers** — scan worker, move worker (CLI scripts)
-
-## Multi-media data flow
-
-All supported media types follow the same pipeline:
+## Three-System Boundary
 
 ```text
-_INGEST/ → scan → classify → review → edit → approve → move → manifest + index + log
+Intake Watcher = Is the upload finished?
+Archive Assistant = What is it, what needs review, and where should it go after approval?
+Cleaner = After approved moves, what safe leftovers can be cleaned or sent to review?
 ```
 
-### 1. Scan (`services/scanner.py`)
+Archive Assistant must scan stable ready folders. It should not watch active downloads directly in production.
+Intake Watcher owns active upload completion detection.
+Cleaner owns later conservative cleanup of empty shells/leftovers.
 
-The scanner iterates over `data/_INGEST/`, classifies each item by type (`music_album`, `music_discography`, `video_movie`, `video_tv_show`, `book`, `audiobook`, `unknown_type`, `unsupported_file`), and delegates to media-specific parsers:
+## Archive Assistant Responsibility
 
-- **Music**: `music_metadata.py` — folder name parsing, embedded tag extraction (mutagen), disc/track sorting, compilation detection, canonical key normalization
-- **Movies**: `video_metadata.py` — movie name parsing, year/edition detection, subtitle/artwork identification
-- **TV**: `video_metadata.py` + `tv_review.py` — season/episode parsing, special episode detection, episode-level review
-- **Books**: `book_metadata.py` — format detection (EPUB, PDF), file grouping
-- **Audiobooks**: `audiobook_metadata.py` — multi-disc detection, narrator/series metadata
+- Scan configured ingest root.
+- Classify media.
+- Build review batches.
+- Show metadata candidates and review issues.
+- Require human approval.
+- Move approved media to final libraries.
+- Write manifests/logs.
 
-### 2. Database models (`models/archive.py`)
+## What It Does Not Do
 
-| Table | Purpose |
-|---|---|
-| `ingest_batches` | Batch-level metadata, status, confidence, destination |
-| `ingest_files` | Per-file records, checksum, detected role, track metadata |
-| `move_actions` | Per-file move history (source, destination, status, error) |
-| `archive_items` | Permanent archive records after move completion |
+- No active download watching.
+- No automatic deletion.
+- No embedded tag mutation.
+- No silent metadata edits.
+- No Cleaner behavior in v2.
 
-### 3. Review state system (`services/review_state.py`)
+## Backend Module Map
 
-Each batch carries a `metadata_json` blob that the review system enriches with:
+```text
+scanner.py              Classifies ingest items and builds batch records
+review_state.py         Builds blocking/non-blocking review state
+metadata_candidates.py  Candidate/suggestion contract for metadata assist
+music_metadata.py       Albums/discographies and audio tag/folder parsing
+video_metadata.py       Movies/TV video parsing
+tv_review.py            TV episode/special review model
+book_metadata.py        PDF/EPUB/book grouping metadata
+audiobook_metadata.py   Audiobook and multi-disc parsing
+mover.py                Approved final moves
+move_manifest.py        Per-move audit manifests
+library_manifest.py     Library index/manifest helpers
+quarantine.py           Unknown/unsupported/rejected handling
+report_writer.py        Reports/logs
+dev_reset.py            Development reset only, not NAS media
+```
 
-- **Blocking review items** — must be resolved before approval (missing required fields, parse failures)
-- **Non-blocking review items** — warnings that can be accepted (missing optional fields, destination conflicts)
-- **Metadata quality label** — `good` / `fair` / `weak` / `broken`
-- **Confidence score** — 0.0–1.0 based on data completeness and source reliability
-- **Metadata warnings** — specific flags like `album_tag_mismatch`, `movie_year_missing`, `tv_episode_parse_failed`
+## Frontend Module Map
 
-### 4. Metadata correction flow
+```text
+App.tsx
+BatchTable.tsx
+BatchRow.tsx
+BatchDetail.tsx
+MediaReviewRouter.tsx
+MetadataSuggestionChips.tsx
+ReviewIssuesPanel.tsx
+MetadataEditor.tsx
+DiscographyEditor.tsx
+MovieMetadataEditor.tsx
+MovieCollectionEditor.tsx
+TvMetadataEditor.tsx
+TvEpisodeReviewPanel.tsx
+BookMetadataEditor.tsx
+BookCollectionEditor.tsx
+AudiobookMetadataEditor.tsx
+LibrarySummary.tsx
+StatusTabs.tsx
+ActionBar.tsx
+```
 
-Each media type has its own PATCH endpoint and editor component:
+## Data Model Map
 
-| Media Type | API Endpoint | Frontend Component |
-|---|---|---|
-| Music album | `PATCH /api/batches/{id}/metadata` | `MetadataEditor.tsx` |
-| Music discography | `PATCH /api/batches/{id}/discography` | `DiscographyEditor.tsx` |
-| Movie | `PATCH /api/batches/{id}/movie-metadata` | `MovieMetadataEditor.tsx` |
-| Movie collection | `PATCH /api/batches/{id}/movie-collection-review` | `MovieCollectionEditor.tsx` |
-| TV show | `PATCH /api/batches/{id}/tv-metadata` | `TvMetadataEditor.tsx` |
-| TV episode review | `PATCH /api/batches/{id}/tv-episode-review` | `TvEpisodeReviewPanel.tsx` |
-| Book | `PATCH /api/batches/{id}/book-metadata` | `BookMetadataEditor.tsx` |
-| Book collection | `PATCH /api/batches/{id}/book-collection-review` | `BookCollectionEditor.tsx` |
-| Audiobook | `PATCH /api/batches/{id}/audiobook-metadata` | `AudiobookMetadataEditor.tsx` |
+- `IngestBatch`: source-level review/move unit.
+- `IngestFile`: files attached to a batch.
+- `MoveAction`: source-to-destination move audit row.
+- `ArchiveItem`: library item index row.
 
-The `MediaReviewRouter.tsx` component routes each batch to the correct editor based on `detected_type` and `review_type`.
+## Scan / Review / Approve / Move Pipeline
 
-Music album and discography review uses the shared metadata-candidate contract.
-Candidates remain assistive until saved. Unknown album artist/title values
-require an explicit accepted-unknown decision; missing year remains a warning
-and can be marked for later lookup.
+```text
+scan ingest
+  -> classify media
+  -> create batch/files
+  -> build review state
+  -> user edits/confirms metadata
+  -> approve
+  -> move approved
+  -> manifest/index/report
+```
 
-Movie and movie-collection review uses the same contract. The parser extracts
-clean title/year candidates while preserving the original release name and
-removed technical tags for audit. Missing movie year is non-blocking; unknown
-titles require editing or an explicit accepted-unknown decision.
+## Metadata Assist Model
 
-### 5. Batch merge (`services/batch_merge.py`)
+Metadata assist produces candidates and review issues. It does not silently change final metadata.
 
-When metadata is saved, the system checks for merge candidates — batches matching by canonical artist, album, compatible year, and format. The smaller batch's files are reassigned to the largest batch, and the smaller batch becomes a `merged` audit row. Archived duplicate candidates are flagged but not merged.
+Blocking issues stop approval until reviewed. Non-blocking issues can be accepted by the user.
 
-### 6. Move pipeline (`services/mover.py`)
+## Manifest And Logging Model
 
-Approved batches are processed by the move worker:
+Moves write audit manifests and media-type metadata manifests. Reports and logs are for traceability and rollback reasoning.
 
-1. Lock metadata for move (snapshot final values)
-2. Recalculate canonical destination
-3. For each file: verify checksum, create destination path, copy/move file
-4. Write metadata manifest alongside moved media
-5. Update or create library index at the media-type root
-6. Log every action to `move_actions` table and filesystem move logs
+## Quarantine Model
 
-### 7. Manifest and index (`services/library_manifest.py`)
+Unknown and unsupported items go to quarantine review. Recognized media with weak metadata stays in metadata review.
 
-- **Metadata manifest**: JSON file written inside each moved media folder containing scan metadata, correction history, confidence, timestamps, and checksums.
-- **Library index**: updated at each media-type root (`Music/Library/`, `Movies/Library/`, etc.) listing all moved items with their paths.
+## Intake Watcher Bridge
 
-### 8. Quarantine system (`services/quarantine.py`)
+In bridge mode, `INGEST_ROOT` points to Intake Watcher's ready folder.
 
-Files classified as `unknown_type` or `unsupported_file` route to quarantine instead of blocking the scan. Quarantine review allows: restore to `_INGEST`, discard from tracking, or permanent exclusion. Quarantined discography exclusions (`discography-excluded`) are tracked separately.
+Archive Assistant scans ready, not incoming.
 
-## Permissions design for NAS
+## Future Cleaner Boundary
 
-Run the deployed app as an `archive-assistant` service user. Grant access only to:
+Cleaner is not implemented in Archive Assistant v2.
 
-- `_INGEST`, `_STAGING`, `_QUARANTINE`
-- `_REPORTS`, `_METADATA_RECOVERY`
-- `Music`, `Movies`, `TV`, `Books`, `Audiobooks`
-
-Do not allow access to legal documents, financial documents, secrets, or TrueNAS system paths.
-
-## Regression boundary
-
-`check_core_v1_regression.py` validates all v1 contracts in isolated temp directories. It does not touch real ingest, library, or database paths. Filesystem-heavy checks (discography, audiobook, manifest integration) are targeted manual checks on Windows due to temp-directory cleanup behavior.
+Cleanup of empty shells, uncertain leftovers, rejected retention, and deletion review belongs to future Cleaner / v3.

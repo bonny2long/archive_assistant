@@ -163,3 +163,6 @@ Then verify:
 
 If `check_root_ingest.py` still hangs, use the faulthandler stack trace to identify the exact line before making more changes.
 
+## Addendum - 2026-06-17 local Intake Watcher bridge proof
+
+Intake Watcher MVP was created as a separate app. It promotes stable uploads from incoming to ready. Archive Assistant was configured to scan Intake Watcher's ready folder by setting INGEST_ROOT. Local proof cases passed for PDFs/books and large music discographies. Cleaner remains future-only.

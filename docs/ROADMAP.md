@@ -1,109 +1,37 @@
-# Archive Assistant Roadmap
+# Roadmap
 
-## v1 Core — Complete
+## Current State
 
-Tagged: `archive-assistant-v1-core`
+```text
+v1 Core: complete and tagged.
+v2 Metadata Assist: complete and current local baseline.
+Intake Watcher: separate MVP complete/proven locally as companion app.
+Cleaner / Archive Assistant v3 Production Cleanup: future only.
+```
 
-Safe deterministic organizer: scan, classify, guided review, edit, approve, move, manifest, index, logs, and regression runner.
+Active Archive Assistant feature work is paused until the v3 Cleaner/cleanup planning chat.
 
-**Supported workflows:**
-- Music albums
-- Music discographies
-- Single movies
-- Movie collections / trilogies
-- TV shows (seasons, episodes, specials)
-- Books / book collections
-- Audiobooks / multi-disc audiobook folders
-- Bulk approval with skip reporting
-- Metadata manifests and library indexes
-- Mixed-media scan / review / approve / move
-- Core v1 regression suite
+## Locked Baselines
 
-**Core v1 rules:**
-- No deletion
-- No overwrite
-- No embedded tag mutation
-- No move without approval
-- Recognized media with weak metadata → review, not quarantine
-- True unknown / unsupported → quarantine review
-- Moved media gets metadata manifests and move logs
+- Core v1 is locked as `archive-assistant-v1-core`.
+- v2 Metadata Assist is treated as the current local baseline.
+- The Intake Watcher ready-folder bridge is locally proven.
 
----
+## Future v3 Scope
 
-## v2 Metadata Assist — In Progress
+Future v3 / Cleaner may cover:
 
-### v2.064 Checkpoint
+```text
+Safe empty source folder cleanup after successful approved moves.
+Leftover review routing.
+Quarantine/rejected retention.
+Cleanup logs.
+Development vs production mode separation.
+Rollback/audit proof.
+```
 
-**v2.064 is functionally passing for book/audiobook metadata assist and move
-manifests. Full v2 remains open until music, movie, and TV metadata assist reach
-parity.**
+## Not Active Now
 
-Passing at this checkpoint:
+Cleaner is not implemented in Archive Assistant v2.
 
-- Book and book-collection metadata candidates and guided repair
-- Audiobook metadata candidates, artwork matching, and multi-book preview
-- Explicit accepted-unknown and lookup-later review decisions
-- JSON and Markdown move manifests with persisted audit pointers
-
-Still open for full v2:
-
-- TV metadata-assist parity
-- Final mixed-media v2 regression and release lock
-
-### v2.065 Music Metadata Assist
-
-Passing at this checkpoint:
-
-- Local music candidates from folders, parent folders, filenames, embedded tags, and artwork
-- DJ/mixtape guards that prevent weak VA tags from replacing stronger folder context
-- Album and discography suggestion chips and guided repair controls
-- Explicit accepted-unknown and lookup-later decisions for music
-- Album track detail and artwork evidence in JSON/Markdown move manifests
-- Central discography move manifests under `Music/Metadata/move_manifests`
-
-### v2.066 Movie Metadata Assist
-
-Passing at this checkpoint:
-
-- Local movie candidates from folders, parent folders, filenames, and containers
-- Release-name cleanup with original names and removed tokens retained for audit
-- Single-movie and collection suggestion chips with accepted-unknown controls
-- Warning-only missing years and blocking unknown titles unless explicitly accepted
-- Visible-only collection bulk actions for lookup, unknown years, and exclusion
-- Movie manifests with poster, subtitle, sidecar, cleanup, and per-item proof
-
-Scope stays focused on metadata only:
-
-- **EPUB/PDF metadata reading** — extract title, author, series from book files using EbookLib / pypdf
-- **Audiobook chapter/title metadata** — optional chapter naming helpers using mutagen
-- **Suggestion chips in editors** — metadata candidates from file parsing, embedded tags, and optional online lookup
-- **Artwork suggestion support** — find and suggest cover art candidates
-- **Online lookup** — optional Open Library, Google Books, Audible lookups (opt-in, never automatic)
-- No silent edits
-- No deletion
-- No embedded tag writing (unless explicitly approved later)
-- Manual approval remains authoritative
-
----
-
-## v3 Production Ingest Cleanup
-
-Production hardening after metadata assist is stable:
-
-- Clean empty `_INGEST` folders after successful moves
-- Leave folders with leftover files for review
-- Never delete files that were not moved
-- Never delete quarantined / rejected files
-- Development mode keeps leftovers
-- Production mode can clean approved empty source folders
-- Cleanup actions must be logged
-
----
-
-## Later Phases
-
-- **PostgreSQL analytics** — richer search, library intelligence, historical stats
-- **Dashboard intelligence** — library trends, missing metadata reports, duplicate analysis
-- **Local radio** — streaming from organized music library
-- **External metadata engines** — plugin system for custom metadata sources
-- **Off-site backup** — parents-house replication, remote sync
+Do not add automatic cleanup/delete behavior under the v2 roadmap.

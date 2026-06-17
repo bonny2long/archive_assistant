@@ -1,45 +1,20 @@
-# Local Ready-Folder Bridge Setup
+# Local Ready-Folder Bridge Setup - 2026-06-17 Checkpoint
 
-This local setup lets Archive Assistant scan Intake Watcher's completed handoff folder while the two projects remain separate.
+This dated checkpoint is kept for project history.
 
-Archive Assistant should scan only Intake Watcher's ready folder:
+The current bridge documentation lives at:
 
 ```text
-C:/Users/BonnyMakaniankhondo/Documents/GitHub/NAS/intake-watccher/data/_INGEST/ready
+docs/INTAKE_WATCHER_BRIDGE.md
 ```
 
-Do not point Archive Assistant at Intake Watcher's `incoming` folder.
-
-## Backend Startup
-
-The local backend now has `backend\.env` with:
+Current proven local path:
 
 ```env
 INGEST_ROOT=C:/Users/BonnyMakaniankhondo/Documents/GitHub/NAS/intake-watccher/data/_INGEST/ready
 ```
 
-Start the backend from the backend folder so that `.env` is loaded:
-
-```powershell
-cd C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\archive-assistant-scaffold\archive-assistant-scaffold\backend
-
-python -c "from app.core.config import settings; print('INGEST_ROOT=', settings.ingest_root)"
-
-uvicorn app.main:app --reload
-```
-
-## Frontend Startup
-
-Start the frontend separately:
-
-```powershell
-cd C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\archive-assistant-scaffold\archive-assistant-scaffold\frontend
-npm run dev
-```
-
-## Verification Command
-
-Before opening the UI, verify the backend sees the intended ingest path:
+Validate from the backend folder:
 
 ```powershell
 cd C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\archive-assistant-scaffold\archive-assistant-scaffold\backend
@@ -47,29 +22,11 @@ cd C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\archive-assistant-scaffold\
 python -c "from app.core.config import settings; print(settings.ingest_root); print(settings.ingest_root.exists())"
 ```
 
-Expected output:
+Expected:
 
 ```text
-C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\intake-watccher\data\_INGEST\ready
+...\intake-watccher\data\_INGEST\ready
 True
 ```
 
-If it prints `False`, the path is wrong or the folder does not exist.
-
-If it prints Archive Assistant's own `data/_INGEST`, the backend did not load `backend\.env`. Start the backend from the `backend` folder or set `INGEST_ROOT` manually before starting `uvicorn`.
-
-## UI Check
-
-Archive Assistant now exposes:
-
-```text
-GET /api/system/paths
-```
-
-The dashboard header shows:
-
-```text
-Scanning ingest: ...
-```
-
-Confirm this line points to Intake Watcher's `ready` folder before clicking Scan.
+If it prints Archive Assistant's own `data/_INGEST`, `backend/.env` did not load or the backend was started from the wrong folder.
