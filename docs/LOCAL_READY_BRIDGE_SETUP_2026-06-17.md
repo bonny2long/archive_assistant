@@ -15,7 +15,7 @@ Do not point Archive Assistant at Intake Watcher's `incoming` folder.
 Run this in the same PowerShell session that starts the Archive Assistant backend. The environment variable must be set before `uvicorn` starts.
 
 ```powershell
-cd C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\archive-assistant-scaffold\backend
+cd C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\archive-assistant-scaffold\archive-assistant-scaffold\backend
 
 $env:INGEST_ROOT="C:/Users/BonnyMakaniankhondo/Documents/GitHub/NAS/intake-watcher/data/_INGEST/ready"
 
@@ -29,7 +29,7 @@ uvicorn app.main:app --reload
 Start the frontend separately:
 
 ```powershell
-cd C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\archive-assistant-scaffold\frontend
+cd C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\archive-assistant-scaffold\archive-assistant-scaffold\frontend
 npm run dev
 ```
 
@@ -38,7 +38,7 @@ npm run dev
 Before opening the UI, verify the backend sees the intended ingest path:
 
 ```powershell
-cd C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\archive-assistant-scaffold\backend
+cd C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\archive-assistant-scaffold\archive-assistant-scaffold\backend
 
 $env:INGEST_ROOT="C:/Users/BonnyMakaniankhondo/Documents/GitHub/NAS/intake-watcher/data/_INGEST/ready"
 
@@ -71,4 +71,3 @@ Scanning ingest: ...
 ```
 
 Confirm this line points to Intake Watcher's `ready` folder before clicking Scan.
-
