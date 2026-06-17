@@ -2,6 +2,8 @@ import re
 from collections import Counter
 from pathlib import Path
 
+from app.services.metadata_candidates import add_candidate, make_candidate
+
 AUDIO_EXTENSIONS = {".mp3", ".flac", ".m4a", ".aac", ".wav", ".ogg", ".opus"}
 ARTWORK_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 PREFERRED_ARTWORK_STEMS = {
@@ -18,6 +20,16 @@ PREFERRED_ARTWORK_STEMS = {
     "booklet",
 }
 UNKNOWN_VALUES = {"", "unknown", "unknown artist", "unknown album", "unknown year"}
+GENERIC_MUSIC_VALUES = {
+    "",
+    "unknown",
+    "unknown artist",
+    "unknown album",
+    "unknown year",
+    "va",
+    "v.a.",
+    "various",
+}
 YEAR_PATTERN = re.compile(r"(?<!\d)(19\d{2}|20\d{2})(?!\d)")
 BRACKETED_TEXT = re.compile(r"[\[(][^\])]*(?:mp3|flac|pmedia|lossless|web|cd|vinyl|kbps|bit|remaster|deluxe)[^\])]*[\])]", re.IGNORECASE)
 TRAILING_RELEASE_NOISE = re.compile(
@@ -501,6 +513,131 @@ def build_suggested_metadata(
     if is_compilation_artist(artist):
         cleaned["compilation"] = True
     return cleaned
+
+
+def _usable_music_candidate(
+    field: str,
+    value: object,
+    *,
+    compilation: bool = False,
+) -> bool:
+    normalized = normalize_key(str(value or ""))
+    if normalized in GENERIC_MUSIC_VALUES:
+        return False
+    if normalized == "various artists" and not compilation:
+        return False
+    if field == "track_title" and re.fullmatch(
+        r"(?:audio\s*)?(?:cd\s*)?track\s*0*\d+",
+        normalized,
+    ):
+        return False
+    if re.match(r"^(?:www[.]|downloaded from|torrent downloaded from)", normalized):
+        return False
+    return True
+
+
+def build_music_metadata_candidates(
+    source_folder: Path,
+    track_metadata: list[dict],
+    *,
+    compilation: bool = False,
+) -> tuple[dict[str, list[dict]], list[dict]]:
+    """Build local-only album and track candidates using the shared contract."""
+    candidates: dict[str, list[dict]] = {}
+    track_candidates: list[dict] = []
+    folder = parse_music_folder_name(source_folder.name)
+
+    def add(
+        field: str,
+        value: object,
+        source: str,
+        label: str,
+        confidence: float,
+        notes: list[str] | None = None,
+    ) -> None:
+        if not _usable_music_candidate(
+            field,
+            value,
+            compilation=compilation,
+        ):
+            return
+        add_candidate(
+            candidates,
+            make_candidate(
+                field,
+                value,
+                source,
+                label,
+                confidence,
+                notes,
+            ),
+        )
+
+    add("album_artist", folder.get("artist"), "folder_name", "Release folder name", 0.9)
+    add("album_title", folder.get("album"), "folder_name", "Release folder name", 0.9)
+    add("year", folder.get("year"), "folder_name", "Release folder name", 0.9)
+
+    parent_name = source_folder.parent.name
+    if parent_name and not is_disc_folder_name(parent_name):
+        parent_artist = parse_discography_parent_folder(parent_name).get("artist")
+        add(
+            "album_artist",
+            parent_artist,
+            "parent_folder_name",
+            "Parent folder name",
+            0.72,
+        )
+
+    embedded_fields = (
+        ("album_artist", "albumartist", "audio_tag_albumartist", "Embedded album artist tag", 0.92),
+        ("album_artist", "artist", "audio_tag_artist", "Embedded artist tag", 0.75),
+        ("album_title", "album", "audio_tag_album", "Embedded album tag", 0.9),
+        ("year", "date", "audio_tag_date", "Embedded date tag", 0.82),
+        ("genre", "genre", "audio_tag_genre", "Embedded genre tag", 0.72),
+    )
+    for field, key, source, label, confidence in embedded_fields:
+        values = [
+            str(metadata.get(key) or "").strip()
+            for metadata in track_metadata
+            if _usable_music_candidate(
+                field,
+                metadata.get(key),
+                compilation=compilation,
+            )
+        ]
+        if not values:
+            continue
+        counts = Counter(normalize_key(value) for value in values)
+        winner = counts.most_common(1)[0][0]
+        display = next(value for value in values if normalize_key(value) == winner)
+        add(field, display[:4] if field == "year" else display, source, label, confidence)
+
+    for metadata in track_metadata:
+        title = metadata.get("title")
+        source = "audio_tag_title"
+        source_label = "Embedded track title tag"
+        confidence = 0.85
+        if not _usable_music_candidate("track_title", title):
+            title = Path(str(metadata.get("source_filename") or "")).stem
+            source = "filename"
+            source_label = "Audio filename"
+            confidence = 0.65
+        if not _usable_music_candidate("track_title", title):
+            continue
+        track_candidates.append({
+            "field": "track_title",
+            "value": str(title).strip(),
+            "source": source,
+            "source_label": source_label,
+            "confidence": confidence,
+            "confidence_label": "high" if confidence >= 0.85 else "medium",
+            "applied": False,
+            "ignored": False,
+            "notes": [],
+            "track_number": metadata.get("tracknumber"),
+            "disc_number": metadata.get("discnumber"),
+        })
+    return candidates, track_candidates
 
 
 def extract_music_metadata(path: Path) -> dict:

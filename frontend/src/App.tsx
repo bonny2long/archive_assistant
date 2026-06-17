@@ -70,6 +70,7 @@ export default function App() {
   const [librarySummary, setLibrarySummary] = useState<LibrarySummaryData>(EMPTY_LIBRARY_SUMMARY);
   const [qaSummary, setQaSummary] = useState<QaSummary | null>(null);
   const [systemTime, setSystemTime] = useState<SystemTimeResponse | null>(null);
+  const [ingestPath, setIngestPath] = useState<string | null>(null);
 
   const showToast = useCallback((msg: string, type: ToastState["type"] = "info") => {
     setToast({ msg, type });
@@ -124,6 +125,9 @@ export default function App() {
         setSystemTime(time);
       })
       .catch(() => configureArchiveTimezone(null));
+    void api.systemPaths()
+      .then((paths) => setIngestPath(paths.ingest_root))
+      .catch(() => setIngestPath(null));
   }, [loadBatches]);
 
   const filtered = batches.filter((batch) => {
@@ -531,7 +535,7 @@ export default function App() {
       setQaSummary({
         title: "Scan summary",
         text: `Movies found: ${result.movie_batches_found}${tvCounts} | Audiobooks found: ${result.audiobook_batches_found} | Music albums found: ${result.music_albums_found} | Discographies found: ${result.discographies_found} | Unknown items: ${result.unknown_items} | Unsupported files: ${result.unsupported_files}`,
-        warnings: `Audiobook files found: ${result.audiobook_files_found} | Ignored system files: ${result.ignored_system_files} | Artwork files found: ${result.artwork_files_found} | Subtitle files found: ${result.subtitle_files_found} | ${warnings.filter((warning) => warning === "release_folder_grouping_used").length} release-folder grouping used`,
+        warnings: `Audiobook files found: ${result.audiobook_files_found} | Ignored system files: ${result.ignored_system_files} | Sidecar-only folders skipped: ${result.ignored_sidecar_only_folders} | Artwork files found: ${result.artwork_files_found} | Subtitle files found: ${result.subtitle_files_found} | ${warnings.filter((warning) => warning === "release_folder_grouping_used").length} release-folder grouping used`,
       });
       showToast(`Scan complete - ${result.created} new, ${result.skipped_duplicates} skipped duplicate(s)`);
     } catch {
@@ -545,7 +549,8 @@ export default function App() {
     const confirmed = window.confirm(
       "Reset all local ingest test data? This restores moved and quarantined "
       + "media to _INGEST, clears every review batch, archive row, report, "
-      + "and move log. Database tables and source files are preserved.",
+      + "and move log. Reset preserves media files. Media moved out of active "
+      + "test folders will be placed in _RECOVERY.",
     );
     if (!confirmed) return;
 
@@ -555,7 +560,7 @@ export default function App() {
       showToast(result.message);
       setQaSummary({
         title: "Reset summary",
-        text: `${result.restored_files} files restored · ${result.cleared_batches} batches cleared · ${result.removed_move_logs} move logs removed`,
+        text: `${result.restored_files} files restored · ${result.recovered_media_files ?? 0} existing ingest media files moved to _RECOVERY · ${result.untracked_library_media_files ?? 0} untracked library media files preserved · ${result.cleared_batches} batches cleared · ${result.removed_move_logs} move logs removed · ${result.removed_library_metadata} stale library metadata items removed`,
       });
       setTab("all");
       setSelected(new Set());
@@ -579,9 +584,15 @@ export default function App() {
       await loadBatches();
       const summary = await api.getLibrarySummary();
       setLibrarySummary(summary);
+      const manifestNames = result.manifests
+        .map((manifest) => manifest.markdown_path ?? manifest.json_path)
+        .join(" | ");
       setQaSummary({
-        title: "Move summary",
-        text: `${summary.moved_batches} batches moved · ${summary.moved_files} files · ${summary.failed_moves} failed moves`,
+        title: "Move complete",
+        text: `${result.moved} batches moved | ${result.files_moved} files moved | ${result.failed_moves} failed moves`,
+        warnings: manifestNames
+          ? `Manifests created: ${manifestNames}`
+          : "No move manifests were created.",
       });
     } catch {
       showToast("Move failed", "error");
@@ -602,6 +613,7 @@ export default function App() {
         serverTime={systemTime
           ? `Server time: ${formatArchiveTime(systemTime.server_utc)} ${archiveTimezone()}`
           : null}
+        ingestPath={ingestPath}
       />
       <div className="app-content">
         <LibrarySummary summary={librarySummary} />
@@ -649,6 +661,19 @@ export default function App() {
           onBulkReject={runBulkReject}
         />
       </div>
+      <footer className="app-footer">
+        <div className="app-footer__identity">
+          <strong>Archive Assistant</strong>
+          <span className="app-footer__version">v2.066B</span>
+          <span>Move manifest audit trail</span>
+        </div>
+        <div className="app-footer__notes" aria-label="Application guarantees">
+          <span><i className="ti ti-device-desktop" /> Local-first processing</span>
+          <span><i className="ti ti-user-check" /> Human approval required</span>
+          <span><i className="ti ti-shield-check" /> No automatic moves</span>
+        </div>
+        <small>Deterministic media review for your NAS library.</small>
+      </footer>
       {toast && (
         <Toast
           message={toast.msg}

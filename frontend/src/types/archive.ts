@@ -58,6 +58,8 @@ export type BatchSummary = {
   video_files?: string[];
   title?: string | null;
   edition?: string | null;
+  resolution?: string | null;
+  source?: string | null;
   original_release_name?: string | null;
   primary_video_file?: string | null;
   artwork_files: string[];
@@ -102,6 +104,7 @@ export type BatchSummary = {
   book_files?: string[];
   primary_book_file?: string | null;
   book_items?: BookCollectionItem[];
+  collection_summary?: BookCollectionSummary;
   narrator?: string | null;
   series?: string | null;
   series_index?: string | null;
@@ -109,6 +112,24 @@ export type BatchSummary = {
   audio_files?: string[];
   primary_audio_file?: string | null;
   chapter_count?: number;
+  metadata_candidates?: Record<string, MetadataCandidate[]>;
+  chapter_candidates?: ChapterCandidate[];
+  artwork_candidates?: MetadataCandidate[];
+  generic_audio_tag_count?: number;
+  detected_disc_count?: number;
+  candidate_warning_count?: number;
+  audiobook_collection_type?: string | null;
+  contained_books?: AudiobookContainedBook[];
+  accepted_unknown_author?: boolean;
+  accepted_unknown_year?: boolean;
+  accepted_unknown_narrator?: boolean;
+  accepted_unknown_album_artist?: boolean;
+  accepted_unknown_album_title?: boolean;
+  accepted_unknown_discography_artist?: boolean;
+  accepted_unknown_title?: boolean;
+  lookup_later?: boolean;
+  move_manifest?: MoveManifestPointer | null;
+  metadata_assist_version?: string | null;
   suggested_destination?: string | null;
   suggested_metadata?: SuggestedMetadata | null;
   metadata_confirmed: boolean;
@@ -123,7 +144,35 @@ export type BatchSummary = {
   created_at: string;
 };
 
+export type MetadataCandidate = {
+  field: string;
+  value: string;
+  source: string;
+  source_label: string;
+  confidence: number;
+  confidence_label: "high" | "medium" | "low";
+  applied: boolean;
+  ignored: boolean;
+  notes: string[];
+};
+
+export type ChapterCandidate = {
+  source_file: string;
+  track_number?: string | number | null;
+  disc_number?: string | number | null;
+  current_name: string;
+  suggested_title: string;
+  source: string;
+  source_label?: string;
+  confidence: number;
+  confidence_label: "high" | "medium" | "low";
+  ignored?: boolean;
+  generic?: boolean;
+  notes?: string[];
+};
+
 export type SuggestedMetadata = {
+  metadata_assist_version?: string | null;
   artist?: string | null;
   album?: string | null;
   year?: string | null;
@@ -139,6 +188,14 @@ export type SuggestedMetadata = {
   season_number?: number | null;
   season_title?: string | null;
   note?: string | null;
+  accepted_unknown_author?: boolean;
+  accepted_unknown_year?: boolean;
+  accepted_unknown_narrator?: boolean;
+  accepted_unknown_album_artist?: boolean;
+  accepted_unknown_album_title?: boolean;
+  accepted_unknown_discography_artist?: boolean;
+  accepted_unknown_title?: boolean;
+  lookup_later?: boolean;
   sources?: Partial<Record<
     "artist" | "album" | "year" | "genre" | "title" | "author" | "narrator" | "series" | "series_index" | "edition" | "format" | "show_title" | "season_number" | "season_title",
     string
@@ -149,10 +206,14 @@ export type SuggestedMetadata = {
 export type BatchMetadataUpdate = {
   artist: string;
   album: string;
-  year: string;
+  year: string | null;
   primary_genre?: string | null;
   format?: string | null;
   note?: string | null;
+  accepted_unknown_album_artist?: boolean;
+  accepted_unknown_album_title?: boolean;
+  accepted_unknown_year?: boolean;
+  lookup_later?: boolean;
 };
 
 export type ReviewItem = {
@@ -185,12 +246,19 @@ export type DiscographyAlbum = {
   year?: string | null;
   format?: string;
   track_count: number;
+  disc_count?: number;
   artwork_count?: number;
   artwork_files?: string[];
   status?: string;
   warnings?: string[];
   release_type?: DiscographyReleaseType;
   include?: boolean;
+  metadata_candidates?: Record<string, MetadataCandidate[]>;
+  track_candidates?: MetadataCandidate[];
+  accepted_unknown_album_artist?: boolean;
+  accepted_unknown_album_title?: boolean;
+  accepted_unknown_year?: boolean;
+  lookup_later?: boolean;
 };
 
 export type DiscographyAlbumUpdate = {
@@ -199,11 +267,17 @@ export type DiscographyAlbumUpdate = {
   year: string | null;
   release_type: DiscographyReleaseType;
   include: boolean;
+  accepted_unknown_album_artist: boolean;
+  accepted_unknown_album_title: boolean;
+  accepted_unknown_year: boolean;
+  lookup_later: boolean;
 };
 
 export type DiscographyMetadataUpdate = {
   artist: string;
   albums?: DiscographyAlbumUpdate[];
+  accepted_unknown_discography_artist?: boolean;
+  lookup_later?: boolean;
 };
 
 export type MovieMetadataUpdate = {
@@ -211,6 +285,9 @@ export type MovieMetadataUpdate = {
   year: string | null;
   edition?: string | null;
   format?: string | null;
+  accepted_unknown_title?: boolean;
+  accepted_unknown_year?: boolean;
+  lookup_later?: boolean;
 };
 
 export type MovieCollectionItem = {
@@ -222,16 +299,27 @@ export type MovieCollectionItem = {
   year?: string | null;
   edition?: string | null;
   format?: string | null;
+  resolution?: string | null;
+  source?: string | null;
   destination_preview?: string | null;
+  metadata_candidates?: Record<string, MetadataCandidate[]>;
+  release_cleanup?: Record<string, unknown>;
+  accepted_unknown_title?: boolean;
+  accepted_unknown_year?: boolean;
+  lookup_later?: boolean;
 };
 
 export type MovieCollectionItemUpdate = {
   source_file: string;
   include: boolean;
   title: string;
-  year: string;
+  year: string | null;
   edition?: string | null;
   format?: string | null;
+  metadata_candidates?: Record<string, MetadataCandidate[]>;
+  accepted_unknown_title: boolean;
+  accepted_unknown_year: boolean;
+  lookup_later: boolean;
 };
 
 export type MovieCollectionReviewUpdate = {
@@ -254,12 +342,23 @@ export type BookCollectionItem = {
   source_file: string;
   include: boolean;
   title?: string | null;
+  metadata_title?: string | null;
+  display_title?: string | null;
+  destination_title?: string | null;
   author?: string | null;
   year?: string | null;
   format?: string | null;
   series?: string | null;
   series_index?: string | null;
   destination_preview?: string | null;
+  metadata_candidates?: Record<string, MetadataCandidate[]>;
+  candidate_notes?: string[];
+  candidate_runtime?: Record<string, unknown>;
+  matched_artwork?: MatchedArtwork | null;
+  alternate_formats?: AlternateBookFormat[];
+  accepted_unknown_author?: boolean;
+  accepted_unknown_year?: boolean;
+  lookup_later?: boolean;
 };
 
 export type BookCollectionItemUpdate = {
@@ -271,6 +370,42 @@ export type BookCollectionItemUpdate = {
   format?: string | null;
   series?: string | null;
   series_index?: string | null;
+  metadata_candidates?: Record<string, MetadataCandidate[]>;
+  candidate_notes?: string[];
+  candidate_runtime?: Record<string, unknown>;
+  matched_artwork?: MatchedArtwork | null;
+  alternate_formats?: AlternateBookFormat[];
+  accepted_unknown_author?: boolean;
+  accepted_unknown_year?: boolean;
+  lookup_later?: boolean;
+};
+
+export type MatchedArtwork = {
+  file: string;
+  match_method: "normalized_basename";
+  confidence: number;
+};
+
+export type AlternateBookFormat = {
+  format: string;
+  file: string;
+  role: "alternate_format";
+};
+
+export type BookCollectionSummary = {
+  total_files_seen: number;
+  primary_book_count: number;
+  included_book_count: number;
+  epub_count: number;
+  pdf_count: number;
+  mobi_duplicate_count: number;
+  opf_sidecar_count: number;
+  artwork_count: number;
+  matched_artwork_count: number;
+  unmatched_artwork_count: number;
+  ignored_sidecar_count: number;
+  duplicate_format_groups: number;
+  needs_repair_count: number;
 };
 
 export type BookCollectionReviewUpdate = {
@@ -289,6 +424,15 @@ export type AudiobookMetadataUpdate = {
   series_index?: string | null;
   format?: string | null;
   note?: string | null;
+  accepted_unknown_author?: boolean;
+  accepted_unknown_year?: boolean;
+  accepted_unknown_narrator?: boolean;
+  lookup_later?: boolean;
+};
+
+export type AudiobookContainedBook = {
+  series_index: string;
+  title: string;
 };
 
 export type TvMetadataUpdate = {
@@ -334,6 +478,20 @@ export type PaginatedResponse<T> = {
 export type MoveResult = {
   moved: number;
   errors: string[];
+  files_moved: number;
+  failed_moves: number;
+  manifests: Array<MoveManifestPointer & { batch_id: number }>;
+};
+
+export type MoveManifestPointer = {
+  json_path: string;
+  markdown_path?: string | null;
+  created_at: string;
+  manifest_version: string;
+  archive_assistant_version?: string;
+  files_moved: number;
+  artwork_moved: number;
+  failed_moves: number;
 };
 
 export type ScanMusicResponse = {
@@ -345,6 +503,7 @@ export type ScanMusicResponse = {
   unknown_items: number;
   unsupported_files: number;
   ignored_system_files: number;
+  ignored_sidecar_only_folders: number;
   artwork_files_found: number;
   movie_batches_found: number;
   tv_shows_found: number;
@@ -356,12 +515,28 @@ export type ScanMusicResponse = {
   audiobook_files_found: number;
 };
 
+export type SystemPathsResponse = {
+  data_root: string;
+  ingest_root: string;
+  reports_dir: string;
+  move_logs_dir: string;
+  movies_dir: string;
+  tv_dir: string;
+  music_flac_dir: string;
+  music_mp3_dir: string;
+  books_dir: string;
+  audiobooks_dir: string;
+};
+
 export type DevResetResponse = {
   status: string;
   restored_tracks: number;
   restored_files: number;
+  recovered_media_files?: number;
+  untracked_library_media_files?: number;
   removed_reports: number;
   removed_move_logs: number;
+  removed_library_metadata: number;
   removed_empty_dirs: number;
   cleared_batches: number;
   message: string;
@@ -408,6 +583,7 @@ export type BatchMoveSummary = {
   completed: number;
   failed: number;
   moves: MoveAction[];
+  manifest?: MoveManifestPointer | null;
 };
 
 export type BatchReviewTrack = {

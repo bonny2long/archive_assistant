@@ -5,6 +5,8 @@ import type {
   MovieCollectionReviewUpdate,
 } from "../types/archive";
 import ReviewIssuesPanel from "./ReviewIssuesPanel";
+import MetadataAssistStaleWarning from "./MetadataAssistStaleWarning";
+import MetadataSuggestionChips from "./MetadataSuggestionChips";
 
 type Props = {
   batch: BatchSummary;
@@ -30,6 +32,51 @@ function buildDestPreview(
   return `Movies/Library/${sanitizePath(folder)}`;
 }
 
+export function parseMovieFilename(sourceFile: string): {
+  title: string;
+  year: string | null;
+  edition: string | null;
+  format: string | null;
+} {
+  const fileName = sourceFile.split(/[\\/]/).pop() ?? sourceFile;
+  const extensionMatch = fileName.match(/\.([a-z0-9]{2,5})$/i);
+  const format = extensionMatch?.[1]?.toUpperCase() ?? null;
+  const stem = extensionMatch
+    ? fileName.slice(0, -extensionMatch[0].length)
+    : fileName;
+  const yearMatches = Array.from(
+    stem.matchAll(/(?:^|\D)((?:19|20)\d{2})(?!\d)/g),
+  );
+  const yearMatch = yearMatches.length > 0
+    ? yearMatches[yearMatches.length - 1]
+    : undefined;
+  const year = yearMatch?.[1] ?? null;
+  const yearIndex = yearMatch?.index ?? -1;
+  const titleSource = yearIndex >= 0 ? stem.slice(0, yearIndex) : stem;
+  const title = titleSource
+    .replace(/[._]+/g, " ")
+    .replace(/\s*-\s*/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  let edition: string | null = null;
+  if (yearMatch) {
+    edition = stem
+      .slice(yearIndex + yearMatch[0].length)
+      .replace(
+        /\b(?:2160p|1080p|720p|480p|4k|uhd|hdr10?|dv|bluray|brrip|bdrip|web[ ._-]?dl|web|webrip|hdrip|dvdrip|x264|x265|h264|h265|hevc|aac|dts|truehd|atmos)\b/gi,
+        " ",
+      )
+      .replace(/\b\d\.\d\b/g, " ")
+      .replace(/\b(?:BONE|YIFY|YTS|RARBG)\b/gi, " ")
+      .replace(/[._]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim() || null;
+  }
+
+  return { title, year, edition, format };
+}
+
 // ── Single item card ─────────────────────────────────────────────────────────
 
 type ItemCardProps = {
@@ -40,12 +87,12 @@ type ItemCardProps = {
 
 function CollectionItemCard({ sourceFile, item, onChange }: ItemCardProps) {
   const yearValid =
-    item.year.trim() === "" || /^(19|20)\d{2}$/.test(item.year.trim());
-  const titleValid = item.title.trim() !== "";
+    !item.year || /^(19|20)\d{2}$/.test(item.year.trim());
+  const titleValid = item.title.trim() !== "" || item.accepted_unknown_title;
 
   const destPreview = useMemo(() => {
     if (!item.include) return null;
-    return buildDestPreview(item.title, item.year, item.edition ?? "");
+    return buildDestPreview(item.title, item.year ?? "", item.edition ?? "");
   }, [item.include, item.title, item.year, item.edition]);
 
   return (
@@ -73,8 +120,15 @@ function CollectionItemCard({ sourceFile, item, onChange }: ItemCardProps) {
             value={item.title}
             disabled={!item.include}
             autoComplete="off"
-            onChange={(e) => onChange({ ...item, title: e.target.value })}
+            onChange={(e) => onChange({
+              ...item,
+              title: e.target.value,
+              accepted_unknown_title: e.target.value.trim()
+                ? false
+                : item.accepted_unknown_title,
+            })}
           />
+          <MetadataSuggestionChips label={`Title for ${sourceFile}`} field="title" candidates={item.metadata_candidates?.title ?? []} currentValue={item.title} onApply={(value) => onChange({ ...item, title: value })} maxVisible={2} />
           {item.include && !titleValid && (
             <p className="field-error">Title is required</p>
           )}
@@ -82,11 +136,18 @@ function CollectionItemCard({ sourceFile, item, onChange }: ItemCardProps) {
         <label>
           Year
           <input
-            value={item.year}
+            value={item.year ?? ""}
             disabled={!item.include}
             maxLength={4}
-            onChange={(e) => onChange({ ...item, year: e.target.value })}
+            onChange={(e) => onChange({
+              ...item,
+              year: e.target.value || null,
+              accepted_unknown_year: e.target.value.trim()
+                ? false
+                : item.accepted_unknown_year,
+            })}
           />
+          <MetadataSuggestionChips label={`Year for ${sourceFile}`} field="year" candidates={item.metadata_candidates?.year ?? []} currentValue={item.year ?? ""} onApply={(value) => onChange({ ...item, year: value })} maxVisible={2} />
           {item.include && !yearValid && (
             <p className="field-error">Must be four-digit year</p>
           )}
@@ -113,6 +174,18 @@ function CollectionItemCard({ sourceFile, item, onChange }: ItemCardProps) {
             }
           />
         </label>
+      </div>
+
+      <div className="collection-item-card__actions acceptance-controls__buttons">
+        <button type="button" className={`btn-sm${item.accepted_unknown_title ? " btn-sm--active" : ""}`} onClick={() => onChange({ ...item, accepted_unknown_title: !item.accepted_unknown_title })}>
+          {item.accepted_unknown_title ? "Unknown Title Accepted" : "Accept Unknown Title"}
+        </button>
+        <button type="button" className={`btn-sm${item.accepted_unknown_year ? " btn-sm--active" : ""}`} onClick={() => onChange({ ...item, accepted_unknown_year: !item.accepted_unknown_year })}>
+          {item.accepted_unknown_year ? "Unknown Year Accepted" : "Accept Unknown Year"}
+        </button>
+        <button type="button" className={`btn-sm${item.lookup_later ? " btn-sm--active" : ""}`} onClick={() => onChange({ ...item, lookup_later: !item.lookup_later })}>
+          {item.lookup_later ? "Lookup Later Marked" : "Lookup Later"}
+        </button>
       </div>
 
       {/* Destination preview */}
@@ -153,24 +226,35 @@ function buildInitialItems(batch: BatchSummary): MovieCollectionItemUpdate[] {
   return videoFiles.map((sourceFile) => {
     const key = sourceFile.toLowerCase();
     const existing = existingByFile.get(key);
+    const parsed = parseMovieFilename(sourceFile);
     if (existing) {
       return {
         source_file: sourceFile,
         include: existing.include ?? true,
-        title: existing.title ?? "",
-        year: existing.year ?? "",
-        edition: existing.edition ?? null,
-        format: existing.format ?? null,
+        title: existing.title
+          || (existing.accepted_unknown_title ? "" : parsed.title),
+        year: existing.year
+          || (existing.accepted_unknown_year ? null : parsed.year),
+        edition: existing.edition ?? parsed.edition,
+        format: existing.format ?? parsed.format,
+        metadata_candidates: existing.metadata_candidates ?? {},
+        accepted_unknown_title: existing.accepted_unknown_title ?? false,
+        accepted_unknown_year: existing.accepted_unknown_year ?? false,
+        lookup_later: existing.lookup_later ?? false,
       };
     }
     // No prior data — start with empty fields so the user fills them in
     return {
       source_file: sourceFile,
       include: true,
-      title: "",
-      year: "",
-      edition: null,
-      format: null,
+      title: parsed.title,
+      year: parsed.year,
+      edition: parsed.edition,
+      format: parsed.format,
+      metadata_candidates: {},
+      accepted_unknown_title: false,
+      accepted_unknown_year: false,
+      lookup_later: false,
     };
   });
 }
@@ -188,16 +272,30 @@ export default function MovieCollectionEditor({
   const [items, setItems] = useState<MovieCollectionItemUpdate[]>(
     () => buildInitialItems(batch),
   );
+  const [filter, setFilter] = useState<"repair" | "included" | "excluded" | "all">("repair");
 
   const includedCount = items.filter((i) => i.include).length;
-  const allValid = items.every(
+  const allValid = includedCount > 0 && items.every(
     (item) =>
       !item.include ||
-      (item.title.trim() !== "" &&
-        /^(19|20)\d{2}$/.test(item.year.trim())),
+      ((item.title.trim() !== "" || item.accepted_unknown_title) &&
+        (
+          (Boolean(item.year) && /^(19|20)\d{2}$/.test(item.year!.trim()))
+          || (!item.year && item.accepted_unknown_year)
+        )),
   );
-
-  const hasBlockers = (batch.blocking_review_items ?? []).length > 0;
+  const visibleItems = items.filter((item) => {
+    if (filter === "included") return item.include;
+    if (filter === "excluded") return !item.include;
+    if (filter === "repair") {
+      return item.include && (
+        (!item.title.trim() && !item.accepted_unknown_title)
+        || (!item.year && !item.accepted_unknown_year)
+        || item.lookup_later
+      );
+    }
+    return true;
+  });
 
   const handleItemChange = (
     sourceFile: string,
@@ -222,7 +320,7 @@ export default function MovieCollectionEditor({
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <div
-        className="metadata-editor metadata-editor--wide"
+        className="metadata-editor metadata-editor--collection"
         onMouseDown={(e) => e.stopPropagation()}
       >
         {/* ── Header ── */}
@@ -276,6 +374,7 @@ export default function MovieCollectionEditor({
             confirmLabel="Confirm collection review"
             onConfirm={onConfirm}
           />
+          <MetadataAssistStaleWarning batch={batch} />
 
           {/* Optional collection label */}
           <div className="editor-grid editor-grid--full">
@@ -289,9 +388,35 @@ export default function MovieCollectionEditor({
             </label>
           </div>
 
+          <div className="collection-editor__bulk-actions">
+            {(["repair", "included", "excluded", "all"] as const).map((value) => (
+              <button type="button" className={`btn-sm${filter === value ? " btn-sm--active" : ""}`} key={value} onClick={() => setFilter(value)}>
+                {value === "repair" ? "Needs repair" : value[0].toUpperCase() + value.slice(1)}
+              </button>
+            ))}
+            <button type="button" className="btn-sm" onClick={() => {
+              const visible = new Set(visibleItems.map((item) => item.source_file));
+              setItems((current) => current.map((item) => visible.has(item.source_file)
+                ? { ...item, accepted_unknown_year: true }
+                : item));
+            }}>Accept unknown years for visible</button>
+            <button type="button" className="btn-sm" onClick={() => {
+              const visible = new Set(visibleItems.map((item) => item.source_file));
+              setItems((current) => current.map((item) => visible.has(item.source_file)
+                ? { ...item, lookup_later: true }
+                : item));
+            }}>Mark visible lookup later</button>
+            <button type="button" className="btn-sm" onClick={() => {
+              const visible = new Set(visibleItems.map((item) => item.source_file));
+              setItems((current) => current.map((item) => visible.has(item.source_file)
+                ? { ...item, include: false }
+                : item));
+            }}>Exclude visible</button>
+          </div>
+
           {/* Per-movie item cards */}
           <div className="collection-item-list">
-            {items.map((item) => (
+            {visibleItems.map((item) => (
               <CollectionItemCard
                 key={item.source_file}
                 sourceFile={item.source_file}
@@ -305,7 +430,7 @@ export default function MovieCollectionEditor({
 
           {!allValid && (
             <p className="metadata-editor__error">
-              All included movies need a title and a valid four-digit year.
+              Include at least one movie. Each included movie needs a title and year, or an explicit accepted-unknown decision.
             </p>
           )}
         </div>

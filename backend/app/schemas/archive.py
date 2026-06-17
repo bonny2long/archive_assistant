@@ -33,6 +33,8 @@ class BatchSummary(BaseModel):
     video_files: list[str] = Field(default_factory=list)
     title: str | None = None
     edition: str | None = None
+    resolution: str | None = None
+    source: str | None = None
     original_release_name: str | None = None
     primary_video_file: str | None = None
     artwork_files: list[str] = Field(default_factory=list)
@@ -74,6 +76,7 @@ class BatchSummary(BaseModel):
     book_files: list[str] = Field(default_factory=list)
     primary_book_file: str | None = None
     book_items: list[dict] = Field(default_factory=list)
+    collection_summary: dict = Field(default_factory=dict)
     narrator: str | None = None
     series: str | None = None
     series_index: str | None = None
@@ -81,6 +84,24 @@ class BatchSummary(BaseModel):
     audio_files: list[str] = Field(default_factory=list)
     primary_audio_file: str | None = None
     chapter_count: int = 0
+    metadata_candidates: dict[str, list[dict]] = Field(default_factory=dict)
+    chapter_candidates: list[dict] = Field(default_factory=list)
+    artwork_candidates: list[dict] = Field(default_factory=list)
+    generic_audio_tag_count: int = 0
+    detected_disc_count: int = 0
+    candidate_warning_count: int = 0
+    audiobook_collection_type: str | None = None
+    contained_books: list[dict] = Field(default_factory=list)
+    accepted_unknown_author: bool = False
+    accepted_unknown_year: bool = False
+    accepted_unknown_narrator: bool = False
+    accepted_unknown_album_artist: bool = False
+    accepted_unknown_album_title: bool = False
+    accepted_unknown_discography_artist: bool = False
+    accepted_unknown_title: bool = False
+    lookup_later: bool = False
+    move_manifest: dict | None = None
+    metadata_assist_version: str | None = None
     suggested_destination: str | None = None
     suggested_metadata: dict | None = None
     metadata_confirmed: bool = False
@@ -126,10 +147,14 @@ class IngestBatchOut(BaseModel):
 class BatchMetadataUpdate(BaseModel):
     artist: str = Field(min_length=1)
     album: str = Field(min_length=1)
-    year: str = Field(pattern=r"^(19|20)\d{2}$")
+    year: str | None = Field(default=None, pattern=r"^(19|20)\d{2}$")
     primary_genre: str | None = None
     format: str | None = None
     note: str | None = None
+    accepted_unknown_album_artist: bool = False
+    accepted_unknown_album_title: bool = False
+    accepted_unknown_year: bool = False
+    lookup_later: bool = False
 
 
 class MovieMetadataUpdate(BaseModel):
@@ -137,6 +162,9 @@ class MovieMetadataUpdate(BaseModel):
     year: str | None = Field(default=None, pattern=r"^(19|20)\d{2}$")
     edition: str | None = None
     format: str | None = None
+    accepted_unknown_title: bool = False
+    accepted_unknown_year: bool = False
+    lookup_later: bool = False
 
 
 class TvMetadataUpdate(BaseModel):
@@ -176,10 +204,13 @@ class TvEpisodeReviewUpdate(BaseModel):
 class MovieCollectionItemUpdate(BaseModel):
     source_file: str = Field(min_length=1)
     include: bool = True
-    title: str = Field(min_length=1)
-    year: str = Field(pattern=r"^(19|20)\d{2}$")
+    title: str = ""
+    year: str | None = Field(default=None, pattern=r"^(19|20)\d{2}$")
     edition: str | None = None
     format: str | None = None
+    accepted_unknown_title: bool = False
+    accepted_unknown_year: bool = False
+    lookup_later: bool = False
 
 
 class MovieCollectionReviewUpdate(BaseModel):
@@ -205,6 +236,9 @@ class BookCollectionItemUpdate(BaseModel):
     format: str | None = None
     series: str | None = None
     series_index: str | None = None
+    accepted_unknown_author: bool = False
+    accepted_unknown_year: bool = False
+    lookup_later: bool = False
 
 
 class BookCollectionReviewUpdate(BaseModel):
@@ -223,6 +257,10 @@ class AudiobookMetadataUpdate(BaseModel):
     series_index: str | None = None
     format: str | None = None
     note: str | None = None
+    accepted_unknown_author: bool = False
+    accepted_unknown_year: bool = False
+    accepted_unknown_narrator: bool = False
+    lookup_later: bool = False
 
 
 class ReviewConfirmationUpdate(BaseModel):
@@ -245,11 +283,17 @@ class DiscographyAlbumUpdate(BaseModel):
         "exclude",
     ] = "album"
     include: bool = True
+    accepted_unknown_album_artist: bool = False
+    accepted_unknown_album_title: bool = False
+    accepted_unknown_year: bool = False
+    lookup_later: bool = False
 
 
 class DiscographyMetadataUpdate(BaseModel):
     artist: str = Field(min_length=1)
     albums: list[DiscographyAlbumUpdate] | None = None
+    accepted_unknown_discography_artist: bool = False
+    lookup_later: bool = False
 
 class PaginatedResponse(BaseModel, Generic[T]):
     items: list[T]
@@ -284,6 +328,9 @@ class BulkApproveResponse(BaseModel):
 class MoveResponse(BaseModel):
     moved: int
     errors: list[str]
+    files_moved: int = 0
+    failed_moves: int = 0
+    manifests: list[dict] = Field(default_factory=list)
 
 
 class ScanMusicResponse(BaseModel):
@@ -295,6 +342,7 @@ class ScanMusicResponse(BaseModel):
     unknown_items: int = 0
     unsupported_files: int = 0
     ignored_system_files: int = 0
+    ignored_sidecar_only_folders: int = 0
     artwork_files_found: int = 0
     movie_batches_found: int = 0
     tv_shows_found: int = 0
@@ -310,8 +358,11 @@ class DevResetResponse(BaseModel):
     status: str
     restored_tracks: int
     restored_files: int
+    recovered_media_files: int = 0
+    untracked_library_media_files: int = 0
     removed_reports: int
     removed_move_logs: int
+    removed_library_metadata: int
     removed_empty_dirs: int
     cleared_batches: int
     message: str
@@ -351,6 +402,7 @@ class BatchMoveSummary(BaseModel):
     completed: int
     failed: int
     moves: list[MoveActionOut]
+    manifest: dict | None = None
 
 
 class BatchReviewTrack(BaseModel):

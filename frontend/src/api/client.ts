@@ -18,6 +18,7 @@ import type {
   MoveResult,
   PaginatedResponse,
   ScanMusicResponse,
+  SystemPathsResponse,
   SystemTimeResponse,
   TvMetadataUpdate,
   TvEpisodeReviewUpdate,
@@ -26,6 +27,38 @@ import type {
 
 const BASE = "/api";
 
+export function formatApiError(errorBody: unknown, fallback: string): string {
+  const detail = (
+    errorBody as { detail?: unknown } | null
+  )?.detail;
+
+  if (typeof detail === "string") return detail;
+
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (item && typeof item === "object") {
+          const record = item as Record<string, unknown>;
+          const loc = Array.isArray(record.loc)
+            ? record.loc.join(".")
+            : "";
+          const msg = typeof record.msg === "string"
+            ? record.msg
+            : JSON.stringify(record);
+          return loc ? `${loc}: ${msg}` : msg;
+        }
+        return String(item);
+      })
+      .join("; ");
+  }
+
+  if (detail && typeof detail === "object") {
+    return JSON.stringify(detail);
+  }
+
+  return fallback;
+}
+
 async function request<T>(path: string, method = "GET", body?: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method,
@@ -33,8 +66,13 @@ async function request<T>(path: string, method = "GET", body?: unknown): Promise
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) {
-    const errorBody = await res.json().catch(() => null) as { detail?: string } | null;
-    throw new Error(errorBody?.detail ?? `${method} ${path} returned ${res.status}`);
+    const errorBody = await res.json().catch(() => null);
+    throw new Error(
+      formatApiError(
+        errorBody,
+        `${method} ${path} returned ${res.status}`,
+      ),
+    );
   }
   const contentType = res.headers.get("content-type") ?? "";
   return contentType.includes("json") ? res.json() : (null as T);
@@ -43,6 +81,7 @@ async function request<T>(path: string, method = "GET", body?: unknown): Promise
 export const api = {
   health: () => request<HealthResponse>("/health"),
   systemTime: () => request<SystemTimeResponse>("/system/time"),
+  systemPaths: () => request<SystemPathsResponse>("/system/paths"),
   listBatches: () => request<PaginatedResponse<BatchSummary>>("/batches?page_size=100"),
   listPending: () => request<PaginatedResponse<BatchSummary>>("/batches/pending?page_size=100"),
   getBatch: (id: number) => request<IngestBatch>(`/batches/${id}`),

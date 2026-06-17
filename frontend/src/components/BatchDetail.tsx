@@ -781,10 +781,20 @@ function BookBatchDetail({ batch, moveSummary }: Props) {
     : [];
   const collection = metadata.review_type === "book_collection" || items.length > 0;
   const keepTogether = Boolean(metadata.keep_collection_together);
+  const collectionSummary = (
+    metadata.collection_summary
+    && typeof metadata.collection_summary === "object"
+  ) ? metadata.collection_summary as Record<string, unknown> : {};
+  const primaryBookCount = Number(
+    collectionSummary.primary_book_count ?? items.length,
+  );
   const collectionDestination = String(
     metadata.collection_destination_root
     ?? items.find((item) => item.include !== false)?.destination_preview
     ?? "-",
+  );
+  const firstIncludedDestination = String(
+    items.find((item) => item.include !== false)?.destination_preview ?? "-",
   );
   return (
     <div className="batch-detail batch-detail--review">
@@ -796,7 +806,7 @@ function BookBatchDetail({ batch, moveSummary }: Props) {
             {collection ? "Book collection detected" : "Book detected"}
           </div>
           <h2>{String(metadata.collection_title ?? metadata.title ?? "Unknown Title")}</h2>
-          <p>{collection ? `${items.length} books` : String(metadata.author ?? "Unknown Author")}</p>
+          <p>{collection ? `${primaryBookCount} books` : String(metadata.author ?? "Unknown Author")}</p>
         </div>
         <div className="library-status__facts">
           <span>{Math.round(batch.confidence * 100)}% confidence</span>
@@ -807,14 +817,31 @@ function BookBatchDetail({ batch, moveSummary }: Props) {
         <section className="library-card">
           <h3>{collection ? "Collection" : "Book"}</h3>
           <dl className="library-fields">
-            {!collection && <div><dt>Title</dt><dd>{String(metadata.title ?? "-")}</dd></div>}
+            {!collection && <div><dt>Title</dt><dd title={String(metadata.title ?? "-")}>{String(metadata.title ?? "-")}</dd></div>}
             {!collection && <div><dt>Author</dt><dd>{String(metadata.author ?? "-")}</dd></div>}
             {!collection && <div><dt>Year</dt><dd>{String(metadata.year ?? "-")}</dd></div>}
-            {collection && <div><dt>Collection</dt><dd>{String(metadata.collection_title ?? "-")}</dd></div>}
+            {collection && <div><dt>Books</dt><dd>{primaryBookCount}</dd></div>}
             {collection && <div><dt>Routing</dt><dd>{keepTogether ? "Collection folder" : "Author folders"}</dd></div>}
-            <div><dt>Format</dt><dd>{String(metadata.format ?? "Mixed")}</dd></div>
-            <div><dt>Book files</dt><dd>{String(metadata.book_file_count ?? batch.files.length)}</dd></div>
-            <div><dt>Artwork</dt><dd>{String(metadata.artwork_count ?? 0)}</dd></div>
+            {collection ? (
+              <>
+                <div><dt>EPUB</dt><dd>{String(collectionSummary.epub_count ?? 0)}</dd></div>
+                <div><dt>PDF</dt><dd>{String(collectionSummary.pdf_count ?? 0)}</dd></div>
+                <div>
+                  <dt>Artwork matched</dt>
+                  <dd>
+                    {String(collectionSummary.matched_artwork_count ?? 0)}
+                    /{String(collectionSummary.primary_book_count ?? items.length)}
+                  </dd>
+                </div>
+                <div><dt>Sidecars ignored</dt><dd>{String(collectionSummary.ignored_sidecar_count ?? 0)}</dd></div>
+              </>
+            ) : (
+              <>
+                <div><dt>Format</dt><dd>{String(metadata.format ?? "Mixed")}</dd></div>
+                <div><dt>Book files</dt><dd>{String(metadata.book_file_count ?? batch.files.length)}</dd></div>
+                <div><dt>Artwork</dt><dd>{String(metadata.artwork_count ?? 0)}</dd></div>
+              </>
+            )}
           </dl>
         </section>
         <section className="library-card">
@@ -841,7 +868,7 @@ function BookBatchDetail({ batch, moveSummary }: Props) {
                   <tr key={String(item.source_file ?? index)}>
                     <td>{String(item.format ?? "-")}</td>
                     <td>{String(item.author ?? "-")}</td>
-                    <td>{String(item.title ?? "-")}</td>
+                    <td title={String(item.title ?? "-")}>{String(item.title ?? "-")}</td>
                     <td>{String(item.year ?? "-")}</td>
                     <td>{String(item.series ?? "-")}</td>
                     <td>{String(item.destination_preview ?? "-")}</td>
@@ -853,12 +880,28 @@ function BookBatchDetail({ batch, moveSummary }: Props) {
         </section>
       )}
       <section className="library-destination">
-        <span>{batch.status === "moved" ? "Final destination" : "Destination preview"}</span>
-        <strong>
-          {collection
-            ? readableLibraryPath(collectionDestination)
-            : readableLibraryPath(batch.suggested_destination)}
-        </strong>
+        {collection ? (
+          <>
+            <span>
+              Destination mode: {keepTogether ? "Collection folder" : "Author folders"}
+            </span>
+            <strong>
+              {keepTogether
+                ? readableLibraryPath(collectionDestination)
+                : "Each included book will route to its own destination."}
+            </strong>
+            {!keepTogether && (
+              <small>
+                Previewing first item: {readableLibraryPath(firstIncludedDestination)}
+              </small>
+            )}
+          </>
+        ) : (
+          <>
+            <span>{batch.status === "moved" ? "Final destination" : "Destination preview"}</span>
+            <strong>{readableLibraryPath(batch.suggested_destination)}</strong>
+          </>
+        )}
       </section>
       <DebugDetails batch={batch} moveSummary={moveSummary} />
     </div>
@@ -869,6 +912,9 @@ function AudiobookBatchDetail({ batch, moveSummary }: Props) {
   const metadata = batch.metadata_json ?? {};
   const audioFiles = Array.isArray(metadata.audio_files)
     ? metadata.audio_files.map(String)
+    : [];
+  const containedBooks = Array.isArray(metadata.contained_books)
+    ? metadata.contained_books as Array<Record<string, unknown>>
     : [];
   return (
     <div className="batch-detail batch-detail--review">
@@ -887,6 +933,27 @@ function AudiobookBatchDetail({ batch, moveSummary }: Props) {
           <span>{batch.status.replace(/_/g, " ")}</span>
         </div>
       </div>
+      {containedBooks.length > 0 && (
+        <section className="track-preview">
+          <div className="track-preview__header">
+            <h3>Detected multi-book audiobook set</h3>
+            <span>{containedBooks.length} books · preview only</span>
+          </div>
+          <div className="track-preview__table">
+            <table>
+              <thead><tr><th>Book</th><th>Title</th></tr></thead>
+              <tbody>
+                {containedBooks.map((book, index) => (
+                  <tr key={`${String(book.series_index ?? index)}:${String(book.title ?? "")}`}>
+                    <td>{String(book.series_index ?? index + 1)}</td>
+                    <td>{String(book.title ?? "Unknown Title")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
       <div className="library-detail__grid movie-detail__cards">
         <section className="library-card">
           <h3>Audiobook</h3>

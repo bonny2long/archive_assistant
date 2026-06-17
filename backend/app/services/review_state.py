@@ -95,29 +95,48 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
             target.append(_item(warning, warning.replace("_", " ").capitalize()))
 
     if detected_type == "music_album":
-        if not str(meta.get("artist") or meta.get("albumartist") or "").strip():
+        artist = str(meta.get("artist") or meta.get("albumartist") or "").strip()
+        album = str(meta.get("album") or "").strip()
+        if (
+            (not artist or artist.casefold() in {"unknown", "unknown artist", "unkn"})
+            and not meta.get("accepted_unknown_album_artist")
+        ):
             blocking.append(_item("artist_missing", "Artist is required before approval."))
-        if not str(meta.get("album") or "").strip():
+        if (
+            (not album or album.casefold() in {"unknown", "unknown album", "unkn"})
+            and not meta.get("accepted_unknown_album_title")
+        ):
             blocking.append(_item("album_missing", "Album title is required before approval."))
-        if not str(meta.get("year") or meta.get("date") or "")[:4].isdigit():
-            blocking.append(_item("year_missing", "A four-digit year is required before approval."))
+        year = str(meta.get("year") or meta.get("date") or "")[:4]
+        if not year.isdigit():
+            non_blocking.append(_item(
+                "year_missing",
+                "Year is missing. It may be accepted as unknown and reviewed later.",
+            ))
     elif detected_type == "music_discography":
-        if not str(meta.get("artist") or "").strip():
+        artist = str(meta.get("artist") or "").strip()
+        if (
+            (not artist or artist.casefold() in {"unknown", "unknown artist", "unkn"})
+            and not meta.get("accepted_unknown_discography_artist")
+        ):
             blocking.append(_item("artist_missing", "Discography artist is required."))
         for album in meta.get("albums", []):
             if not isinstance(album, dict) or not album.get("include", True):
                 continue
             source = str(album.get("source_folder") or "")
-            if not str(album.get("album") or "").strip():
+            if (
+                not str(album.get("album") or "").strip()
+                and not album.get("accepted_unknown_album_title")
+            ):
                 blocking.append(_item(
                     "album_missing_title",
                     "Included release is missing a title.",
                     source_folder=source,
                 ))
             if not str(album.get("year") or "").strip():
-                blocking.append(_item(
+                non_blocking.append(_item(
                     "album_missing_year",
-                    "Included release is missing a year.",
+                    "Included release is missing a year and may be reviewed later.",
                     source_folder=source,
                 ))
     elif detected_type == "video_movie":
@@ -130,11 +149,19 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
             resolved_review_type = "movie"
         meta["review_type"] = resolved_review_type
 
-        if not str(meta.get("title") or "").strip():
-            blocking.append(_item("movie_title_missing", "Movie title is required."))
-        year = str(meta.get("year") or "")
-        if len(year) != 4 or not year.isdigit():
-            blocking.append(_item("movie_year_missing", "A four-digit movie year is required."))
+        if resolved_review_type != "movie_collection":
+            title = str(meta.get("title") or "").strip()
+            if (
+                (not title or title.casefold() in {"unknown", "unknown movie"})
+                and not meta.get("accepted_unknown_title")
+            ):
+                blocking.append(_item("movie_title_missing", "Movie title is required."))
+            year = str(meta.get("year") or "")
+            if len(year) != 4 or not year.isdigit():
+                non_blocking.append(_item(
+                    "movie_year_missing",
+                    "Movie year is missing and may be accepted as unknown.",
+                ))
         video_file_count = int(meta.get("video_file_count") or 0)
         if video_file_count > 1:
             # If resolved as movie_collection, the ambiguity is resolved.
@@ -163,19 +190,46 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
                 continue
             included_count += 1
             source_file = str(movie_item.get("source_file") or "")
-            if not str(movie_item.get("title") or "").strip():
+            title = str(movie_item.get("title") or "").strip()
+            accepted_unknown_title = bool(
+                movie_item.get("accepted_unknown_title")
+            )
+            accepted_unknown_year = bool(
+                movie_item.get("accepted_unknown_year")
+            )
+            if (
+                (not title or title.casefold() in {
+                    "unknown",
+                    "unknown movie",
+                    "unknown title",
+                })
+                and not accepted_unknown_title
+            ):
                 blocking.append(_item(
                     "movie_collection_item_missing_title",
                     "Movie in collection is missing a title.",
                     file_name=source_file,
                 ))
-            raw_year = str(movie_item.get("year") or "")
-            if len(raw_year) != 4 or not raw_year.isdigit():
-                blocking.append(_item(
-                    "movie_collection_item_missing_year",
-                    "Movie in collection is missing a valid year.",
+            elif not title and accepted_unknown_title:
+                non_blocking.append(_item(
+                    "movie_collection_item_unknown_title_accepted",
+                    "Unknown movie title was explicitly accepted.",
                     file_name=source_file,
                 ))
+            raw_year = str(movie_item.get("year") or "")
+            if len(raw_year) != 4 or not raw_year.isdigit():
+                if accepted_unknown_year:
+                    non_blocking.append(_item(
+                        "movie_collection_item_unknown_year_accepted",
+                        "Unknown movie year was explicitly accepted.",
+                        file_name=source_file,
+                    ))
+                else:
+                    blocking.append(_item(
+                        "movie_collection_item_missing_year",
+                        "Movie in collection is missing a year.",
+                        file_name=source_file,
+                    ))
 
         # At least one movie must be included
         if has_movie_items and included_count == 0:
@@ -308,8 +362,26 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
                 source = str(item.get("source_file") or "")
                 if not str(item.get("title") or "").strip():
                     blocking.append(_item("book_item_missing_title", "Included book is missing a title.", file_name=source))
-                if str(item.get("author") or "").strip().casefold() in {"", "unknown author"}:
-                    blocking.append(_item("book_item_missing_author", "Included book is missing an author.", file_name=source))
+                if str(item.get("author") or "").strip().casefold() in {
+                    "",
+                    "unknown",
+                    "unknown author",
+                    "unkn",
+                }:
+                    if item.get("accepted_unknown_author", False):
+                        non_blocking.append(_item(
+                            "book_author_unknown_accepted",
+                            "Book author is unknown but accepted for this review.",
+                            file_name=source,
+                        ))
+                    else:
+                        blocking.append(_item("book_item_missing_author", "Included book is missing an author.", file_name=source))
+                if item.get("lookup_later", False):
+                    non_blocking.append(_item(
+                        "book_lookup_later",
+                        "Book metadata is marked for later lookup.",
+                        file_name=source,
+                    ))
                 raw_year = str(item.get("year") or "").strip()
                 if raw_year and (len(raw_year) != 4 or not raw_year.isdigit()):
                     blocking.append(_item("book_item_invalid_year", "Book year must be four digits when provided.", file_name=source))
@@ -350,29 +422,71 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
         title = str(meta.get("title") or "").strip().casefold()
         raw_year = str(meta.get("year") or "").strip()
         if author in {"", "unknown author", "unknown", "unkn"}:
-            blocking.append(_item(
-                "audiobook_author_missing",
-                "Audiobook author is required before approval.",
-            ))
+            if meta.get("accepted_unknown_author", False):
+                non_blocking.append(_item(
+                    "audiobook_author_unknown_accepted",
+                    "Audiobook author is unknown but accepted for this review.",
+                ))
+            else:
+                blocking.append(_item(
+                    "audiobook_author_missing",
+                    "Audiobook author is required before approval.",
+                ))
         if title in {"", "unknown title", "unknown", "unkn"}:
             blocking.append(_item(
                 "audiobook_title_missing",
                 "Audiobook title is required before approval.",
             ))
-        if raw_year and (len(raw_year) != 4 or not raw_year.isdigit()):
+        year_unknown = raw_year.casefold() in {
+            "",
+            "unknown",
+            "unknown year",
+            "unkn",
+        }
+        if (
+            raw_year
+            and not year_unknown
+            and (len(raw_year) != 4 or not raw_year.isdigit())
+        ):
             blocking.append(_item(
                 "audiobook_year_invalid",
                 "Audiobook year must be four digits when provided.",
             ))
-        if not raw_year:
+        if year_unknown:
             non_blocking.append(_item(
-                "audiobook_year_missing",
-                "Audiobook year is missing; destination will use Unknown Year.",
+                (
+                    "audiobook_year_unknown_accepted"
+                    if meta.get("accepted_unknown_year", False)
+                    else "audiobook_year_missing"
+                ),
+                (
+                    "Audiobook year is unknown but accepted for this review."
+                    if meta.get("accepted_unknown_year", False)
+                    else "Audiobook year is missing; destination will use Unknown Year."
+                ),
             ))
-        if not str(meta.get("narrator") or "").strip():
+        if str(meta.get("narrator") or "").strip().casefold() in {
+            "",
+            "unknown",
+            "unknown narrator",
+            "unkn",
+        }:
             non_blocking.append(_item(
-                "audiobook_narrator_missing",
-                "Narrator is missing.",
+                (
+                    "audiobook_narrator_unknown_accepted"
+                    if meta.get("accepted_unknown_narrator", False)
+                    else "audiobook_narrator_missing"
+                ),
+                (
+                    "Narrator is unknown but accepted for this review."
+                    if meta.get("accepted_unknown_narrator", False)
+                    else "Narrator is missing."
+                ),
+            ))
+        if meta.get("lookup_later", False):
+            non_blocking.append(_item(
+                "audiobook_lookup_later",
+                "Audiobook metadata is marked for later lookup.",
             ))
     elif detected_type in {"unknown_type", "unsupported_file"}:
         blocking.append(_item(
@@ -401,6 +515,23 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
     quality = str(meta.get("metadata_quality") or "weak")
     if blocking:
         quality = "broken" if quality == "broken" else "weak"
+    elif (
+        detected_type in {"book", "audiobook"}
+        and (
+            meta.get("accepted_unknown_author", False)
+            or meta.get("accepted_unknown_year", False)
+            or meta.get("accepted_unknown_narrator", False)
+            or any(
+                isinstance(item, dict)
+                and (
+                    item.get("accepted_unknown_author", False)
+                    or item.get("accepted_unknown_year", False)
+                )
+                for item in (meta.get("book_items") or [])
+            )
+        )
+    ):
+        quality = "accepted_with_unknowns"
     elif quality in {"weak", "broken", "unsupported"} and confirmed:
         quality = "fair"
 

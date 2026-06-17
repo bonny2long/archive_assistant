@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import type { BatchSummary, MovieMetadataUpdate } from "../types/archive";
 import ReviewIssuesPanel from "./ReviewIssuesPanel";
+import MetadataAssistStaleWarning from "./MetadataAssistStaleWarning";
+import MetadataSuggestionChips from "./MetadataSuggestionChips";
 
 type Props = {
   batch: BatchSummary;
@@ -34,9 +36,18 @@ export default function MovieMetadataEditor({
   const [format, setFormat] = useState(
     () => batch.suggested_metadata?.format ?? batch.format ?? "",
   );
+  const [acceptedUnknownTitle, setAcceptedUnknownTitle] = useState(
+    Boolean(batch.accepted_unknown_title),
+  );
+  const [acceptedUnknownYear, setAcceptedUnknownYear] = useState(
+    Boolean(batch.accepted_unknown_year),
+  );
+  const [lookupLater, setLookupLater] = useState(Boolean(batch.lookup_later));
+  const candidates = batch.metadata_candidates ?? {};
 
   const yearValid = year.trim() === "" || /^(19|20)\d{2}$/.test(year.trim());
-  const valid = title.trim() !== "" && yearValid;
+  const titleValid = title.trim() !== "" || acceptedUnknownTitle;
+  const valid = titleValid && yearValid;
   const preview = useMemo(() => {
     const base = `${year.trim() || "Unknown Year"} - ${title.trim() || "Unknown Title"}`;
     const folder = edition.trim() ? `${base} [${edition.trim()}]` : base;
@@ -52,10 +63,13 @@ export default function MovieMetadataEditor({
           event.preventDefault();
           if (!valid) return;
           void onSave({
-            title: title.trim(),
+            title: title.trim() || "Unknown Movie",
             year: year.trim() || null,
             edition: edition.trim() || null,
             format: format.trim() || null,
+            accepted_unknown_title: acceptedUnknownTitle,
+            accepted_unknown_year: acceptedUnknownYear,
+            lookup_later: lookupLater,
           });
         }}
       >
@@ -97,6 +111,8 @@ export default function MovieMetadataEditor({
             )}
             <div className="movie-editor__counts">
               <span>Video files: {batch.video_file_count}</span>
+              <span>Resolution: {batch.resolution ?? "Unknown"}</span>
+              <span>Source: {batch.source ?? "Unknown"}</span>
               <span>Artwork: {batch.artwork_count}</span>
               <span>Subtitles: {batch.subtitle_count}</span>
               <span>Ignored sidecars: {batch.ignored_sidecar_count}</span>
@@ -108,27 +124,50 @@ export default function MovieMetadataEditor({
             confirmLabel="Confirm movie metadata"
             onConfirm={onConfirm}
           />
+          <MetadataAssistStaleWarning batch={batch} />
+
+          <section className="acceptance-controls">
+            <div>
+              <strong>Accepted unknown metadata</strong>
+              <p>These decisions remain visible in the movie move manifest.</p>
+            </div>
+            <div className="acceptance-controls__buttons">
+              <button type="button" className={`btn-sm${acceptedUnknownTitle ? " btn-sm--active" : ""}`} onClick={() => setAcceptedUnknownTitle((value) => !value)}>
+                {acceptedUnknownTitle ? "Unknown Title Accepted" : "Accept Unknown Title"}
+              </button>
+              <button type="button" className={`btn-sm${acceptedUnknownYear ? " btn-sm--active" : ""}`} onClick={() => setAcceptedUnknownYear((value) => !value)}>
+                {acceptedUnknownYear ? "Unknown Year Accepted" : "Accept Unknown Year"}
+              </button>
+              <button type="button" className={`btn-sm${lookupLater ? " btn-sm--active" : ""}`} onClick={() => setLookupLater((value) => !value)}>
+                {lookupLater ? "Lookup Later Marked" : "Lookup Later"}
+              </button>
+            </div>
+          </section>
 
           <div className="editor-grid editor-grid--full">
             <label>
               <span>Title</span>
               <input value={title} onChange={(event) => setTitle(event.target.value)} autoFocus />
+              <MetadataSuggestionChips label="Movie title" field="title" candidates={candidates.title ?? []} currentValue={title} onApply={setTitle} />
             </label>
           </div>
           <div className="editor-grid">
             <label>
               <span>Year</span>
               <input value={year} maxLength={4} onChange={(event) => setYear(event.target.value)} />
+              <MetadataSuggestionChips label="Movie year" field="year" candidates={candidates.year ?? []} currentValue={year} onApply={setYear} />
             </label>
             <label>
               <span>Edition / Version optional</span>
               <input value={edition} onChange={(event) => setEdition(event.target.value)} />
+              <MetadataSuggestionChips label="Edition" field="edition" candidates={candidates.edition ?? []} currentValue={edition} onApply={setEdition} />
             </label>
           </div>
           <div className="editor-grid editor-grid--full">
             <label>
               <span>Format</span>
               <input value={format} onChange={(event) => setFormat(event.target.value)} />
+              <MetadataSuggestionChips label="Format" field="format" candidates={candidates.format ?? []} currentValue={format} onApply={setFormat} />
             </label>
           </div>
 

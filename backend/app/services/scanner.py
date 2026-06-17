@@ -10,6 +10,7 @@ from app.models.archive import IngestBatch, IngestFile
 from app.services.checksum import file_sha256
 from app.services.music_metadata import (
     album_group_key,
+    build_music_metadata_candidates,
     build_suggested_metadata,
     canonical_artist_key,
     clean_compilation_artist,
@@ -34,6 +35,7 @@ from app.services.music_metadata import (
 )
 from app.services.report_writer import write_json_report
 from app.services.video_metadata import (
+    build_movie_metadata_candidates,
     is_ignored_video_sidecar,
     is_movie_artwork,
     is_subtitle_file,
@@ -52,8 +54,17 @@ from app.services.video_metadata import (
     useful_movie_name,
 )
 from app.services.review_state import build_review_state
+from app.services.metadata_candidates import (
+    METADATA_ASSIST_VERSION,
+    add_candidate,
+    make_candidate,
+    preferred_candidate_value,
+)
+from app.services.title_display import clean_display_title, destination_title
 from app.services.book_metadata import (
     book_format_for,
+    build_book_metadata_candidates,
+    build_book_collection_groups,
     build_book_item_destination,
     build_single_book_metadata,
     collect_book_files,
@@ -80,6 +91,7 @@ class ScanMusicResult:
     unknown_items: int = 0
     unsupported_files: int = 0
     ignored_system_files: int = 0
+    ignored_sidecar_only_folders: int = 0
     artwork_files_found: int = 0
     movie_batches_found: int = 0
     tv_shows_found: int = 0
@@ -124,6 +136,17 @@ RECOGNIZED_MEDIA_TYPES = {
 
 QUARANTINE_TYPES = {"unknown_type", "unsupported_file"}
 
+IGNORED_SIDECAR_ONLY_EXTENSIONS = {
+    ".txt",
+    ".nfo",
+    ".url",
+    ".sfv",
+    ".md",
+    ".log",
+    ".m3u",
+    ".md5",
+}
+
 ACTIVE_REVIEW_STATUSES = {
     "needs_quarantine_review",
     "quarantined",
@@ -161,6 +184,18 @@ def _is_empty_source_leftover(path: Path) -> bool:
     return path.is_dir() and not _has_any_real_files(path)
 
 
+def _is_ignored_sidecar_only_folder(path: Path) -> bool:
+    if not path.is_dir():
+        return False
+    files = _all_files(path)
+    if not files:
+        return False
+    return all(
+        file.suffix.casefold() in IGNORED_SIDECAR_ONLY_EXTENSIONS
+        for file in files
+    )
+
+
 def classify_ingest_item(path: Path) -> str:
     if path.name.casefold() in IGNORED_INGEST_NAMES:
         return "ignored_system_folder"
@@ -173,9 +208,11 @@ def classify_ingest_item(path: Path) -> str:
             return "video_movie"
         if is_book_file(path):
             return "book"
-        return "unsupported_file"
+        return "unknown_type"
     if not path.is_dir():
         return "unknown_type"
+    if _is_ignored_sidecar_only_folder(path):
+        return "ignored_sidecar_only_folder"
 
     audio_files = [
         candidate
@@ -226,6 +263,10 @@ def classify_ingest_item(path: Path) -> str:
     if audio_files and not video_files and looks_like_audiobook_source(path):
         return "audiobook"
     return "music_album"
+
+
+def is_skipped_root_unsupported_file(path: Path, classification: str) -> bool:
+    return path.is_file() and classification == "unknown_type"
 
 
 def _root_music_audio_files() -> list[Path]:
@@ -345,6 +386,7 @@ def _tv_episode_metadata(path: Path, root: Path) -> dict:
     if (
         parsed["season_number"] is not None
         and parsed["episode_number"] is not None
+        and not parsed.get("is_special")
     ):
         parsed["episode_code"] = (
             f"S{int(parsed['season_number']):02d}"
@@ -491,6 +533,8 @@ def _tv_batch_data(source: Path) -> dict | None:
     if not show_title:
         show_title = "Unknown TV Show"
         warnings.append("tv_show_title_missing")
+    for episode in [*episodes, *special_episodes]:
+        episode["show_title"] = show_title
 
     parse_failed = any(
         episode.get("season_number") is None
@@ -642,8 +686,30 @@ def _apply_tv_batch_data(
     db.flush()
 
     files = data["files"]
+    canonical_file_metadata = {
+        item.get("relative_source"): item
+        for season in data["metadata"].get("seasons", [])
+        for item in season.get("episodes", [])
+        if isinstance(item, dict) and item.get("relative_source")
+    }
+    canonical_file_metadata.update({
+        item.get("relative_source"): item
+        for item in data["metadata"].get("special_episodes", [])
+        if isinstance(item, dict) and item.get("relative_source")
+    })
+    canonical_file_metadata.update({
+        item.get("relative_source"): item
+        for item in data["metadata"].get("subtitles", [])
+        if isinstance(item, dict) and item.get("relative_source")
+    })
     episode_rows = [
-        (path, _tv_episode_metadata(path, source))
+        (
+            path,
+            canonical_file_metadata.get(
+                str(path.relative_to(source)),
+                _tv_episode_metadata(path, source),
+            ),
+        )
         for path in files["video"]
     ]
     role_rows = (
@@ -803,6 +869,14 @@ def _create_movie_batch(db: Session, source: Path) -> IngestBatch | None:
         edition = None
     video_files = [path.name for path in files["video"]]
     video_file_count = len(files["video"])
+    metadata_candidates, movie_candidate_items = build_movie_metadata_candidates(
+        source,
+        files["video"],
+    )
+    item_candidates_by_file = {
+        str(item.get("source_file") or "").casefold(): item
+        for item in movie_candidate_items
+    }
     folder = safe_movie_path_part(
         f"{year or 'Unknown Year'} - {title}"
         if not edition
@@ -815,6 +889,8 @@ def _create_movie_batch(db: Session, source: Path) -> IngestBatch | None:
         "title": title,
         "year": year,
         "edition": edition,
+        "resolution": parsed.get("resolution") or file_parsed.get("resolution"),
+        "source": parsed.get("source") or file_parsed.get("source"),
         "format": main_video.suffix.lstrip(".").upper(),
         "video_file_count": video_file_count,
         "video_files": video_files,
@@ -830,10 +906,84 @@ def _create_movie_batch(db: Session, source: Path) -> IngestBatch | None:
         "original_release_name": original_release_name,
         "primary_video_file": main_video.name,
         "release_tags_removed": release_tags_removed,
+        "release_cleanup": {
+            "original_name": original_release_name,
+            "clean_title": title,
+            "year": year,
+            "removed_tokens": release_tags_removed,
+        },
+        "review_type": (
+            "movie_collection" if video_file_count > 1 else "movie"
+        ),
+        "review_mode": (
+            "item_list" if video_file_count > 1 else "single_item"
+        ),
+        "metadata_assist_version": METADATA_ASSIST_VERSION,
+        "metadata_candidates": metadata_candidates,
+        "artwork_candidates": [
+            {
+                "field": "artwork",
+                "value": path.name,
+                "source": "sidecar_poster",
+                "source_label": "Movie poster sidecar",
+                "confidence": 0.85,
+                "confidence_label": "high",
+                "applied": False,
+                "ignored": False,
+                "notes": [],
+            }
+            for path in files["artwork"]
+        ],
+        "accepted_unknown_title": False,
+        "accepted_unknown_year": False,
+        "lookup_later": False,
         "metadata_quality": "good" if year else "weak",
         "metadata_warnings": warnings,
         "confidence": 0.8 if year else 0.7,
     }
+    if video_file_count > 1:
+        metadata["collection_title"] = (
+            parsed.get("title") if useful_movie_name(parsed) else source.name
+        )
+        metadata["movie_items"] = []
+        for path in files["video"]:
+            item_parsed = parse_movie_name(path.name)
+            item_title = item_parsed.get("title")
+            item_year = item_parsed.get("year")
+            item_edition = item_parsed.get("edition")
+            destination_label = (
+                f"{item_year or 'Unknown Year'} - "
+                f"{item_title or 'Unknown Movie'}"
+            )
+            if item_edition:
+                destination_label += f" [{item_edition}]"
+            candidate_data = item_candidates_by_file.get(
+                path.name.casefold(),
+                {},
+            )
+            metadata["movie_items"].append({
+                "item_kind": "movie",
+                "source_key": path.name,
+                "source_file": path.name,
+                "include": True,
+                "title": item_title,
+                "year": item_year,
+                "edition": item_edition,
+                "format": path.suffix.lstrip(".").upper(),
+                "resolution": item_parsed.get("resolution"),
+                "source": item_parsed.get("source"),
+                "destination_preview": (
+                    f"Movies/Library/{safe_movie_path_part(destination_label)}"
+                ),
+                "metadata_candidates": candidate_data.get(
+                    "metadata_candidates",
+                    {},
+                ),
+                "release_cleanup": candidate_data.get("release_cleanup", {}),
+                "accepted_unknown_title": False,
+                "accepted_unknown_year": False,
+                "lookup_later": False,
+            })
     metadata = build_review_state("video_movie", metadata)
     batch = IngestBatch(
         source_kind="manual-drop",
@@ -898,7 +1048,12 @@ def _create_book_batch(db: Session, source: Path) -> IngestBatch | None:
         return None
 
     metadata = build_single_book_metadata(source, settings.books_dir)
-    parsed = [parse_book_name(path.name) for path in book_files]
+    collection_groups, collection_summary = build_book_collection_groups(
+        source,
+        files,
+    )
+    primary_book_files = [group["primary"] for group in collection_groups]
+    parsed = [parse_book_name(path.name) for path in primary_book_files]
     identities = {
         (
             item["author"].casefold(),
@@ -909,23 +1064,68 @@ def _create_book_batch(db: Session, source: Path) -> IngestBatch | None:
     }
     if len(identities) > 1:
         items = []
-        for path, item in sorted(
-            zip(book_files, parsed),
-            key=lambda pair: pair[0].name.casefold(),
+        for group, item in sorted(
+            zip(collection_groups, parsed),
+            key=lambda pair: pair[0]["primary"].name.casefold(),
         ):
+            path = group["primary"]
             fmt = book_format_for(path)
             item_metadata = {
                 "item_kind": "book",
                 "source_key": path.name,
                 "source_file": path.name,
                 "include": True,
-                "author": item["author"],
+                "author": (
+                    item["author"]
+                    if item.get("author_guess_confidence") == "high"
+                    else "Unknown Author"
+                ),
                 "title": item["title"],
                 "year": item.get("year"),
                 "series": item.get("series"),
                 "series_index": item.get("series_index"),
                 "format": fmt,
+                "metadata_assist_version": METADATA_ASSIST_VERSION,
+                "matched_artwork": group["matched_artwork"],
+                "alternate_formats": group["alternate_formats"],
+                "accepted_unknown_author": False,
+                "accepted_unknown_year": False,
+                "lookup_later": False,
             }
+            candidate_runtime: dict = {}
+            item_candidates, _ = build_book_metadata_candidates(
+                path,
+                path,
+                [],
+                candidate_runtime,
+            )
+            item_metadata["metadata_candidates"] = item_candidates
+            item_metadata["candidate_notes"] = []
+            item_metadata["candidate_runtime"] = candidate_runtime
+            item_metadata["author"] = preferred_candidate_value(
+                item_candidates,
+                "author",
+                item_metadata["author"],
+                min_confidence="high",
+                require_not_filename_guess=True,
+            )
+            item_metadata["title"] = preferred_candidate_value(
+                item_candidates,
+                "title",
+                item_metadata["title"],
+            )
+            item_metadata["year"] = preferred_candidate_value(
+                item_candidates,
+                "year",
+                item_metadata["year"],
+            )
+            item_metadata["metadata_title"] = item_metadata["title"]
+            item_metadata["display_title"] = clean_display_title(
+                item_metadata["title"]
+            )
+            item_metadata["destination_title"] = destination_title(
+                item_metadata["title"]
+            )
             destination = build_book_item_destination(
                 books_root=settings.books_dir,
                 item=item_metadata,
@@ -935,6 +1135,11 @@ def _create_book_batch(db: Session, source: Path) -> IngestBatch | None:
                 destination.relative_to(settings.data_root).as_posix()
             )
             items.append(item_metadata)
+        collection_summary["needs_repair_count"] = sum(
+            item["author"] == "Unknown Author"
+            or item["title"] == "Unknown Title"
+            for item in items
+        )
         metadata.update({
             "review_type": "book_collection",
             "review_mode": "item_list",
@@ -945,6 +1150,7 @@ def _create_book_batch(db: Session, source: Path) -> IngestBatch | None:
             "keep_collection_together": False,
             "collection_destination_root": None,
             "book_items": items,
+            "collection_summary": collection_summary,
             "metadata_quality": "weak",
             "metadata_warnings": list(dict.fromkeys([
                 *metadata.get("metadata_warnings", []),
@@ -966,9 +1172,22 @@ def _create_book_batch(db: Session, source: Path) -> IngestBatch | None:
         confidence=float(metadata.get("confidence") or 0.65),
         suggested_destination=str(destination) if destination else None,
         suggested_metadata={
-            "author": metadata.get("author"),
-            "title": metadata.get("title"),
-            "year": metadata.get("year"),
+            "metadata_assist_version": METADATA_ASSIST_VERSION,
+            "author": preferred_candidate_value(
+                metadata.get("metadata_candidates") or {},
+                "author",
+                metadata.get("author"),
+            ),
+            "title": preferred_candidate_value(
+                metadata.get("metadata_candidates") or {},
+                "title",
+                metadata.get("title"),
+            ),
+            "year": preferred_candidate_value(
+                metadata.get("metadata_candidates") or {},
+                "year",
+                metadata.get("year"),
+            ),
             "format": metadata.get("format"),
         },
         metadata_json=metadata,
@@ -977,6 +1196,10 @@ def _create_book_batch(db: Session, source: Path) -> IngestBatch | None:
     db.flush()
     roles = (
         [(path, "book_file") for path in files["books"]]
+        + [
+            (path, "book_alternate_format")
+            for path in files.get("alternates", [])
+        ]
         + [(path, "book_artwork") for path in files["artwork"]]
         + [(path, "book_sidecar") for path in files["sidecars"]]
     )
@@ -1028,10 +1251,27 @@ def _create_audiobook_batch(db: Session, source: Path) -> IngestBatch | None:
         confidence=float(metadata.get("confidence") or 0.65),
         suggested_destination=str(destination) if destination else None,
         suggested_metadata={
-            "author": metadata.get("author"),
-            "title": metadata.get("title"),
-            "year": metadata.get("year"),
-            "narrator": metadata.get("narrator"),
+            "metadata_assist_version": METADATA_ASSIST_VERSION,
+            "author": preferred_candidate_value(
+                metadata.get("metadata_candidates") or {},
+                "author",
+                metadata.get("author"),
+            ),
+            "title": preferred_candidate_value(
+                metadata.get("metadata_candidates") or {},
+                "title",
+                metadata.get("title"),
+            ),
+            "year": preferred_candidate_value(
+                metadata.get("metadata_candidates") or {},
+                "year",
+                metadata.get("year"),
+            ),
+            "narrator": preferred_candidate_value(
+                metadata.get("metadata_candidates") or {},
+                "narrator",
+                metadata.get("narrator"),
+            ),
             "format": metadata.get("format"),
         },
         metadata_json=metadata,
@@ -1129,6 +1369,18 @@ def repair_stale_media_batches(
                 db,
                 source,
                 reason="empty_source_leftover",
+            )
+        if classification == "unknown_type" and source.is_file():
+            _merge_active_quarantine_rows_for_source(
+                db,
+                source,
+                reason="unsupported_root_file_skipped",
+            )
+        if classification == "ignored_sidecar_only_folder":
+            _merge_active_quarantine_rows_for_source(
+                db,
+                source,
+                reason="ignored_sidecar_only_folder",
             )
 
     stale_rows = (
@@ -1520,7 +1772,13 @@ def _create_discography_batch(
 
     for child, paths in sorted(child_groups.items(), key=lambda item: item[0].name.lower()):
         folder = parse_music_folder_name(child.name)
-        track_metadata = [file_metadata[str(path)] for path in paths]
+        track_metadata = [
+            {
+                **file_metadata[str(path)],
+                "source_filename": path.name,
+            }
+            for path in paths
+        ]
         album = folder.get("album") or child.name
         year = folder.get("year")
         extensions = {path.suffix.lower() for path in paths}
@@ -1530,6 +1788,10 @@ def _create_discography_batch(
         }
         formats.update(child_formats)
         album_format = ", ".join(sorted(child_formats))
+        disc_count = len({
+            int(metadata.get("discnumber") or 1)
+            for metadata in track_metadata
+        })
         child_warnings = []
         release_tags = music_folder_release_tags(child.name)
         if not year:
@@ -1568,13 +1830,16 @@ def _create_discography_batch(
             child_warnings.append("album_title_from_folder_cleanup")
         if len(extensions) > 1:
             child_warnings.append("mixed_formats")
-        if {"album_missing_year", "album_missing_title"} & set(child_warnings):
+        if "album_missing_title" in child_warnings:
             warnings.append("child_album_metadata_missing")
-        child_blocking = bool(
-            {"album_missing_year", "album_missing_title"} & set(child_warnings)
-        )
+        child_blocking = "album_missing_title" in child_warnings
         artwork_paths = _artwork_files(child)
         ignored_sidecars = _ignored_music_sidecars(child)
+        album_candidates, track_candidates = build_music_metadata_candidates(
+            child,
+            track_metadata,
+            compilation=release_type == "compilation",
+        )
 
         album_summaries.append(
             {
@@ -1584,6 +1849,7 @@ def _create_discography_batch(
                 "year": year,
                 "format": album_format,
                 "track_count": len(paths),
+                "disc_count": disc_count,
                 "artwork_count": len(artwork_paths),
                 "artwork_files": [path.name for path in artwork_paths],
                 "ignored_sidecar_count": len(ignored_sidecars),
@@ -1595,6 +1861,12 @@ def _create_discography_batch(
                 ),
                 "warnings": list(dict.fromkeys(child_warnings)),
                 "release_tags_removed": release_tags,
+                "metadata_candidates": album_candidates,
+                "track_candidates": track_candidates,
+                "accepted_unknown_album_artist": False,
+                "accepted_unknown_album_title": False,
+                "accepted_unknown_year": False,
+                "lookup_later": False,
             }
         )
         for path in paths:
@@ -1656,6 +1928,11 @@ def _create_discography_batch(
     collection_sidecars = _ignored_music_sidecars(parent)
     metadata = {
         "artist": artist,
+        "review_type": "music_discography",
+        "review_mode": "album_list",
+        "metadata_assist_version": METADATA_ASSIST_VERSION,
+        "accepted_unknown_discography_artist": False,
+        "lookup_later": False,
         "collection_type": "discography",
         "album_count": len(album_summaries),
         "release_count": len(album_summaries),
@@ -1678,6 +1955,28 @@ def _create_discography_batch(
         "metadata_warnings": list(dict.fromkeys(warnings)),
         "confidence": 0.6 if blocking else 1.0,
     }
+    metadata_candidates: dict[str, list[dict]] = {}
+    add_candidate(
+        metadata_candidates,
+        make_candidate(
+            "album_artist",
+            parent_artist,
+            "parent_folder_name",
+            "Discography folder name",
+            0.9,
+        ),
+    )
+    add_candidate(
+        metadata_candidates,
+        make_candidate(
+            "album_artist",
+            embedded_artist,
+            "audio_tag_albumartist",
+            "Common embedded album artist tag",
+            0.92,
+        ),
+    )
+    metadata["metadata_candidates"] = metadata_candidates
     metadata = build_review_state("music_discography", metadata)
     batch = IngestBatch(
         source_kind="manual-drop",
@@ -1762,6 +2061,8 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
     for item, classification in classifications.items():
         if classification != "unknown_type":
             continue
+        if item.is_file():
+            continue
         batch = _create_unknown_batch(db, item, classification)
         if batch:
             unknown_batches.append(batch)
@@ -1774,6 +2075,11 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
         item
         for item, classification in classifications.items()
         if classification == "unsupported_file"
+    ]
+    skipped_root_unsupported = [
+        item
+        for item, classification in classifications.items()
+        if is_skipped_root_unsupported_file(item, classification)
     ]
     _retire_noisy_unsupported_batches(db, music_roots, loose_unsupported)
     _update_existing_music_sidecars(db, music_roots)
@@ -1789,12 +2095,16 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
             skipped_duplicates=0,
             batches=batches,
             unknown_items=sum(
-                classification == "unknown_type"
-                for classification in classifications.values()
+                classification == "unknown_type" and item.is_dir()
+                for item, classification in classifications.items()
             ),
-            unsupported_files=len(loose_unsupported),
+            unsupported_files=len(loose_unsupported) + len(skipped_root_unsupported),
             ignored_system_files=sum(
                 classification == "ignored_system_folder"
+                for classification in classifications.values()
+            ),
+            ignored_sidecar_only_folders=sum(
+                classification == "ignored_sidecar_only_folder"
                 for classification in classifications.values()
             ),
             movie_batches_found=sum(
@@ -1904,7 +2214,13 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
             file_metadata[str(path)].get("discnumber", 1)
             for path in paths
         }
-        track_metadata = [file_metadata[str(path)] for path in paths]
+        track_metadata = [
+            {
+                **file_metadata[str(path)],
+                "source_filename": path.name,
+            }
+            for path in paths
+        ]
         album_meta = {
             "artist": _representative_value(
                 track_metadata, "albumartist", sample_meta["albumartist"]
@@ -1950,6 +2266,39 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
             track_metadata,
             album_meta,
         )
+        metadata_candidates, track_candidates = build_music_metadata_candidates(
+            source_path,
+            track_metadata,
+            compilation=bool(
+                suggested_metadata.get("compilation")
+                or album_meta.get("is_compilation")
+            ),
+        )
+        album_meta.update({
+            "review_type": "music_album",
+            "review_mode": "single_album",
+            "metadata_assist_version": METADATA_ASSIST_VERSION,
+            "metadata_candidates": metadata_candidates,
+            "track_candidates": track_candidates,
+            "accepted_unknown_album_artist": False,
+            "accepted_unknown_album_title": False,
+            "accepted_unknown_year": False,
+            "lookup_later": False,
+        })
+        album_meta["artwork_candidates"] = [
+            {
+                "field": "artwork",
+                "value": path.name,
+                "source": "music_sidecar_artwork",
+                "source_label": "Music sidecar artwork",
+                "confidence": 0.9,
+                "confidence_label": "high",
+                "applied": False,
+                "ignored": False,
+                "notes": [],
+            }
+            for path in artwork_paths
+        ]
         folder_display_artist, folder_artist_cleanup = (
             compilation_artist_cleanup_from_folder(source_path.name)
         )
@@ -2104,12 +2453,16 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
             for classification in classifications.values()
         ),
         unknown_items=sum(
-            classification == "unknown_type"
-            for classification in classifications.values()
+            classification == "unknown_type" and item.is_dir()
+            for item, classification in classifications.items()
         ),
-        unsupported_files=len(loose_unsupported),
+        unsupported_files=len(loose_unsupported) + len(skipped_root_unsupported),
         ignored_system_files=sum(
             classification == "ignored_system_folder"
+            for classification in classifications.values()
+        ),
+        ignored_sidecar_only_folders=sum(
+            classification == "ignored_sidecar_only_folder"
             for classification in classifications.values()
         ),
         artwork_files_found=sum(

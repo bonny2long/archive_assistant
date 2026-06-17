@@ -3,6 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 import re
 
+from app.services.metadata_candidates import (
+    METADATA_ASSIST_VERSION,
+    add_candidate,
+    is_generic_track_value,
+    make_candidate,
+    preferred_candidate_value,
+)
+
 AUDIOBOOK_EXTENSIONS = {
     ".mp3", ".m4b", ".m4a", ".aac", ".flac", ".wav", ".ogg", ".opus",
 }
@@ -39,16 +47,7 @@ def is_audiobook_audio_file(path: Path) -> bool:
 
 
 def is_audiobook_artwork(path: Path) -> bool:
-    if path.suffix.casefold() not in AUDIOBOOK_ARTWORK_EXTENSIONS:
-        return False
-    if path.stem.casefold() in {
-        "cover", "folder", "front", "audiobook", "book",
-    }:
-        return True
-    return any(
-        part.casefold() in {"cover", "covers", "artwork", "images"}
-        for part in path.parts
-    )
+    return path.suffix.casefold() in AUDIOBOOK_ARTWORK_EXTENSIONS
 
 
 def is_audiobook_sidecar(path: Path) -> bool:
@@ -253,6 +252,228 @@ def collect_audiobook_files(root: Path) -> dict[str, list[Path]]:
     }
 
 
+MULTI_BOOK_INDEX_RE = re.compile(
+    r"^(?P<title>.+?)\s*\(Book\s+(?P<index>\d+(?:\.\d+)?)\)",
+    re.I,
+)
+
+
+def detect_audiobook_collection(source: Path, audio: list[Path]) -> dict:
+    parsed: list[tuple[str, str]] = []
+    for path in audio:
+        cleaned = _strip_audio_noise(path.stem)
+        match = MULTI_BOOK_INDEX_RE.match(cleaned)
+        if match:
+            parsed.append((match.group("index"), match.group("title").strip()))
+    if len(parsed) < 2:
+        return {
+            "audiobook_collection_type": None,
+            "contained_books": [],
+        }
+
+    tokenized = [title.split() for _, title in parsed]
+    common_length = 0
+    for tokens in zip(*tokenized):
+        if len({token.casefold() for token in tokens}) != 1:
+            break
+        common_length += 1
+    source_tokens = re.sub(
+        r"\b(?:trilogy|collection|series|set)\b",
+        "",
+        source.stem,
+        flags=re.I,
+    ).split()
+    if source_tokens:
+        common_length = min(common_length, len(source_tokens))
+
+    contained = []
+    for index, title in parsed:
+        title_tokens = title.split()
+        item_title = " ".join(title_tokens[common_length:]).strip() or title
+        contained.append({
+            "series_index": index,
+            "title": item_title,
+        })
+    contained.sort(key=lambda item: float(item["series_index"]))
+    return {
+        "audiobook_collection_type": (
+            "multi_book_trilogy" if len(contained) == 3 else "multi_book_set"
+        ),
+        "contained_books": contained,
+    }
+
+
+def _first_tag_value(tags, keys: tuple[str, ...]) -> str | None:
+    for key in keys:
+        value = tags.get(key) if tags is not None else None
+        if not value:
+            continue
+        if isinstance(value, (list, tuple)):
+            value = value[0] if value else None
+        if value is not None:
+            text = str(value).strip()
+            if text:
+                return text
+    return None
+
+
+def extract_audio_metadata(path: Path) -> dict:
+    try:
+        from mutagen import File as MutagenFile
+    except ImportError:
+        return {}
+    try:
+        media = MutagenFile(str(path), easy=True)
+    except Exception:
+        return {}
+    if media is None or media.tags is None:
+        return {}
+    tags = media.tags
+    date = _first_tag_value(tags, ("date", "year", "originaldate"))
+    year_match = YEAR_RE.search(date or "")
+    return {
+        key: value
+        for key, value in {
+            "title": _first_tag_value(tags, ("album",)),
+            "author": _first_tag_value(
+                tags,
+                ("albumartist", "artist", "author"),
+            ),
+            "year": year_match.group(1) if year_match else None,
+            "narrator": _first_tag_value(
+                tags,
+                ("narrator", "performer", "composer"),
+            ),
+            "chapter_title": _first_tag_value(tags, ("title",)),
+            "track_number": _first_tag_value(tags, ("tracknumber",)),
+            "disc_number": _first_tag_value(tags, ("discnumber",)),
+        }.items()
+        if value
+    }
+
+
+def build_audiobook_metadata_candidates(
+    source: Path,
+    audio: list[Path],
+    artwork: list[Path],
+) -> tuple[dict[str, list[dict]], list[dict], list[dict]]:
+    candidates: dict[str, list[dict]] = {}
+    source_is_container = (
+        source.is_dir()
+        or source.suffix.casefold() not in AUDIOBOOK_EXTENSIONS
+    )
+    source_guess = parse_audiobook_name(
+        source.name if source_is_container else audio[0].name
+    )
+    file_guess = parse_audiobook_name(audio[0].name)
+    for field in (
+        "author", "title", "year", "narrator", "series", "series_index",
+    ):
+        source_value = source_guess.get(field)
+        file_value = file_guess.get(field)
+        if str(source_value or "").casefold() not in UNKNOWN_AUDIOBOOK_VALUES:
+            add_candidate(candidates, make_candidate(
+                field,
+                source_value,
+                "folder_name" if source_is_container else "filename",
+                "Folder name" if source_is_container else "Filename",
+                0.72,
+            ))
+        if str(file_value or "").casefold() not in UNKNOWN_AUDIOBOOK_VALUES:
+            add_candidate(candidates, make_candidate(
+                field,
+                file_value,
+                "filename",
+                "Filename",
+                0.68,
+            ))
+
+    chapter_candidates: list[dict] = []
+    generic_audio_tag_count = 0
+    detected_discs: set[int] = set()
+    for path in audio:
+        embedded = extract_audio_metadata(path)
+        for field in ("author", "title", "year", "narrator"):
+            candidate = make_candidate(
+                field,
+                embedded.get(field),
+                f"audio_tag_{field}",
+                "Embedded audio tags",
+                0.88 if field in {"author", "title"} else 0.78,
+            )
+            if field == "title" and candidate and candidate.get("ignored"):
+                generic_audio_tag_count += 1
+            add_candidate(candidates, candidate)
+        chapter_title = embedded.get("chapter_title")
+        folder_disc = next(
+            (
+                int(match.group(1))
+                for part in path.parts
+                if (
+                    match := re.search(
+                        r"\b(?:disc|disk|cd)\s*0*(\d+)\b",
+                        part,
+                        flags=re.I,
+                    )
+                )
+            ),
+            None,
+        )
+        raw_disc = embedded.get("disc_number")
+        disc_match = re.match(r"\s*(\d+)", str(raw_disc or ""))
+        disc_number = (
+            int(disc_match.group(1))
+            if disc_match
+            else folder_disc
+        )
+        if disc_number is not None:
+            detected_discs.add(disc_number)
+        if chapter_title and is_generic_track_value(chapter_title):
+            generic_audio_tag_count += 1
+        if chapter_title and not is_generic_track_value(chapter_title):
+            chapter_candidates.append({
+                "source_file": (
+                    str(path.relative_to(source))
+                    if source_is_container
+                    else path.name
+                ),
+                "track_number": embedded.get("track_number"),
+                "disc_number": disc_number,
+                "current_name": path.name,
+                "suggested_title": chapter_title,
+                "source": "audio_tag_title",
+                "source_label": "Embedded audio title",
+                "confidence": 0.8,
+                "confidence_label": "medium",
+            })
+
+    artwork_candidates = [
+        candidate
+        for path in artwork
+        if (
+            candidate := make_candidate(
+                "artwork",
+                str(path.relative_to(source))
+                if source_is_container
+                else path.name,
+                "audiobook_sidecar_artwork",
+                "Audiobook artwork file",
+                0.9,
+            )
+        )
+    ]
+    summary = {
+        "generic_audio_tag_count": generic_audio_tag_count,
+        "detected_disc_count": len(detected_discs),
+        "candidate_warning_count": sum(
+            bool(candidate.get("ignored") or candidate.get("notes"))
+            for values in candidates.values()
+            for candidate in values
+        ),
+    }
+    return candidates, chapter_candidates, artwork_candidates, summary
+
+
 def audiobook_destination(
     *,
     audiobooks_root: Path,
@@ -287,7 +508,34 @@ def build_audiobook_metadata(source: Path, audiobooks_root: Path) -> dict:
     )
     year = source_guess.get("year") or file_guess.get("year")
     narrator = source_guess.get("narrator") or file_guess.get("narrator")
+    (
+        metadata_candidates,
+        chapter_candidates,
+        artwork_candidates,
+        candidate_summary,
+    ) = build_audiobook_metadata_candidates(
+        source,
+        audio,
+        files["artwork"],
+    )
+    author = preferred_candidate_value(
+        metadata_candidates,
+        "author",
+        author if author.casefold() not in UNKNOWN_AUDIOBOOK_VALUES else "Unknown Author",
+    )
+    title = preferred_candidate_value(
+        metadata_candidates,
+        "title",
+        title if title.casefold() not in UNKNOWN_AUDIOBOOK_VALUES else "Unknown Title",
+    )
+    year = preferred_candidate_value(metadata_candidates, "year", year)
+    narrator = preferred_candidate_value(
+        metadata_candidates,
+        "narrator",
+        narrator,
+    )
     fmt = audiobook_format_for(audio)
+    collection_preview = detect_audiobook_collection(source, audio)
     destination = audiobook_destination(
         audiobooks_root=audiobooks_root,
         author=author,
@@ -307,6 +555,21 @@ def build_audiobook_metadata(source: Path, audiobooks_root: Path) -> dict:
         warnings.append("audiobook_ignored_sidecars_present")
     return {
         "media_kind": "audiobook",
+        "metadata_assist_version": METADATA_ASSIST_VERSION,
+        "candidate_runtime": {
+            "metadata_assist_version": METADATA_ASSIST_VERSION,
+            "candidate_filter_active": True,
+            "generic_audio_tags_hidden": candidate_summary[
+                "generic_audio_tag_count"
+            ],
+            "bad_author_splits_blocked": 0,
+            "source_labels_removed": 0,
+            "pdf_metadata_attempted": False,
+            "epub_metadata_attempted": False,
+            "metadata_reader_errors": [],
+            "pdf_garbage_candidates_blocked": 0,
+            "author_names_canonicalized": 0,
+        },
         "review_type": "audiobook",
         "review_mode": "single_item",
         "author": author,
@@ -318,6 +581,10 @@ def build_audiobook_metadata(source: Path, audiobooks_root: Path) -> dict:
             source_guess.get("series_index")
             or file_guess.get("series_index")
         ),
+        "accepted_unknown_author": False,
+        "accepted_unknown_year": False,
+        "accepted_unknown_narrator": False,
+        "lookup_later": False,
         "format": fmt,
         "audiobook_file_count": len(audio),
         "chapter_count": len(audio),
@@ -349,4 +616,9 @@ def build_audiobook_metadata(source: Path, audiobooks_root: Path) -> dict:
             if author != "Unknown Author" and title != "Unknown Title"
             else 0.65
         ),
+        "metadata_candidates": metadata_candidates,
+        "chapter_candidates": chapter_candidates,
+        "artwork_candidates": artwork_candidates,
+        **collection_preview,
+        **candidate_summary,
     }

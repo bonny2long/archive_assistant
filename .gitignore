@@ -5,5 +5,9 @@ __pycache__/
 node_modules/
 dist/
 .env
+.tmp/
 .DS_Store
 data/ 
+*.db-journal
+*.db-wal
+*.db-shm

@@ -25,6 +25,7 @@ from app.services.library_manifest import (
     append_library_index_entry,
     write_library_manifest,
 )
+from app.services.move_manifest import write_move_manifest
 
 
 def _safe_path_part(value: str) -> str:
@@ -54,6 +55,65 @@ def _safe_write_library_metadata(
         )
     except Exception as exc:
         print(f"Failed to update library index for {destination}: {exc}")
+
+
+def _record_move_manifest(
+    db: Session,
+    batch: IngestBatch,
+    failed_files: list[str],
+) -> list[str]:
+    actions = (
+        db.query(MoveAction)
+        .filter(MoveAction.batch_id == batch.id)
+        .order_by(MoveAction.id.asc())
+        .all()
+    )
+    pointer, warnings = write_move_manifest(
+        batch=batch,
+        move_actions=actions,
+        failed_messages=failed_files,
+    )
+    if pointer:
+        metadata = dict(batch.metadata_json or {})
+        metadata["move_manifest"] = pointer
+        batch.metadata_json = metadata
+        db.flush()
+    return warnings
+
+
+def _update_movie_library_manifest_pointers(
+    db: Session,
+    batch: IngestBatch,
+) -> None:
+    pointer = (batch.metadata_json or {}).get("move_manifest")
+    if not pointer or batch.detected_type != "video_movie":
+        return
+    actions = (
+        db.query(MoveAction)
+        .filter(
+            MoveAction.batch_id == batch.id,
+            MoveAction.status == "completed",
+        )
+        .all()
+    )
+    manifest_paths = {
+        Path(action.destination_path).parent / "metadata" / "movie.json"
+        for action in actions
+        if Path(action.destination_path).suffix.lower()
+        in {".mkv", ".mp4", ".m4v", ".mov", ".avi", ".webm", ".ts", ".m2ts"}
+    }
+    for path in manifest_paths:
+        if not path.exists():
+            continue
+        try:
+            document = json.loads(path.read_text(encoding="utf-8"))
+            document["move_manifest"] = pointer
+            path.write_text(
+                json.dumps(document, indent=2, ensure_ascii=False, default=str),
+                encoding="utf-8",
+            )
+        except (OSError, ValueError):
+            continue
 
 
 def _unique_artwork_destination(
@@ -262,6 +322,8 @@ def _move_movie_batch(
                 "title": metadata.get("title") or title,
                 "year": metadata.get("year") or year or None,
                 "edition": metadata.get("edition") or None,
+                "resolution": metadata.get("resolution"),
+                "source": metadata.get("source"),
                 "format": metadata.get("format"),
                 "source_path": batch.source_path,
                 "primary_video_file": (
@@ -281,6 +343,13 @@ def _move_movie_batch(
                     batch.metadata_confirmed
                     or metadata.get("review_confirmed")
                 ),
+                "accepted_unknown_title": bool(
+                    metadata.get("accepted_unknown_title")
+                ),
+                "accepted_unknown_year": bool(
+                    metadata.get("accepted_unknown_year")
+                ),
+                "lookup_later": bool(metadata.get("lookup_later")),
                 "batch_id": batch.id,
             },
             settings.movies_metadata_dir,
@@ -348,8 +417,9 @@ def _move_movie_collection_batch(
         if not item:
             continue
 
-        title = str(item.get("title") or "Unknown Movie").strip()
-        year = str(item.get("year") or "Unknown Year")[:4]
+        title = str(item.get("title") or "Unknown Title").strip()
+        raw_year = str(item.get("year") or "").strip()
+        year = raw_year if len(raw_year) == 4 and raw_year.isdigit() else "Unknown Year"
         edition = str(item.get("edition") or "").strip()
         dest_label = (
             f"{year} - {title}"
@@ -418,6 +488,8 @@ def _move_movie_collection_batch(
                     "year": year,
                     "edition": edition or None,
                     "format": item.get("format"),
+                    "resolution": item.get("resolution"),
+                    "source": item.get("source"),
                     "source_path": str(source),
                     "primary_video_file": destination_file.name,
                     "video_file_count": 1,
@@ -431,6 +503,13 @@ def _move_movie_collection_batch(
                         batch.metadata_confirmed
                         or metadata.get("review_confirmed")
                     ),
+                    "accepted_unknown_title": bool(
+                        item.get("accepted_unknown_title")
+                    ),
+                    "accepted_unknown_year": bool(
+                        item.get("accepted_unknown_year")
+                    ),
+                    "lookup_later": bool(item.get("lookup_later")),
                     "batch_id": batch.id,
                 },
                 settings.movies_metadata_dir,
@@ -926,6 +1005,14 @@ def _move_tv_batch(
                     batch.metadata_confirmed
                     or metadata.get("review_confirmed")
                 ),
+                "accepted_unknown_show_title": bool(
+                    metadata.get("accepted_unknown_show_title")
+                ),
+                "accepted_unknown_year": bool(
+                    metadata.get("accepted_unknown_year")
+                ),
+                "lookup_later": bool(metadata.get("lookup_later")),
+                "move_manifest": metadata.get("move_manifest"),
                 "batch_id": batch.id,
             },
             settings.tv_metadata_dir,
@@ -1247,6 +1334,7 @@ def _move_discography_batch(
             {
                 "media_kind": "music_discography",
                 "artist": metadata.get("artist"),
+                "discography_artist": metadata.get("artist"),
                 "release_count": metadata.get(
                     "release_count",
                     sum(release_type_counts.values()),
@@ -1263,6 +1351,11 @@ def _move_discography_batch(
                     batch.metadata_confirmed
                     or metadata.get("review_confirmed")
                 ),
+                "accepted_unknown_discography_artist": bool(
+                    metadata.get("accepted_unknown_discography_artist")
+                ),
+                "lookup_later": bool(metadata.get("lookup_later")),
+                "move_manifest": metadata.get("move_manifest"),
                 "batch_id": batch.id,
             },
             settings.music_metadata_dir,
@@ -1687,6 +1780,18 @@ def _move_book_batch(
         for item in items
         if item.get("source_file")
     }
+    associated_item_by_path: dict[str, dict] = {}
+    for item in items:
+        for alternate in item.get("alternate_formats") or []:
+            if isinstance(alternate, dict) and alternate.get("file"):
+                associated_item_by_path[
+                    str(alternate["file"]).replace("\\", "/").casefold()
+                ] = item
+        artwork = item.get("matched_artwork")
+        if isinstance(artwork, dict) and artwork.get("file"):
+            associated_item_by_path[
+                str(artwork["file"]).replace("\\", "/").casefold()
+            ] = item
     moved_files: list[str] = []
     failed_files: list[str] = []
     planned: list[tuple[object, Path]] = []
@@ -1733,9 +1838,15 @@ def _move_book_batch(
             continue
 
         if collection:
-            if ingest_file.detected_role != "book_file":
-                continue
             item = item_by_source.get(ingest_file.file_name.casefold())
+            if not item:
+                try:
+                    relative_source = source.relative_to(
+                        Path(batch.source_path)
+                    ).as_posix().casefold()
+                except ValueError:
+                    relative_source = ingest_file.file_name.casefold()
+                item = associated_item_by_path.get(relative_source)
             if not item:
                 continue
             destination = build_book_item_destination(
@@ -1826,7 +1937,14 @@ def _move_book_batch(
             for path in moved_files
             if Path(path).parent == destination
         ]
-        primary_file = destination_files[0] if destination_files else None
+        primary_file = next(
+            (
+                path
+                for path in destination_files
+                if path.name.casefold() in item_by_source
+            ),
+            destination_files[0] if destination_files else None,
+        )
         item = (
             item_by_source.get(primary_file.name.casefold(), {})
             if primary_file
@@ -1917,15 +2035,26 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                     if batch.status != "needs_metadata_review":
                         batch.status = "move_failed"
                     batch.updated_at = now_utc()
+                    manifest_warnings = _record_move_manifest(
+                        db, batch, failed_files
+                    )
                     db.commit()
                     errors.extend(
                         f"Batch {batch.id}: {error}" for error in failed_files
+                    )
+                    errors.extend(
+                        f"Batch {batch.id}: {warning}"
+                        for warning in manifest_warnings
                     )
                     continue
                 batch.status = "move_failed" if failed_files else "moved"
                 batch.updated_at = now_utc()
                 if batch.status == "moved":
                     _lock_metadata_for_move(batch)
+                manifest_warnings = _record_move_manifest(
+                    db, batch, failed_files
+                )
+                _update_movie_library_manifest_pointers(db, batch)
                 metadata = batch.metadata_json or {}
                 if not (
                     db.query(ArchiveItem)
@@ -1952,6 +2081,10 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                     errors.extend(
                         f"Batch {batch.id}: {error}" for error in failed_files
                     )
+                errors.extend(
+                    f"Batch {batch.id}: {warning}"
+                    for warning in manifest_warnings
+                )
                 continue
 
             if batch.detected_type == "video_tv_show":
@@ -1960,15 +2093,25 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                     if batch.status != "needs_metadata_review":
                         batch.status = "move_failed"
                     batch.updated_at = now_utc()
+                    manifest_warnings = _record_move_manifest(
+                        db, batch, failed_files
+                    )
                     db.commit()
                     errors.extend(
                         f"Batch {batch.id}: {error}" for error in failed_files
+                    )
+                    errors.extend(
+                        f"Batch {batch.id}: {warning}"
+                        for warning in manifest_warnings
                     )
                     continue
                 batch.status = "move_failed" if failed_files else "moved"
                 batch.updated_at = now_utc()
                 if batch.status == "moved":
                     _lock_metadata_for_move(batch)
+                manifest_warnings = _record_move_manifest(
+                    db, batch, failed_files
+                )
                 metadata = batch.metadata_json or {}
                 if not (
                     db.query(ArchiveItem)
@@ -1995,6 +2138,10 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                     errors.extend(
                         f"Batch {batch.id}: {error}" for error in failed_files
                     )
+                errors.extend(
+                    f"Batch {batch.id}: {warning}"
+                    for warning in manifest_warnings
+                )
                 continue
 
             if batch.detected_type == "book":
@@ -2003,15 +2150,25 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                     if batch.status != "needs_metadata_review":
                         batch.status = "move_failed"
                     batch.updated_at = now_utc()
+                    manifest_warnings = _record_move_manifest(
+                        db, batch, failed_files
+                    )
                     db.commit()
                     errors.extend(
                         f"Batch {batch.id}: {error}" for error in failed_files
+                    )
+                    errors.extend(
+                        f"Batch {batch.id}: {warning}"
+                        for warning in manifest_warnings
                     )
                     continue
                 batch.status = "move_failed" if failed_files else "moved"
                 batch.updated_at = now_utc()
                 if batch.status == "moved":
                     _lock_metadata_for_move(batch)
+                manifest_warnings = _record_move_manifest(
+                    db, batch, failed_files
+                )
                 metadata = batch.metadata_json or {}
                 book_items = {
                     str(item.get("source_file") or "").casefold(): item
@@ -2023,6 +2180,8 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                     if path.suffix.casefold() not in {".epub", ".pdf"}:
                         continue
                     item = book_items.get(path.name.casefold(), {})
+                    if not item:
+                        continue
                     if (
                         db.query(ArchiveItem)
                         .filter(ArchiveItem.final_path == str(path))
@@ -2048,6 +2207,10 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                     errors.extend(
                         f"Batch {batch.id}: {error}" for error in failed_files
                     )
+                errors.extend(
+                    f"Batch {batch.id}: {warning}"
+                    for warning in manifest_warnings
+                )
                 continue
 
             if batch.detected_type == "audiobook":
@@ -2056,15 +2219,25 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                     if batch.status != "needs_metadata_review":
                         batch.status = "move_failed"
                     batch.updated_at = now_utc()
+                    manifest_warnings = _record_move_manifest(
+                        db, batch, failed_files
+                    )
                     db.commit()
                     errors.extend(
                         f"Batch {batch.id}: {error}" for error in failed_files
+                    )
+                    errors.extend(
+                        f"Batch {batch.id}: {warning}"
+                        for warning in manifest_warnings
                     )
                     continue
                 batch.status = "move_failed" if failed_files else "moved"
                 batch.updated_at = now_utc()
                 if batch.status == "moved":
                     _lock_metadata_for_move(batch)
+                manifest_warnings = _record_move_manifest(
+                    db, batch, failed_files
+                )
                 metadata = batch.metadata_json or {}
                 destination = str(
                     audiobook_destination(
@@ -2099,6 +2272,10 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                     errors.extend(
                         f"Batch {batch.id}: {error}" for error in failed_files
                     )
+                errors.extend(
+                    f"Batch {batch.id}: {warning}"
+                    for warning in manifest_warnings
+                )
                 continue
 
             if batch.detected_type == "music_discography":
@@ -2109,12 +2286,24 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                     if batch.status != "needs_metadata_review":
                         batch.status = "move_failed"
                     batch.updated_at = now_utc()
+                    manifest_warnings = _record_move_manifest(
+                        db, batch, failed_files
+                    )
                     db.commit()
                     errors.extend(f"Batch {batch.id}: {error}" for error in failed_files)
+                    errors.extend(
+                        f"Batch {batch.id}: {warning}"
+                        for warning in manifest_warnings
+                    )
                     continue
 
                 batch.status = "move_failed" if failed_files else "moved"
                 batch.updated_at = now_utc()
+                if batch.status == "moved":
+                    _lock_metadata_for_move(batch)
+                manifest_warnings = _record_move_manifest(
+                    db, batch, failed_files
+                )
                 for dest_path in moved_files:
                     dest = Path(dest_path)
                     if is_artwork_file(dest):
@@ -2141,6 +2330,10 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                 moved += 1
                 if failed_files:
                     errors.extend(f"Batch {batch.id}: {error}" for error in failed_files)
+                errors.extend(
+                    f"Batch {batch.id}: {warning}"
+                    for warning in manifest_warnings
+                )
                 continue
 
             if not batch.suggested_destination:
@@ -2280,9 +2473,14 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                 batch.status = "moved"
 
             batch.updated_at = now_utc()
+            if batch.status == "moved":
+                _lock_metadata_for_move(batch)
             db.flush()
 
             _write_move_log(batch, album_meta, moved_files, failed_files)
+            manifest_warnings = _record_move_manifest(
+                db, batch, failed_files
+            )
             if moved_files and not failed_files:
                 track_count = sum(
                     not is_artwork_file(Path(path)) for path in moved_files
@@ -2295,6 +2493,11 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                     "music-album.json",
                     {
                         "media_kind": "music_album",
+                        "album_artist": (
+                            album_meta.get("artist")
+                            or album_meta.get("album_artist")
+                        ),
+                        "album_title": album_meta.get("album"),
                         "artist": (
                             album_meta.get("artist")
                             or album_meta.get("album_artist")
@@ -2322,6 +2525,19 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                         "review_confirmed": bool(
                             batch.metadata_confirmed
                             or album_meta.get("review_confirmed")
+                        ),
+                        "accepted_unknown_album_artist": bool(
+                            album_meta.get("accepted_unknown_album_artist")
+                        ),
+                        "accepted_unknown_album_title": bool(
+                            album_meta.get("accepted_unknown_album_title")
+                        ),
+                        "accepted_unknown_year": bool(
+                            album_meta.get("accepted_unknown_year")
+                        ),
+                        "lookup_later": bool(album_meta.get("lookup_later")),
+                        "move_manifest": (
+                            (batch.metadata_json or {}).get("move_manifest")
                         ),
                         "batch_id": batch.id,
                     },
@@ -2369,6 +2585,10 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
             db.commit()
             if moved_files:
                 moved += 1
+            errors.extend(
+                f"Batch {batch.id}: {warning}"
+                for warning in manifest_warnings
+            )
 
         except Exception as exc:
             db.rollback()

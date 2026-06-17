@@ -67,6 +67,11 @@ from app.services.book_metadata import (
     book_destination,
     build_book_item_destination,
 )
+from app.services.title_display import clean_display_title, destination_title
+from app.services.metadata_candidates import (
+    METADATA_ASSIST_VERSION,
+    normalize_metadata_text,
+)
 from app.services.audiobook_metadata import audiobook_destination
 from app.core.config import settings
 from app.core.time import configured_timezone, now_local, now_utc, serialize_utc
@@ -94,6 +99,25 @@ def system_time():
     }
 
 
+@router.get("/system/paths")
+def system_paths():
+    def path_value(path: Path) -> str:
+        return str(path.resolve())
+
+    return {
+        "data_root": path_value(settings.data_root),
+        "ingest_root": path_value(settings.ingest_root),
+        "reports_dir": path_value(settings.reports_dir),
+        "move_logs_dir": path_value(settings.move_logs_dir),
+        "movies_dir": path_value(settings.movies_dir),
+        "tv_dir": path_value(settings.tv_dir),
+        "music_flac_dir": path_value(settings.music_flac_dir),
+        "music_mp3_dir": path_value(settings.music_mp3_dir),
+        "books_dir": path_value(settings.books_dir),
+        "audiobooks_dir": path_value(settings.audiobooks_dir),
+    }
+
+
 @router.post("/scan/music", response_model=ScanMusicResponse)
 def scan_music(db: Session = Depends(get_db)):
     result = scan_music_ingest(db)
@@ -106,6 +130,7 @@ def scan_music(db: Session = Depends(get_db)):
         unknown_items=result.unknown_items,
         unsupported_files=result.unsupported_files,
         ignored_system_files=result.ignored_system_files,
+        ignored_sidecar_only_folders=result.ignored_sidecar_only_folders,
         artwork_files_found=result.artwork_files_found,
         movie_batches_found=result.movie_batches_found,
         tv_shows_found=result.tv_shows_found,
@@ -321,7 +346,8 @@ def get_batch_files(batch_id: int, db: Session = Depends(get_db)):
 
 @router.get("/batches/{batch_id}/moves", response_model=BatchMoveSummary)
 def get_batch_moves(batch_id: int, db: Session = Depends(get_db)):
-    if not db.get(IngestBatch, batch_id):
+    batch = db.get(IngestBatch, batch_id)
+    if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
 
     actions = (
@@ -349,6 +375,7 @@ def get_batch_moves(batch_id: int, db: Session = Depends(get_db)):
         completed=sum(move.status == "completed" for move in moves),
         failed=sum(move.status == "failed" for move in moves),
         moves=moves,
+        manifest=(batch.metadata_json or {}).get("move_manifest"),
     )
 
 
@@ -396,8 +423,20 @@ def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Sessio
         meta["artist_cleanup"] = artist_cleanup
         meta["is_compilation"] = True
     meta["album"] = update.album.strip()
-    meta["year"] = update.year.strip()
-    meta["date"] = update.year.strip()
+    year = update.year.strip() if update.year else ""
+    meta["year"] = year
+    meta["date"] = year
+    meta["accepted_unknown_album_artist"] = (
+        update.accepted_unknown_album_artist
+    )
+    meta["accepted_unknown_album_title"] = (
+        update.accepted_unknown_album_title
+    )
+    meta["accepted_unknown_year"] = update.accepted_unknown_year
+    meta["lookup_later"] = update.lookup_later
+    meta["review_type"] = "music_album"
+    meta["review_mode"] = "single_album"
+    meta["metadata_assist_version"] = METADATA_ASSIST_VERSION
     meta.pop("metadata_alerts", None)
     if update.primary_genre is not None:
         meta["genre"] = update.primary_genre.strip() or "Unknown"
@@ -409,6 +448,13 @@ def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Sessio
     # Re-evaluate quality
     quality_res = evaluate_music_album_metadata(meta)
     meta.update(quality_res)
+    if any((
+        update.accepted_unknown_album_artist,
+        update.accepted_unknown_album_title,
+        update.accepted_unknown_year,
+    )):
+        meta["metadata_quality"] = "accepted_with_unknowns"
+        meta["confidence"] = max(float(meta.get("confidence") or 0), 0.75)
     if artist_cleanup:
         warnings = list(meta.get("metadata_warnings", []))
         warnings.extend(["compilation_detected", "compilation_prefix_removed"])
@@ -442,8 +488,8 @@ def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Sessio
             "genre": "manual correction",
         },
     }
-    batch.confidence = quality_res["confidence"]
-    batch.metadata_confirmed = True
+    batch.confidence = meta["confidence"]
+    batch.metadata_confirmed = not bool(meta["blocking_review_items"])
 
     if not meta["blocking_review_items"]:
         batch.status = "pending_review"
@@ -506,7 +552,7 @@ def update_movie_metadata(
     title = update.title.strip()
     if not title:
         raise HTTPException(status_code=422, detail="Movie title is required")
-    year = update.year.strip() if update.year else None
+    year = normalize_metadata_text(update.year) if update.year else None
     edition = update.edition.strip() if update.edition else None
     movie_format = update.format.strip().upper() if update.format else None
     metadata = dict(batch.metadata_json or {})
@@ -531,7 +577,18 @@ def update_movie_metadata(
             "title": title,
             "year": year,
             "edition": edition,
-            "metadata_quality": "good" if year else "weak",
+            "accepted_unknown_title": update.accepted_unknown_title,
+            "accepted_unknown_year": update.accepted_unknown_year,
+            "lookup_later": update.lookup_later,
+            "review_type": "movie",
+            "review_mode": "single_item",
+            "metadata_assist_version": METADATA_ASSIST_VERSION,
+            "metadata_quality": (
+                "accepted_with_unknowns"
+                if update.accepted_unknown_title
+                or update.accepted_unknown_year
+                else "good" if year else "weak"
+            ),
             "metadata_warnings": warnings,
             "confidence": 1.0 if year else 0.65,
         }
@@ -595,21 +652,39 @@ def update_movie_collection_review(
 
     # Normalize movie_items from the submitted update
     movie_items = []
-    destination_parts = []
     for movie_update in update.movies:
-        title = movie_update.title.strip()
-        year = movie_update.year.strip()
+        existing_item = next(
+            (
+                item
+                for item in metadata.get("movie_items", [])
+                if isinstance(item, dict)
+                and str(item.get("source_file") or "").casefold()
+                == movie_update.source_file.casefold()
+            ),
+            {},
+        )
+        title = (movie_update.title or "").strip()
+        year = movie_update.year.strip() if movie_update.year else None
         edition = movie_update.edition.strip() if movie_update.edition else None
         fmt = movie_update.format.strip().upper() if movie_update.format else None
         include = bool(movie_update.include)
+        accepted_unknown_title = bool(movie_update.accepted_unknown_title)
+        accepted_unknown_year = bool(movie_update.accepted_unknown_year)
+        lookup_later = bool(movie_update.lookup_later)
 
+        destination_title = title or "Unknown Title"
+        destination_year = year or "Unknown Year"
         dest_label = (
-            f"{year} - {title}"
+            f"{destination_year} - {destination_title}"
             if not edition
-            else f"{year} - {title} [{edition}]"
+            else f"{destination_year} - {destination_title} [{edition}]"
         )
         dest = f"Movies/Library/{safe_movie_path_part(dest_label)}"
-        destination_parts.append(dest)
+        destination_allowed = (
+            include
+            and bool(title or accepted_unknown_title)
+            and bool(year or accepted_unknown_year)
+        )
 
         movie_items.append(
             {
@@ -621,13 +696,27 @@ def update_movie_collection_review(
                 "year": year,
                 "edition": edition,
                 "format": fmt,
-                "destination_preview": dest if include else None,
+                "resolution": existing_item.get("resolution"),
+                "source": existing_item.get("source"),
+                "accepted_unknown_title": accepted_unknown_title,
+                "accepted_unknown_year": accepted_unknown_year,
+                "lookup_later": lookup_later,
+                "metadata_candidates": existing_item.get(
+                    "metadata_candidates",
+                    {},
+                ),
+                "release_cleanup": existing_item.get(
+                    "release_cleanup",
+                    {},
+                ),
+                "destination_preview": dest if destination_allowed else None,
             }
         )
 
     metadata["movie_items"] = movie_items
     metadata["review_type"] = "movie_collection"
     metadata["review_mode"] = "item_list"
+    metadata["metadata_assist_version"] = METADATA_ASSIST_VERSION
 
     if update.collection_title:
         metadata["collection_title"] = update.collection_title.strip()
@@ -650,7 +739,15 @@ def update_movie_collection_review(
         metadata["metadata_quality"] = "weak"
         metadata["confidence"] = 0.7
     else:
-        metadata["metadata_quality"] = "reviewed"
+        metadata["metadata_quality"] = (
+            "accepted_with_unknowns"
+            if any(
+                item.get("accepted_unknown_title")
+                or item.get("accepted_unknown_year")
+                for item in movie_items
+            )
+            else "reviewed"
+        )
         metadata["review_confirmed"] = True
         metadata["confidence"] = 1.0
         if batch.status in {"needs_metadata_review", "pending_review"}:
@@ -678,8 +775,8 @@ def update_book_metadata(
     if batch.status in {"moved", "merged"}:
         raise HTTPException(status_code=400, detail="Moved batches cannot be edited")
 
-    title = update.title.strip()
-    author = update.author.strip()
+    title = normalize_metadata_text(update.title)
+    author = normalize_metadata_text(update.author)
     year = update.year.strip() if update.year else None
     metadata = dict(batch.metadata_json or {})
     book_format = (
@@ -711,6 +808,9 @@ def update_book_metadata(
         "review_mode": "single_item",
         "author": author,
         "title": title,
+        "metadata_title": title,
+        "display_title": clean_display_title(title),
+        "destination_title": destination_title(title),
         "year": year,
         "format": book_format,
         "book_format": book_format,
@@ -724,6 +824,7 @@ def update_book_metadata(
     metadata = build_review_state("book", metadata)
     batch.metadata_json = metadata
     batch.suggested_metadata = {
+        "metadata_assist_version": METADATA_ASSIST_VERSION,
         "author": author,
         "title": title,
         "year": year,
@@ -775,10 +876,15 @@ def update_book_collection_review(
             detail="Collection label is required when keeping a collection together.",
         )
     items = []
+    existing_items = {
+        str(item.get("source_file") or ""): item
+        for item in metadata.get("book_items", [])
+        if isinstance(item, dict)
+    }
     for item in update.books:
-        title = item.title.strip()
-        author = item.author.strip()
-        year = item.year.strip() if item.year else None
+        title = normalize_metadata_text(item.title)
+        author = normalize_metadata_text(item.author)
+        year = normalize_metadata_text(item.year) if item.year else None
         book_format = (
             item.format.strip().upper()
             if item.format
@@ -791,12 +897,53 @@ def update_book_collection_review(
             "include": bool(item.include),
             "author": author,
             "title": title,
+            "metadata_title": title,
+            "display_title": clean_display_title(title),
+            "destination_title": destination_title(title),
             "year": year,
-            "series": item.series.strip() if item.series else None,
+            "series": (
+                normalize_metadata_text(item.series)
+                if item.series
+                else None
+            ),
             "series_index": (
-                item.series_index.strip() if item.series_index else None
+                normalize_metadata_text(item.series_index)
+                if item.series_index
+                else None
             ),
             "format": book_format,
+            "metadata_candidates": dict(
+                existing_items.get(item.source_file, {}).get(
+                    "metadata_candidates",
+                    {},
+                )
+            ),
+            "candidate_notes": list(
+                existing_items.get(item.source_file, {}).get(
+                    "candidate_notes",
+                    [],
+                )
+            ),
+            "candidate_runtime": dict(
+                existing_items.get(item.source_file, {}).get(
+                    "candidate_runtime",
+                    {},
+                )
+            ),
+            "matched_artwork": existing_items.get(
+                item.source_file, {}
+            ).get("matched_artwork"),
+            "alternate_formats": list(
+                existing_items.get(item.source_file, {}).get(
+                    "alternate_formats",
+                    [],
+                )
+            ),
+            "accepted_unknown_author": bool(
+                item.accepted_unknown_author
+            ),
+            "accepted_unknown_year": bool(item.accepted_unknown_year),
+            "lookup_later": bool(item.lookup_later),
         }
         destination = build_book_item_destination(
             books_root=settings.books_dir,
@@ -843,6 +990,32 @@ def update_book_collection_review(
         ],
         "confidence": 0.8,
     })
+    collection_summary = dict(metadata.get("collection_summary") or {})
+    collection_summary["included_book_count"] = sum(
+        item.get("include", True) for item in items
+    )
+    collection_summary["needs_repair_count"] = sum(
+        item.get("include", True)
+        and (
+            (
+                str(item.get("author") or "").casefold()
+                == "unknown author"
+                and not item.get("accepted_unknown_author", False)
+            )
+            or str(item.get("title") or "").casefold() == "unknown title"
+        )
+        for item in items
+    )
+    collection_summary["accepted_unknown_count"] = sum(
+        item.get("include", True)
+        and item.get("accepted_unknown_author", False)
+        for item in items
+    )
+    collection_summary["lookup_later_count"] = sum(
+        item.get("include", True) and item.get("lookup_later", False)
+        for item in items
+    )
+    metadata["collection_summary"] = collection_summary
     if update.confirm_non_blocking_warnings:
         metadata["review_confirmed"] = True
     metadata = build_review_state("book", metadata)
@@ -850,7 +1023,18 @@ def update_book_collection_review(
         metadata["metadata_quality"] = "weak"
         batch.status = "needs_metadata_review"
     else:
-        metadata["metadata_quality"] = "reviewed"
+        metadata["metadata_quality"] = (
+            "accepted_with_unknowns"
+            if any(
+                item.get("include", True)
+                and (
+                    item.get("accepted_unknown_author", False)
+                    or item.get("accepted_unknown_year", False)
+                )
+                for item in items
+            )
+            else "reviewed"
+        )
         metadata["review_confirmed"] = True
         metadata["confidence"] = 1.0
         batch.status = "pending_review"
@@ -879,13 +1063,23 @@ def update_audiobook_metadata(
     if batch.status in {"moved", "merged"}:
         raise HTTPException(status_code=400, detail="Moved batches cannot be edited")
 
-    author = update.author.strip()
-    title = update.title.strip()
-    year = update.year.strip() if update.year else None
-    narrator = update.narrator.strip() if update.narrator else None
-    series = update.series.strip() if update.series else None
+    author = normalize_metadata_text(update.author)
+    title = normalize_metadata_text(update.title)
+    year = normalize_metadata_text(update.year) if update.year else None
+    narrator = (
+        normalize_metadata_text(update.narrator)
+        if update.narrator
+        else None
+    )
+    series = (
+        normalize_metadata_text(update.series)
+        if update.series
+        else None
+    )
     series_index = (
-        update.series_index.strip() if update.series_index else None
+        normalize_metadata_text(update.series_index)
+        if update.series_index
+        else None
     )
     metadata = dict(batch.metadata_json or {})
     audio_format = (
@@ -926,6 +1120,12 @@ def update_audiobook_metadata(
         "series_index": series_index,
         "format": audio_format,
         "note": update.note.strip() if update.note else None,
+        "accepted_unknown_author": bool(update.accepted_unknown_author),
+        "accepted_unknown_year": bool(update.accepted_unknown_year),
+        "accepted_unknown_narrator": bool(
+            update.accepted_unknown_narrator
+        ),
+        "lookup_later": bool(update.lookup_later),
         "suggested_destination_preview": str(destination),
         "metadata_quality": "good",
         "metadata_warnings": list(dict.fromkeys(warnings)),
@@ -951,6 +1151,12 @@ def update_audiobook_metadata(
             "series_index": "manual correction",
             "format": "manual correction",
         },
+        "accepted_unknown_author": bool(update.accepted_unknown_author),
+        "accepted_unknown_year": bool(update.accepted_unknown_year),
+        "accepted_unknown_narrator": bool(
+            update.accepted_unknown_narrator
+        ),
+        "lookup_later": bool(update.lookup_later),
     }
     batch.suggested_destination = str(destination)
     batch.metadata_confirmed = not bool(metadata["blocking_review_items"])
@@ -985,6 +1191,13 @@ def update_discography_metadata(
     artist = update.artist.strip()
     metadata = dict(batch.metadata_json or {})
     metadata["artist"] = artist
+    metadata["accepted_unknown_discography_artist"] = (
+        update.accepted_unknown_discography_artist
+    )
+    metadata["lookup_later"] = update.lookup_later
+    metadata["review_type"] = "music_discography"
+    metadata["review_mode"] = "album_list"
+    metadata["metadata_assist_version"] = METADATA_ASSIST_VERSION
     updates_by_source = {
         item.source_folder: item
         for item in (update.albums or [])
@@ -1002,12 +1215,26 @@ def update_discography_metadata(
             album_copy["year"] = correction.year
             album_copy["release_type"] = correction.release_type
             album_copy["include"] = included
+            album_copy["accepted_unknown_album_artist"] = (
+                correction.accepted_unknown_album_artist
+            )
+            album_copy["accepted_unknown_album_title"] = (
+                correction.accepted_unknown_album_title
+            )
+            album_copy["accepted_unknown_year"] = (
+                correction.accepted_unknown_year
+            )
+            album_copy["lookup_later"] = correction.lookup_later
             album_warnings = [
                 warning
                 for warning in album_copy.get("warnings", [])
                 if warning not in {"album_missing_year", "album_missing_title"}
             ]
-            if included and not correction.year:
+            if (
+                included
+                and not correction.year
+                and not correction.accepted_unknown_year
+            ):
                 album_warnings.append("album_missing_year")
             album_copy["warnings"] = list(dict.fromkeys(album_warnings))
             album_copy["status"] = (
@@ -1040,6 +1267,16 @@ def update_discography_metadata(
         album_metadata["year"] = correction.year
         album_metadata["release_type"] = correction.release_type
         album_metadata["include"] = included
+        album_metadata["accepted_unknown_album_artist"] = (
+            correction.accepted_unknown_album_artist
+        )
+        album_metadata["accepted_unknown_album_title"] = (
+            correction.accepted_unknown_album_title
+        )
+        album_metadata["accepted_unknown_year"] = (
+            correction.accepted_unknown_year
+        )
+        album_metadata["lookup_later"] = correction.lookup_later
         track_metadata["_discography_album"] = album_metadata
         ingest_file.metadata_json = track_metadata
     warnings = [
@@ -1066,15 +1303,32 @@ def update_discography_metadata(
     blocking = any(
         album.get("include", True)
         and (
-            not album.get("album")
-            or not album.get("year")
+            (
+                not album.get("album")
+                and not album.get("accepted_unknown_album_title")
+            )
         )
         for album in albums
     )
     if blocking:
         warnings.append("child_album_metadata_missing")
     metadata["metadata_warnings"] = warnings
-    metadata["metadata_quality"] = "weak" if blocking else "good"
+    accepted_unknowns = bool(
+        update.accepted_unknown_discography_artist
+        or any(
+            album.get("accepted_unknown_album_artist")
+            or album.get("accepted_unknown_album_title")
+            or album.get("accepted_unknown_year")
+            for album in albums
+        )
+    )
+    metadata["metadata_quality"] = (
+        "weak"
+        if blocking
+        else "accepted_with_unknowns"
+        if accepted_unknowns
+        else "good"
+    )
     metadata["confidence"] = 0.6 if blocking else 1.0
     metadata["review_confirmed"] = True
     metadata = build_review_state(batch.detected_type, metadata)
@@ -1085,7 +1339,7 @@ def update_discography_metadata(
         "sources": {"artist": "manual correction"},
     }
     batch.suggested_destination = str(settings.music_discographies_dir / artist)
-    batch.metadata_confirmed = True
+    batch.metadata_confirmed = not bool(metadata["blocking_review_items"])
     batch.confidence = metadata["confidence"]
     batch.status = (
         "needs_metadata_review"
@@ -1095,6 +1349,20 @@ def update_discography_metadata(
     batch.updated_at = now_utc()
     db.commit()
     return _batch_to_summary(batch, action_message="Discography metadata saved.")
+
+
+def _clear_stale_move_lock_for_review(batch: IngestBatch) -> None:
+    if batch.detected_type != "video_tv_show":
+        return
+    if batch.status not in {"pending_review", "needs_metadata_review"}:
+        return
+
+    metadata = dict(batch.metadata_json or {})
+    metadata.pop("metadata_locked_for_move", None)
+    metadata.pop("metadata_locked_at", None)
+    batch.metadata_json = metadata
+    batch.approved_at = None
+    batch.approved_by = None
 
 
 @router.patch("/batches/{batch_id}/tv-metadata", response_model=BatchSummary)
@@ -1216,13 +1484,14 @@ def update_tv_metadata(
     batch.suggested_destination = str(
         settings.tv_dir / safe_tv_path_part(show_title)
     )
-    batch.metadata_confirmed = True
+    batch.metadata_confirmed = not bool(metadata["blocking_review_items"])
     batch.confidence = metadata["confidence"]
     batch.status = (
         "needs_metadata_review"
         if metadata["blocking_review_items"]
         else "pending_review"
     )
+    _clear_stale_move_lock_for_review(batch)
     batch.updated_at = now_utc()
     db.commit()
     return _batch_to_summary(batch, action_message="TV metadata saved.")
@@ -1309,11 +1578,10 @@ def update_tv_episode_review(
     else:
         metadata["metadata_quality"] = "reviewed"
         metadata["review_confirmed"] = True
-        if batch.status in {"needs_metadata_review", "pending_review"}:
-            batch.status = "pending_review"
+        batch.status = "pending_review"
 
     batch.metadata_json = metadata
-    batch.metadata_confirmed = True
+    batch.metadata_confirmed = not bool(metadata.get("blocking_review_items"))
     batch.suggested_metadata = {
         "show_title": metadata.get("show_title"),
         "year": metadata.get("year"),
@@ -1327,6 +1595,7 @@ def update_tv_episode_review(
         settings.tv_dir / safe_tv_path_part(show_title_safe)
     )
     batch.confidence = metadata.get("confidence", 1.0)
+    _clear_stale_move_lock_for_review(batch)
     batch.updated_at = now_utc()
     db.commit()
     return _batch_to_summary(batch, action_message="TV episode review saved.")
@@ -1556,8 +1825,40 @@ def send_to_recovery(batch_id: int, db: Session = Depends(get_db)):
 
 @router.post("/move/approved", response_model=MoveResponse)
 def move_approved(db: Session = Depends(get_db)):
+    approved_ids = [
+        value[0]
+        for value in (
+            db.query(IngestBatch.id)
+            .filter(IngestBatch.status == "approved")
+            .all()
+        )
+    ]
     moved, errors = move_approved_batches(db)
-    return MoveResponse(moved=moved, errors=errors)
+    moved_batches = (
+        db.query(IngestBatch)
+        .filter(IngestBatch.id.in_(approved_ids))
+        .all()
+        if approved_ids
+        else []
+    )
+    manifests = []
+    for batch in moved_batches:
+        pointer = (batch.metadata_json or {}).get("move_manifest")
+        if pointer:
+            manifests.append({"batch_id": batch.id, **pointer})
+    return MoveResponse(
+        moved=moved,
+        errors=errors,
+        files_moved=sum(
+            int(item.get("files_moved") or 0)
+            + int(item.get("artwork_moved") or 0)
+            for item in manifests
+        ),
+        failed_moves=sum(
+            int(item.get("failed_moves") or 0) for item in manifests
+        ),
+        manifests=manifests,
+    )
 
 
 @router.get("/library")
@@ -1590,6 +1891,8 @@ def _batch_to_summary(
         video_files=meta.get("video_files", []),
         title=meta.get("title"),
         edition=meta.get("edition"),
+        resolution=meta.get("resolution"),
+        source=meta.get("source"),
         original_release_name=meta.get("original_release_name"),
         primary_video_file=meta.get("primary_video_file"),
         artwork_files=meta.get("artwork_files", []),
@@ -1633,6 +1936,7 @@ def _batch_to_summary(
         book_files=list(meta.get("book_files") or []),
         primary_book_file=meta.get("primary_book_file"),
         book_items=list(meta.get("book_items") or []),
+        collection_summary=dict(meta.get("collection_summary") or {}),
         narrator=meta.get("narrator"),
         series=meta.get("series"),
         series_index=meta.get("series_index"),
@@ -1640,6 +1944,38 @@ def _batch_to_summary(
         audio_files=list(meta.get("audio_files") or []),
         primary_audio_file=meta.get("primary_audio_file"),
         chapter_count=meta.get("chapter_count", 0),
+        metadata_candidates=dict(meta.get("metadata_candidates") or {}),
+        chapter_candidates=list(meta.get("chapter_candidates") or []),
+        artwork_candidates=list(meta.get("artwork_candidates") or []),
+        generic_audio_tag_count=meta.get("generic_audio_tag_count", 0),
+        detected_disc_count=meta.get("detected_disc_count", 0),
+        candidate_warning_count=meta.get("candidate_warning_count", 0),
+        audiobook_collection_type=meta.get("audiobook_collection_type"),
+        contained_books=list(meta.get("contained_books") or []),
+        accepted_unknown_author=bool(
+            meta.get("accepted_unknown_author", False)
+        ),
+        accepted_unknown_year=bool(
+            meta.get("accepted_unknown_year", False)
+        ),
+        accepted_unknown_narrator=bool(
+            meta.get("accepted_unknown_narrator", False)
+        ),
+        accepted_unknown_album_artist=bool(
+            meta.get("accepted_unknown_album_artist", False)
+        ),
+        accepted_unknown_album_title=bool(
+            meta.get("accepted_unknown_album_title", False)
+        ),
+        accepted_unknown_discography_artist=bool(
+            meta.get("accepted_unknown_discography_artist", False)
+        ),
+        accepted_unknown_title=bool(
+            meta.get("accepted_unknown_title", False)
+        ),
+        lookup_later=bool(meta.get("lookup_later", False)),
+        move_manifest=meta.get("move_manifest"),
+        metadata_assist_version=meta.get("metadata_assist_version"),
         suggested_destination=batch.suggested_destination,
         suggested_metadata=batch.suggested_metadata,
         metadata_confirmed=batch.metadata_confirmed,

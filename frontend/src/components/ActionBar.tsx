@@ -8,6 +8,7 @@ type Props = {
   loadingAction: ActionKey | null;
   devToolsEnabled: boolean;
   serverTime?: string | null;
+  ingestPath?: string | null;
 };
 
 export default function ActionBar({
@@ -18,6 +19,7 @@ export default function ActionBar({
   loadingAction,
   devToolsEnabled,
   serverTime,
+  ingestPath,
 }: Props) {
   const disabled = loadingAction !== null;
 
@@ -26,6 +28,9 @@ export default function ActionBar({
       <div>
         <div className="action-bar__title">Archive Assistant</div>
         <div className="action-bar__subtitle">Archive ingest dashboard</div>
+        <div className="action-bar__system-path">
+          Scanning ingest: {ingestPath || "unknown - check backend"}
+        </div>
         {devToolsEnabled && serverTime && (
           <div className="action-bar__system-time">{serverTime}</div>
         )}
@@ -41,7 +46,12 @@ export default function ActionBar({
           <i className={`ti ti-circle-arrow-right ${loadingAction === "move" ? "spinner" : ""}`} /> Move approved
         </button>
         {devToolsEnabled && (
-          <button className="btn btn--warning" disabled={disabled} onClick={() => void onReset()}>
+          <button
+            className="btn btn--warning"
+            disabled={disabled}
+            title="Reset preserves media files. Media moved out of active test folders will be placed in _RECOVERY."
+            onClick={() => void onReset()}
+          >
             <i className={`ti ti-restore ${loadingAction === "reset" ? "spinner" : ""}`} /> Reset test data
           </button>
         )}

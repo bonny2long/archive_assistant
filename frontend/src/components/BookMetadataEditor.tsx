@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
 import type { BatchSummary, BookMetadataUpdate } from "../types/archive";
 import ReviewIssuesPanel from "./ReviewIssuesPanel";
+import MetadataSuggestionChips from "./MetadataSuggestionChips";
+import MetadataAssistStaleWarning from "./MetadataAssistStaleWarning";
+import { destinationTitle } from "../utils/titleDisplay";
 
 type Props = {
   batch: BatchSummary;
@@ -42,9 +45,10 @@ export default function BookMetadataEditor({
   const yearValid = year.trim() === "" || /^(19|20)\d{2}$/.test(year.trim());
   const valid = !unknown(title) && !unknown(author) && yearValid;
   const preview = useMemo(
-    () => `Books/${safePart(format.toUpperCase() || "EPUB")}/${safePart(author || "Unknown Author")}/${safePart(`${year || "Unknown Year"} - ${title || "Unknown Title"}`)}`,
+    () => `Books/${safePart(format.toUpperCase() || "EPUB")}/${safePart(author || "Unknown Author")}/${safePart(`${year || "Unknown Year"} - ${destinationTitle(title || "Unknown Title")}`)}`,
     [author, format, title, year],
   );
+  const candidates = batch.metadata_candidates ?? {};
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -89,18 +93,44 @@ export default function BookMetadataEditor({
             confirmLabel="Confirm book metadata"
             onConfirm={onConfirm}
           />
+          <MetadataAssistStaleWarning batch={batch} />
+          <p className="metadata-assist-copy">
+            Metadata suggestions are assistive only. Suggestions fill fields only.
+            Save confirms metadata. Move approved files only after review.
+          </p>
           <div className="editor-grid">
             <label>
               <span>Title</span>
-              <input value={title} onChange={(event) => setTitle(event.target.value)} autoFocus />
+              <input value={title} title={title} onChange={(event) => setTitle(event.target.value)} autoFocus />
+              <MetadataSuggestionChips
+                label="Title"
+                field="title"
+                candidates={candidates.title ?? []}
+                currentValue={title}
+                onApply={setTitle}
+              />
             </label>
             <label>
               <span>Author</span>
               <input value={author} onChange={(event) => setAuthor(event.target.value)} />
+              <MetadataSuggestionChips
+                label="Author"
+                field="author"
+                candidates={candidates.author ?? []}
+                currentValue={author}
+                onApply={setAuthor}
+              />
             </label>
             <label>
               <span>Year optional</span>
               <input value={year} maxLength={4} onChange={(event) => setYear(event.target.value)} />
+              <MetadataSuggestionChips
+                label="Year"
+                field="year"
+                candidates={candidates.year ?? []}
+                currentValue={year}
+                onApply={setYear}
+              />
             </label>
             <label>
               <span>Format</span>
@@ -120,7 +150,7 @@ export default function BookMetadataEditor({
           <button type="button" className="btn" disabled={saving} onClick={onClose}>Cancel</button>
           <button type="submit" className="btn btn--green" disabled={saving || !valid}>
             <i className={`ti ti-${saving ? "loader-2 spinner" : "device-floppy"}`} />
-            Save book
+            Save book metadata
           </button>
         </div>
       </form>

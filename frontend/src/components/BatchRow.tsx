@@ -42,6 +42,39 @@ function statusLabel(status: string): string {
   return status.replace(/_/g, " ");
 }
 
+function MoveManifestProof({
+  batch,
+  moveSummary,
+}: {
+  batch: BatchSummary;
+  moveSummary?: BatchMoveSummary;
+}) {
+  const manifest = moveSummary?.manifest ?? batch.move_manifest;
+  if (!manifest) return null;
+  return (
+    <section className="move-manifest-proof">
+      <div className="move-manifest-proof__heading">
+        <div>
+          <strong>Move manifest available</strong>
+          <span>
+            {manifest.archive_assistant_version ?? "Archive Assistant"}
+            {" | "}
+            {manifest.manifest_version}
+          </span>
+        </div>
+        <div className="move-manifest-proof__counts">
+          <span>{manifest.files_moved + manifest.artwork_moved} files</span>
+          <span>{manifest.failed_moves} failed</span>
+        </div>
+      </div>
+      <dl>
+        <div><dt>JSON</dt><dd>{manifest.json_path}</dd></div>
+        <div><dt>Markdown</dt><dd>{manifest.markdown_path ?? "Not created"}</dd></div>
+      </dl>
+    </section>
+  );
+}
+
 export default function BatchRow({
   batch,
   detail,
@@ -177,6 +210,19 @@ export default function BatchRow({
           >
             <i className="ti ti-refresh-alert" />
           </button>
+          {batch.status === "moved" && batch.move_manifest && (
+            <button
+              className="btn-sm"
+              title="View manifest"
+              style={{ color: "var(--accent-blue)" }}
+              onClick={(event) => {
+                event.stopPropagation();
+                onToggle(batch.id);
+              }}
+            >
+              <i className="ti ti-file-description" />
+            </button>
+          )}
           <button
             className="btn-sm"
             title="Reject"
@@ -196,7 +242,12 @@ export default function BatchRow({
             {detailError && (
               <div className="detail-state detail-state--error"><i className="ti ti-wifi-off" /> {detailError}</div>
             )}
-            {detail && <BatchDetail batch={detail} moveSummary={moveSummary} review={review} />}
+            {detail && (
+              <>
+                <BatchDetail batch={detail} moveSummary={moveSummary} review={review} />
+                <MoveManifestProof batch={batch} moveSummary={moveSummary} />
+              </>
+            )}
           </td>
         </tr>
       )}
