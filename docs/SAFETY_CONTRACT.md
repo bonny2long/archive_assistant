@@ -28,3 +28,4 @@ No media-app ownership of ingest.
 - No reset on NAS media: reset is for development fixtures only.
 - No media-app ownership of ingest: media apps should read libraries, not mutate ingest.
 
+Before real NAS installation, reset UI/API behavior must be removed or hard-disabled. In bridged local development, reset sends test data back to the stored source path, which may be the shared ready folder.

@@ -50,18 +50,21 @@ ARCHIVE_ASSISTANT_TIMEZONE=America/Chicago
 
 ## Intake Watcher Ready-Folder Bridge
 
-In local bridge mode, Archive Assistant scans Intake Watcher's ready folder, not its own `data/_INGEST`.
+In local bridge mode, Archive Assistant scans the shared ready folder, not its own project `data/_INGEST`.
 
 ```env
-INGEST_ROOT=C:/Users/BonnyMakaniankhondo/Documents/GitHub/NAS/intake-watccher/data/_INGEST/ready
+DATA_ROOT=C:/Users/BonnyMakaniankhondo/Documents/GitHub/NAS/nas-data
+INGEST_ROOT=C:/Users/BonnyMakaniankhondo/Documents/GitHub/NAS/nas-data/_INGEST/ready
 ```
+
+With `DATA_ROOT` set, Archive Assistant final output folders also resolve under `nas-data` unless a specific folder variable is explicitly overridden.
 
 Validate:
 
 ```powershell
 cd C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\archive-assistant-scaffold\archive-assistant-scaffold\backend
 
-python -c "from app.core.config import settings; print(settings.ingest_root); print(settings.ingest_root.exists())"
+python -c "from app.core.config import settings; print(settings.data_root); print(settings.ingest_root); print(settings.ingest_root.exists())"
 ```
 
 If it prints Archive Assistant's own `data/_INGEST`, `backend/.env` did not load or the backend was started from the wrong folder.
@@ -87,6 +90,6 @@ It should not scan:
 ## Common Path Mistakes
 
 - Missing the nested `archive-assistant-scaffold/archive-assistant-scaffold` folder.
-- Using `intake-watcher` when the local folder is still spelled `intake-watccher`.
 - Starting the backend before updating `.env`.
 - Starting the backend from a folder where `.env` is not loaded.
+- Setting only `INGEST_ROOT` and forgetting `DATA_ROOT`, which can make scans use the shared ready lane while moves still write to old local library folders.

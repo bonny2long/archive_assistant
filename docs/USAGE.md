@@ -20,6 +20,8 @@ Place test copies in Archive Assistant's own `data/_INGEST`, then scan/review/ap
 
 Do not use your only copy of media for tests.
 
+This standalone folder is not the normal scan lane when the Intake Watcher bridge is enabled. In bridge mode, scan `nas-data/_INGEST/ready`.
+
 ## Dashboard Buttons
 
 - Refresh: reload batches.
@@ -67,4 +69,5 @@ Unknown/unsupported items go to quarantine review. Do not delete them manually a
 - Do not scan active downloads.
 - Do not approve without review.
 - Do not run dev reset on real NAS media.
+- Do not use reset as a shared NAS restore tool; it is local-development only.
 - Do not treat empty shells/leftovers as safe deletion targets in v2.

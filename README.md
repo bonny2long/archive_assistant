@@ -84,18 +84,15 @@ data/_INGEST
 Current local two-app bridge:
 
 ```text
-Intake Watcher:
-data/_INGEST/incoming
-  -> stable upload check
-data/_INGEST/ready
-
-Archive Assistant:
-INGEST_ROOT points to Intake Watcher's ready folder
+nas-data/_INGEST/incoming
+  -> Intake Watcher stable upload check
+nas-data/_INGEST/ready
+  -> Archive Assistant scans
   -> scan
   -> review/edit
   -> approve
   -> move approved
-  -> final Archive Assistant library folders
+  -> nas-data/Music | Movies | TV | Books | Audiobooks
 ```
 
 Future NAS production flow:
@@ -153,7 +150,7 @@ npm install
 npm run dev
 ```
 
-## Local Intake Watcher Bridge Setup
+## Local Shared Data Root Setup
 
 Persistent local bridge:
 
@@ -162,31 +159,53 @@ Create or edit:
 backend/.env
 ```
 
-For Bonny's current local test path:
+For Bonny's current local shared NAS-style root:
 
 ```env
-INGEST_ROOT=C:/Users/BonnyMakaniankhondo/Documents/GitHub/NAS/intake-watccher/data/_INGEST/ready
+DATA_ROOT=C:/Users/BonnyMakaniankhondo/Documents/GitHub/NAS/nas-data
+INGEST_ROOT=C:/Users/BonnyMakaniankhondo/Documents/GitHub/NAS/nas-data/_INGEST/ready
 ```
 
-Bonny's local folder is currently spelled `intake-watccher` in some places. Use the actual folder name on disk. Eventually rename it to `intake-watcher` to avoid path mistakes.
+Archive Assistant's project `data/_INGEST` is not the normal scan lane in this bridged setup. Intake Watcher promotes stable items into `nas-data/_INGEST/ready`; Archive Assistant scans only that ready folder.
 
 Validation:
 
 ```powershell
 cd C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\archive-assistant-scaffold\archive-assistant-scaffold\backend
 
-python -c "from app.core.config import settings; print(settings.ingest_root); print(settings.ingest_root.exists())"
+python -c "from app.core.config import settings; print(settings.data_root); print(settings.ingest_root); print(settings.ingest_root.exists())"
 ```
 
 Expected:
 
 ```text
-...\intake-watccher\data\_INGEST\ready
+C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\nas-data
+C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\nas-data\_INGEST\ready
 True
 ```
 
 If this prints `False`, the path is wrong.
 If it prints Archive Assistant's own `data/_INGEST`, `backend/.env` did not load.
+
+## Shared Data Root Ownership
+
+| Path | Owner / purpose |
+| --- | --- |
+| `nas-data/_INGEST/incoming` | Intake Watcher watches active copies/downloads. |
+| `nas-data/_INGEST/intake-processing` | Intake Watcher temporary promotion lane. |
+| `nas-data/_INGEST/ready` | Archive Assistant scan input. |
+| `nas-data/_INGEST/failed` | Intake Watcher blocked/problem lane. |
+| `nas-data/_INGEST/leftover-review` | Future Cleaner / human review. |
+| `nas-data/_STAGING` | Archive Assistant working area. |
+| `nas-data/_QUARANTINE` | Archive Assistant review/quarantine area. |
+| `nas-data/_REPORTS/intake-watcher` | Intake Watcher logs. |
+| `nas-data/_REPORTS/archive-assistant` | Archive Assistant scan/move/review logs. |
+| `nas-data/_REPORTS/cleaner` | Future cleanup logs. |
+| `nas-data/Music` | Archive Assistant final music output. |
+| `nas-data/Movies` | Archive Assistant final movie output. |
+| `nas-data/TV` | Archive Assistant final TV output. |
+| `nas-data/Books` | Archive Assistant final book output. |
+| `nas-data/Audiobooks` | Archive Assistant final audiobook output. |
 
 ## Dashboard Workflow
 
@@ -239,14 +258,14 @@ DATABASE_URL=sqlite:///./archive_assistant.db
 DATA_ROOT=../data
 INGEST_ROOT=../data/_INGEST
 ARCHIVE_ASSISTANT_TIMEZONE=America/Chicago
-TZ=America/Chicago
 ```
 
 - `DATA_ROOT`: app data root.
-- `INGEST_ROOT`: folder Archive Assistant scans.
+- `INGEST_ROOT`: folder Archive Assistant scans. In bridge mode this should be `nas-data/_INGEST/ready`.
 - `DATABASE_URL`: SQLite local or PostgreSQL NAS.
 - `DEV_TOOLS_ENABLED`: must stay false on NAS.
 - `API_DOCS_ENABLED`: keep false unless debugging locally.
+- `ARCHIVE_ASSISTANT_TIMEZONE`: app display/serialization timezone.
 
 ## API Summary
 
@@ -287,6 +306,7 @@ git diff --check
 Archive Assistant should mount `/mnt/rust-pool` as `/app/data`.
 It should scan `/app/data/_INGEST/ready`.
 It should not scan `/app/data/_INGEST/incoming`.
+Final media folders resolve under `DATA_ROOT` unless individually overridden.
 
 Use LAN/Tailscale/VPN only. Do not expose Archive Assistant publicly.
 Disable API docs and dev tools on NAS.

@@ -27,7 +27,6 @@ DATABASE_URL=postgresql+psycopg://archive_assistant:CHANGE_THIS@archive-postgres
 DATA_ROOT=/app/data
 INGEST_ROOT=/app/data/_INGEST/ready
 ARCHIVE_ASSISTANT_TIMEZONE=America/Chicago
-TZ=America/Chicago
 API_DOCS_ENABLED=false
 DEV_TOOLS_ENABLED=false
 DEBUG=false
@@ -39,9 +38,11 @@ Archive Assistant should mount `/mnt/rust-pool` as `/app/data`.
 It should scan `/app/data/_INGEST/ready`.
 It should not scan `/app/data/_INGEST/incoming`.
 
+`DATA_ROOT` controls the final library roots. When `DATA_ROOT=/app/data`, Archive Assistant writes final outputs under `/app/data/Music`, `/app/data/Movies`, `/app/data/TV`, `/app/data/Books`, and `/app/data/Audiobooks` unless a specific destination folder env var overrides one of those paths.
+
 ## Security
 
 Use LAN/Tailscale/VPN only.
 Do not expose Archive Assistant publicly.
 Disable API docs/dev tools on NAS.
-
+Do not use reset test data on real NAS media. Before real NAS installation, remove or hard-disable reset UI/API behavior.

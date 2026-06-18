@@ -1,4 +1,5 @@
 from pathlib import Path
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -12,8 +13,8 @@ class Settings(BaseSettings):
     data_root: Path = project_root / "data"
 
     ingest_root: Path = data_root / "_INGEST"
-    reports_dir: Path = data_root / "_REPORTS" / "ingest-reports"
-    move_logs_dir: Path = data_root / "_REPORTS" / "move-logs"
+    reports_dir: Path = data_root / "_REPORTS" / "archive-assistant" / "ingest-reports"
+    move_logs_dir: Path = data_root / "_REPORTS" / "archive-assistant" / "move-logs"
     music_flac_dir: Path = data_root / "Music" / "Library" / "FLAC"
     music_mp3_dir: Path = data_root / "Music" / "Library" / "MP3"
     music_discographies_dir: Path = data_root / "Music" / "Discographies"
@@ -31,7 +32,9 @@ class Settings(BaseSettings):
     )
     quarantine_unknown_dir: Path = data_root / "_QUARANTINE" / "unknown-type"
     quarantine_unsupported_dir: Path = data_root / "_QUARANTINE" / "unsupported-file"
-    quarantine_reports_dir: Path = data_root / "_REPORTS" / "quarantine-reports"
+    quarantine_reports_dir: Path = (
+        data_root / "_REPORTS" / "archive-assistant" / "quarantine-reports"
+    )
 
     database_url: str = f"sqlite:///{backend_dir / 'archive_assistant.db'}"
 
@@ -41,6 +44,48 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = ".env"
+
+    @model_validator(mode="after")
+    def derive_data_root_paths(self):
+        provided = self.model_fields_set
+        derived_paths = {
+            "ingest_root": self.data_root / "_INGEST",
+            "reports_dir": (
+                self.data_root / "_REPORTS" / "archive-assistant" / "ingest-reports"
+            ),
+            "move_logs_dir": (
+                self.data_root / "_REPORTS" / "archive-assistant" / "move-logs"
+            ),
+            "music_flac_dir": self.data_root / "Music" / "Library" / "FLAC",
+            "music_mp3_dir": self.data_root / "Music" / "Library" / "MP3",
+            "music_discographies_dir": self.data_root / "Music" / "Discographies",
+            "music_metadata_dir": self.data_root / "Music" / "Metadata",
+            "movies_dir": self.data_root / "Movies" / "Library",
+            "movies_metadata_dir": self.data_root / "Movies" / "Metadata",
+            "tv_dir": self.data_root / "TV" / "Library",
+            "tv_metadata_dir": self.data_root / "TV" / "Metadata",
+            "books_dir": self.data_root / "Books",
+            "books_metadata_dir": self.data_root / "Books" / "Metadata",
+            "audiobooks_dir": self.data_root / "Audiobooks" / "Library",
+            "audiobooks_metadata_dir": self.data_root / "Audiobooks" / "Metadata",
+            "quarantine_discography_dir": (
+                self.data_root / "_QUARANTINE" / "music" / "discography-excluded"
+            ),
+            "quarantine_unknown_dir": self.data_root / "_QUARANTINE" / "unknown-type",
+            "quarantine_unsupported_dir": (
+                self.data_root / "_QUARANTINE" / "unsupported-file"
+            ),
+            "quarantine_reports_dir": (
+                self.data_root
+                / "_REPORTS"
+                / "archive-assistant"
+                / "quarantine-reports"
+            ),
+        }
+        for field_name, value in derived_paths.items():
+            if field_name not in provided:
+                setattr(self, field_name, value)
+        return self
 
 
 settings = Settings()

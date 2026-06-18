@@ -8,10 +8,11 @@ The current bridge documentation lives at:
 docs/INTAKE_WATCHER_BRIDGE.md
 ```
 
-Current proven local path:
+Current shared local path:
 
 ```env
-INGEST_ROOT=C:/Users/BonnyMakaniankhondo/Documents/GitHub/NAS/intake-watccher/data/_INGEST/ready
+DATA_ROOT=C:/Users/BonnyMakaniankhondo/Documents/GitHub/NAS/nas-data
+INGEST_ROOT=C:/Users/BonnyMakaniankhondo/Documents/GitHub/NAS/nas-data/_INGEST/ready
 ```
 
 Validate from the backend folder:
@@ -19,13 +20,14 @@ Validate from the backend folder:
 ```powershell
 cd C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\archive-assistant-scaffold\archive-assistant-scaffold\backend
 
-python -c "from app.core.config import settings; print(settings.ingest_root); print(settings.ingest_root.exists())"
+python -c "from app.core.config import settings; print(settings.data_root); print(settings.ingest_root); print(settings.ingest_root.exists())"
 ```
 
 Expected:
 
 ```text
-...\intake-watccher\data\_INGEST\ready
+C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\nas-data
+C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\nas-data\_INGEST\ready
 True
 ```
 

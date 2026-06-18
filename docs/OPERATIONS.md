@@ -18,6 +18,7 @@ Check:
 - Intake Watcher says ready.
 - Archive Assistant header says `Scanning ingest: .../_INGEST/ready`.
 - Backend was restarted after `.env` changes.
+- In bridge mode, the path should be `nas-data/_INGEST/ready`, not the project `data/_INGEST`.
 
 ## Safe To Approve
 
@@ -35,6 +36,8 @@ Unknown/unsupported items go here. Quarantine is review, not deletion.
 
 Moved in Archive Assistant means the approved media was written to the final library path and should have a manifest/log.
 
+In shared-root local mode, final libraries should be under `nas-data/Music`, `nas-data/Movies`, `nas-data/TV`, `nas-data/Books`, or `nas-data/Audiobooks`.
+
 ## Manifests And Logs
 
 Check final media metadata folders and `_REPORTS`.
@@ -43,4 +46,3 @@ Check final media metadata folders and `_REPORTS`.
 
 Empty shells and leftovers are not Archive Assistant v2 cleanup work.
 Leave them visible until Cleaner/v3 is built and proven.
-
