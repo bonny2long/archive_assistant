@@ -331,6 +331,9 @@ class MoveResponse(BaseModel):
     files_moved: int = 0
     failed_moves: int = 0
     manifests: list[dict] = Field(default_factory=list)
+    audit_records: list[str] = Field(default_factory=list)
+    notices: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
 
 
 class ScanMusicResponse(BaseModel):

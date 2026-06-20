@@ -481,6 +481,9 @@ export type MoveResult = {
   files_moved: number;
   failed_moves: number;
   manifests: Array<MoveManifestPointer & { batch_id: number }>;
+  audit_records: string[];
+  notices: string[];
+  warnings: string[];
 };
 
 export type MoveManifestPointer = {

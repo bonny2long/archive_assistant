@@ -19,6 +19,7 @@ import type {
 } from "./types/archive";
 import { api } from "./api/client";
 import ActionBar from "./components/ActionBar";
+import SuiteNav from "./components/SuiteNav";
 import BatchTable from "./components/BatchTable";
 import StatusTabs from "./components/StatusTabs";
 import Toast from "./components/Toast";
@@ -36,7 +37,10 @@ type ActionKey = "refresh" | "scan" | "move" | "reset";
 type QaSummary = {
   title: string;
   text: string;
-  warnings?: string;
+  auditRecords?: string[];
+  notices?: string[];
+  warnings?: string[];
+  errors?: string[];
 };
 
 const EMPTY_LIBRARY_SUMMARY: LibrarySummaryData = {
@@ -535,7 +539,7 @@ export default function App() {
       setQaSummary({
         title: "Scan summary",
         text: `Movies found: ${result.movie_batches_found}${tvCounts} | Audiobooks found: ${result.audiobook_batches_found} | Music albums found: ${result.music_albums_found} | Discographies found: ${result.discographies_found} | Unknown items: ${result.unknown_items} | Unsupported files: ${result.unsupported_files}`,
-        warnings: `Audiobook files found: ${result.audiobook_files_found} | Ignored system files: ${result.ignored_system_files} | Sidecar-only folders skipped: ${result.ignored_sidecar_only_folders} | Artwork files found: ${result.artwork_files_found} | Subtitle files found: ${result.subtitle_files_found} | ${warnings.filter((warning) => warning === "release_folder_grouping_used").length} release-folder grouping used`,
+        notices: [`Audiobook files found: ${result.audiobook_files_found} | Ignored system files: ${result.ignored_system_files} | Sidecar-only folders skipped: ${result.ignored_sidecar_only_folders} | Artwork files found: ${result.artwork_files_found} | Subtitle files found: ${result.subtitle_files_found} | ${warnings.filter((warning) => warning === "release_folder_grouping_used").length} release-folder grouping used`],
       });
       showToast(`Scan complete - ${result.created} new, ${result.skipped_duplicates} skipped duplicate(s)`);
     } catch {
@@ -579,20 +583,27 @@ export default function App() {
     setLoadingAction("move");
     try {
       const result = await api.moveApproved();
-      const errors = result.errors.length ? ` - ${result.errors.join(" | ")}` : "";
-      showToast(`Moved ${result.moved} batch(es)${errors}`, result.errors.length ? "error" : "info");
+      const hasProblems = result.errors.length > 0 || result.warnings.length > 0;
+      showToast(
+        hasProblems ? `Moved ${result.moved} batch(es) with issues` : `Moved ${result.moved} batch(es)`,
+        hasProblems ? "error" : "info",
+      );
       await loadBatches();
       const summary = await api.getLibrarySummary();
       setLibrarySummary(summary);
-      const manifestNames = result.manifests
-        .map((manifest) => manifest.markdown_path ?? manifest.json_path)
-        .join(" | ");
+      const hasFailedMoves = result.failed_moves > 0;
+      const title = hasFailedMoves
+        ? result.files_moved > 0 ? "Move partially complete" : "Move failed"
+        : result.warnings.length > 0 ? "Move complete with warnings"
+        : result.notices.length > 0 ? "Move complete with notices"
+        : "Move complete";
       setQaSummary({
-        title: "Move complete",
+        title,
         text: `${result.moved} batches moved | ${result.files_moved} files moved | ${result.failed_moves} failed moves`,
-        warnings: manifestNames
-          ? `Manifests created: ${manifestNames}`
-          : "No move manifests were created.",
+        auditRecords: result.audit_records,
+        notices: result.notices,
+        warnings: result.warnings,
+        errors: result.errors,
       });
     } catch {
       showToast("Move failed", "error");
@@ -603,6 +614,7 @@ export default function App() {
 
   return (
     <main className="app-shell">
+      <SuiteNav />
       <ActionBar
         onScan={handleScan}
         onMove={handleMove}
@@ -623,7 +635,10 @@ export default function App() {
               <strong>{qaSummary.title}</strong>
               <span>{qaSummary.text}</span>
             </div>
-            {qaSummary.warnings && <small>Warnings: {qaSummary.warnings}</small>}
+            {qaSummary.auditRecords?.length ? <small>Move manifests written: {qaSummary.auditRecords.join(" | ")}</small> : null}
+            {qaSummary.notices?.length ? <small>Notices: {qaSummary.notices.join(" | ")}</small> : null}
+            {qaSummary.warnings?.length ? <small>Warnings: {qaSummary.warnings.join(" | ")}</small> : null}
+            {qaSummary.errors?.length ? <small>Errors: {qaSummary.errors.join(" | ")}</small> : null}
           </section>
         )}
         <StatusTabs

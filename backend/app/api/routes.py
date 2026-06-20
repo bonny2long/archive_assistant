@@ -1842,13 +1842,34 @@ def move_approved(db: Session = Depends(get_db)):
         else []
     )
     manifests = []
+    notices = []
     for batch in moved_batches:
         pointer = (batch.metadata_json or {}).get("move_manifest")
         if pointer:
             manifests.append({"batch_id": batch.id, **pointer})
+        ignored_sidecars = int((batch.metadata_json or {}).get("ignored_sidecar_count") or 0)
+        if ignored_sidecars:
+            notices.append(f"Sidecars left in source: {ignored_sidecars}")
+
+    manifest_errors = [error for error in errors if "move manifest" in error.casefold()]
+    operation_errors = [error for error in errors if error not in manifest_errors]
+    manifest_batch_ids = {item["batch_id"] for item in manifests}
+    missing_manifest_batch_ids = {
+        batch.id for batch in moved_batches
+        if batch.status == "moved" and batch.id not in manifest_batch_ids
+    }
+    warnings = list(manifest_errors)
+    if missing_manifest_batch_ids:
+        count = len(missing_manifest_batch_ids)
+        warnings.append(
+            f"Move manifest missing for {count} moved "
+            f"{'batch' if count == 1 else 'batches'}. "
+            "Cleaner will block cleanup for that source until evidence exists."
+        )
+
     return MoveResponse(
         moved=moved,
-        errors=errors,
+        errors=operation_errors,
         files_moved=sum(
             int(item.get("files_moved") or 0)
             + int(item.get("artwork_moved") or 0)
@@ -1858,6 +1879,12 @@ def move_approved(db: Session = Depends(get_db)):
             int(item.get("failed_moves") or 0) for item in manifests
         ),
         manifests=manifests,
+        audit_records=[
+            str(item.get("markdown_path") or item.get("json_path"))
+            for item in manifests
+        ],
+        notices=list(dict.fromkeys(notices)),
+        warnings=warnings,
     )
 
 
