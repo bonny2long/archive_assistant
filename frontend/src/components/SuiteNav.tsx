@@ -11,7 +11,7 @@ export default function SuiteNav() {
       >
         <i className="ti ti-archive" aria-hidden="true" /> Archive Assistant
       </a>
-      <a href="http://localhost:8093" className="suite-nav__tab">
+      <a href="http://localhost:8092" className="suite-nav__tab">
         <i className="ti ti-sparkles" aria-hidden="true" /> Cleaner
       </a>
     </nav>
