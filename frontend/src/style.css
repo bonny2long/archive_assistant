@@ -1016,7 +1016,7 @@ button:focus-visible, input:focus-visible {
 }
 .movie-editor__counts { display: flex; flex-wrap: wrap; gap: 0.75rem; }
 
-/* ── Movie collection editor ─────────────────────────────────────────────── */
+/* â”€â”€ Movie collection editor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .collection-item-list {
   display: flex;
   flex-direction: column;
@@ -1358,10 +1358,10 @@ button:focus-visible, input:focus-visible {
   }
 }
 
-/* ──────────────────────────────────────────────────────────────────────────
-   Wide editor shell — shared header/body/footer scaffold for Music + Movie
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+   Wide editor shell â€” shared header/body/footer scaffold for Music + Movie
    Reuses the TV modal's structural shape without the two-panel split.
-   ────────────────────────────────────────────────────────────────────────── */
+   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .metadata-editor--wide {
   width: min(860px, calc(100vw - 2rem));
   max-height: calc(100vh - 2rem);
@@ -1456,9 +1456,9 @@ button:focus-visible, input:focus-visible {
   font-size: 10px;
 }
 
-/* ──────────────────────────────────────────────────────────────────────────
-   TV editor — wide two-panel layout
-   ────────────────────────────────────────────────────────────────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+   TV editor â€” wide two-panel layout
+   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .metadata-editor--tv {
   width: min(900px, calc(100vw - 2rem));
   max-height: calc(100vh - 2rem);
@@ -2358,13 +2358,43 @@ button:focus-visible, input:focus-visible {
 }
 
 /* Suite navigation bar */
+.suite-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 46px;
+  margin: 0 1.5rem;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
 .suite-nav {
   display: flex;
+  align-items: center;
   gap: 2px;
-  padding: 6px 1.5rem 0;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 0;
-  flex-shrink: 0;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.suite-nav::-webkit-scrollbar { display: none; }
+.suite-brand {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 42px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 14px;
+  background: radial-gradient(circle at 50% 20%, rgba(34, 211, 238, 0.14), transparent 48%), linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.015));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 10px 30px rgba(0, 0, 0, 0.28);
+}
+.suite-brand__logo {
+  display: block;
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 8px rgba(34, 211, 238, 0.28));
 }
 .suite-nav__tab {
   display: inline-flex;
@@ -2387,4 +2417,9 @@ button:focus-visible, input:focus-visible {
   background: var(--bg-surface);
   border-color: var(--border);
   border-bottom-color: var(--bg-surface);
+}
+@media (max-width: 720px) {
+  .suite-header { margin: 0 1rem; align-items: flex-start; gap: 10px; }
+  .suite-brand { width: 44px; height: 38px; }
+  .suite-brand__logo { width: 31px; height: 31px; }
 }
