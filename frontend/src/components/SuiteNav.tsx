@@ -13,7 +13,7 @@ export default function SuiteNav() {
         </a>
       </nav>
       <div className="suite-brand" aria-label="Bonny NAS">
-        <img src="/assets/bm-nas-logo.png" alt="Bonny NAS" className="suite-brand__logo" />
+        <img src="/assets/bm-nas-mark.svg" alt="Bonny NAS" className="suite-brand__logo" />
       </div>
     </header>
   );
