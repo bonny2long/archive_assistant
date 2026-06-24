@@ -1,5 +1,5 @@
 from pathlib import Path
-from pydantic import model_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -44,6 +44,18 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = ".env"
+
+    @field_validator("debug", mode="before")
+    @classmethod
+    def normalize_debug_environment(cls, value):
+        """Accept common environment labels while retaining a boolean setting."""
+        if isinstance(value, str):
+            normalized = value.strip().casefold()
+            if normalized in {"release", "production", "prod"}:
+                return False
+            if normalized in {"development", "dev"}:
+                return True
+        return value
 
     @model_validator(mode="after")
     def derive_data_root_paths(self):
