@@ -2,7 +2,7 @@ services:
   archive-backend:
     build: ./backend
     ports:
-      - "8000:8000"
+      - "8001:8001"
     volumes:
       - ./data:/app/data
       - ./backend/archive_assistant.db:/app/backend/archive_assistant.db
