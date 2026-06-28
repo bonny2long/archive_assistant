@@ -31,6 +31,7 @@
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
+  --radius-xl: 16px;
   --font: 'Inter', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 }
@@ -501,29 +502,73 @@ button:focus-visible, input:focus-visible {
 }
 .discography-albums td:nth-child(2) { min-width: 180px; }
 .discography-cleanup dd { overflow-wrap: anywhere; }
-.metadata-editor.discography-editor {
-  width: min(96vw, 1400px);
-  max-width: 1400px;
-  height: min(90vh, 900px);
-  min-width: 560px;
-  min-height: 420px;
+/* Discography Editor Shell */
+.discography-editor {
+  width: min(96vw, 1420px);
+  max-width: 1420px;
+  height: min(90vh, 920px);
+  min-width: 580px;
+  min-height: 440px;
   max-height: calc(100vh - 2rem);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   resize: both;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  box-shadow: 0 24px 72px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255,255,255,0.04);
 }
+
+.discography-editor__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem 1rem;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  background: var(--bg-raised);
+}
+.discography-editor__header-eyebrow {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--accent-green);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.discography-editor__header h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.discography-editor__header p {
+  margin-top: 3px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
 .discography-editor__body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-right: 4px;
+  padding: 1.25rem 1.5rem;
+}
+
+.discography-editor__card {
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  margin-bottom: 1rem;
 }
 .discography-editor__collection {
   display: grid;
-  grid-template-columns: minmax(240px, 0.7fr) minmax(240px, 0.7fr) minmax(320px, 1.3fr);
-  gap: 0.75rem;
+  grid-template-columns: minmax(220px, 0.65fr) minmax(220px, 0.65fr) minmax(300px, 1.4fr);
+  gap: 0.85rem;
 }
 .discography-editor__genre-help {
   display: block;
@@ -537,47 +582,63 @@ button:focus-visible, input:focus-visible {
   gap: 0.35rem;
   margin-top: 0.5rem;
 }
-.album-edit-row__genre {
-  display: grid;
-  gap: 4px;
+.discography-editor__destination-preview {
+  align-self: end;
 }
-.album-edit-row__genre small {
-  display: inline-flex;
-  width: fit-content;
-  max-width: 100%;
-  padding: 2px 6px;
-  border-radius: 999px;
-  background: rgba(59,130,246,0.1);
-  color: var(--accent-blue);
-  font-size: 9px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}.discography-editor__release-summary {
+
+.discography-editor__decisions {
+  border-left: 3px solid var(--accent-green);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  background: rgba(16, 185, 129, 0.05);
+  padding: 0.85rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.discography-editor__release-summary {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  margin: 0.9rem 0 0.45rem;
-  color: var(--text-secondary);
-  font-size: 12px;
+  margin: 0.25rem 0 0.5rem;
 }
-.discography-editor__release-summary span {
+.discography-editor__release-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.discography-editor__release-count {
   color: var(--text-muted);
   font-size: 11px;
 }
-.discography-editor__bulk-actions,
+
+.discography-editor__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  padding: 0.35rem 0 0.65rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.65rem;
+}
+.discography-editor__filter-tabs {
+  display: flex;
+  gap: 0.35rem;
+}
+.discography-editor__bulk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-left: auto;
+}
 .album-edit-row__decisions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-}
-.discography-editor__bulk-actions {
-  padding: 0.35rem 0 0.75rem;
-}
-.album-edit-row__decisions {
+  gap: 0.35rem;
   margin-top: 0.4rem;
 }
+
 .collection-editor__bulk-actions,
 .collection-item-card__actions {
   display: flex;
@@ -591,24 +652,29 @@ button:focus-visible, input:focus-visible {
   padding: 0.65rem 0.75rem;
   border-top: 1px solid var(--border);
 }
+
 .discography-editor__releases {
-  max-height: 58vh;
   overflow-x: auto;
   overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-page);
 }
+
 .album-edit-row {
   display: grid;
-  grid-template-columns: 72px 110px minmax(260px, 1fr) 150px 190px minmax(320px, 1fr) 220px;
-  gap: 12px;
-  align-items: center;
-  padding: 8px 10px;
+  grid-template-columns: 60px 110px minmax(240px, 1fr) 150px 190px minmax(300px, 1fr) 220px;
+  gap: 10px;
+  align-items: start;
+  padding: 10px 12px;
   min-width: 1380px;
   border-bottom: 1px solid var(--border);
   color: var(--text-secondary);
   font-size: 11px;
+  transition: background 0.1s;
+}
+.album-edit-row:hover {
+  background: var(--bg-raised);
 }
 .album-edit-row:last-child { border-bottom: 0; }
 .album-edit-header {
@@ -616,19 +682,20 @@ button:focus-visible, input:focus-visible {
   top: 0;
   z-index: 2;
   background: var(--bg-raised);
-  color: #9CA3AF;
+  color: var(--text-muted);
   font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
+  font-weight: 600;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
+  align-items: center;
 }
 .album-edit-row input,
 .album-edit-row select {
   width: 100%;
   min-width: 0;
-  padding: 7px 8px;
+  padding: 6px 8px;
 }
-.album-edit-row__include { text-align: center; }
+.album-edit-row__include { text-align: center; padding-top: 4px; }
 .album-edit-row__include input { width: auto; }
 .album-edit-row__title { min-width: 0; }
 .album-edit-row__destination {
@@ -640,7 +707,37 @@ button:focus-visible, input:focus-visible {
   color: var(--text-muted);
   font-family: var(--font-mono);
   font-size: 10px;
+  padding-top: 4px;
 }
+
+.album-edit-row__genre {
+  display: grid;
+  gap: 4px;
+}
+.album-genre-pill {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 9px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.album-genre-pill--override {
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--accent-green);
+}
+.album-genre-pill--inherited {
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--text-muted);
+}
+.album-genre-pill--empty {
+  background: var(--bg-raised);
+  color: var(--text-muted);
+}
+
 .album-edit-row__warnings {
   display: flex;
   flex-wrap: wrap;
@@ -650,7 +747,7 @@ button:focus-visible, input:focus-visible {
 .album-edit-row__warnings small {
   padding: 2px 5px;
   border-radius: 999px;
-  background: rgba(245,158,11,0.08);
+  background: rgba(245, 158, 11, 0.08);
   color: var(--accent-amber);
   font-size: 9px;
 }
@@ -658,21 +755,33 @@ button:focus-visible, input:focus-visible {
   background: var(--bg-raised);
   color: var(--text-muted);
 }
+
 .discography-editor__footer {
-  position: sticky;
-  bottom: 0;
-  z-index: 3;
-  margin: 0.75rem -1.25rem -1.25rem;
-  padding: 0.85rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1.5rem;
   border-top: 1px solid var(--border);
-  background: var(--bg-surface);
+  background: var(--bg-raised);
+  flex-shrink: 0;
+}
+.discography-editor__footer-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
 }
 .discography-editor__resize-hint {
-  margin-right: auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
   color: var(--text-muted);
   font-size: 10px;
 }
-.track-preview__warning { color: var(--accent-amber); }
+.discography-editor__resize-hint i {
+  font-size: 13px;
+  opacity: 0.6;
+}
+/* End Discography Editor */.track-preview__warning { color: var(--accent-amber); }
 .tv-season-heading td {
   background: var(--bg-raised);
   color: var(--text-secondary);
@@ -2369,17 +2478,16 @@ button:focus-visible, input:focus-visible {
   .library-status__facts { grid-column: 1 / -1; align-items: flex-start; flex-direction: row; flex-wrap: wrap; }
   .library-detail__grid, .library-fields { grid-template-columns: 1fr; }
   .metadata-editor__row { grid-template-columns: 1fr; gap: 0; }
-  .metadata-editor.discography-editor {
+  .discography-editor {
     width: calc(100vw - 1rem);
     height: calc(100vh - 1rem);
     min-width: 0;
     min-height: 0;
     resize: none;
-    padding: 1rem;
   }
   .discography-editor__collection { grid-template-columns: 1fr; }
   .discography-editor__footer {
-    margin: 0.75rem -1rem -1rem;
+    flex-wrap: wrap;
     padding: 0.75rem 1rem;
   }
   .discography-editor__resize-hint { display: none; }

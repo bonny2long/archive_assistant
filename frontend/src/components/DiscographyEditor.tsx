@@ -147,7 +147,7 @@ export default function DiscographyEditor({
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <form
-        className="metadata-editor discography-editor"
+        className="discography-editor"
         onMouseDown={(event) => event.stopPropagation()}
         onSubmit={(event) => {
           event.preventDefault();
@@ -160,8 +160,9 @@ export default function DiscographyEditor({
           });
         }}
       >
-        <div className="metadata-editor__header">
-          <div>
+        <div className="discography-editor__header">
+          <div className="discography-editor__header-title">
+            <span className="discography-editor__header-eyebrow">Music · Discography</span>
             <h2>Correct discography</h2>
             <p>Edit collection metadata, release genres, and the move plan without changing audio tags.</p>
           </div>
@@ -178,7 +179,7 @@ export default function DiscographyEditor({
             onConfirm={onConfirm}
           />
           <MetadataAssistStaleWarning batch={batch} />
-          <div className="discography-editor__collection">
+          <div className="discography-editor__collection discography-editor__card">
             <label>
               <span>Discography artist</span>
               <input value={artist} autoFocus onChange={(event) => setArtist(event.target.value)} />
@@ -214,7 +215,7 @@ export default function DiscographyEditor({
             </div>
           </div>
 
-          <section className="acceptance-controls">
+          <section className="acceptance-controls discography-editor__decisions">
             <div>
               <strong>Discography decisions</strong>
               <p>Accepted unknowns and lookup-later choices remain in the move manifest.</p>
@@ -230,47 +231,51 @@ export default function DiscographyEditor({
           </section>
 
           <div className="discography-editor__release-summary">
-            <strong>Releases</strong>
-            <span>{albums.length} releases · {trackCount} tracks</span>
+            <span className="discography-editor__release-label">Releases</span>
+            <span className="discography-editor__release-count">{albums.length} releases · {trackCount} tracks</span>
           </div>
 
-          <div className="discography-editor__bulk-actions">
-            {(["repair", "included", "excluded", "all"] as const).map((value) => (
-              <button type="button" className={`btn-sm${filter === value ? " btn-sm--active" : ""}`} key={value} onClick={() => setFilter(value)}>
-                {value === "repair" ? "Needs repair" : value[0].toUpperCase() + value.slice(1)}
-              </button>
-            ))}
-            <button type="button" className="btn-sm" onClick={() => {
-              const visible = new Set(visibleAlbums.map((album) => album.source_folder));
-              setAlbums((current) => current.map((album) => visible.has(album.source_folder)
-                ? { ...album, accepted_unknown_album_artist: true }
-                : album));
-            }}>Accept unknown artists for visible</button>
-            <button type="button" className="btn-sm" onClick={() => {
-              const visible = new Set(visibleAlbums.map((album) => album.source_folder));
-              setAlbums((current) => current.map((album) => visible.has(album.source_folder)
-                ? { ...album, lookup_later: true }
-                : album));
-            }}>Mark visible lookup later</button>
-            <button type="button" className="btn-sm" onClick={() => {
-              const visible = new Set(visibleAlbums.map((album) => album.source_folder));
-              setAlbums((current) => current.map((album) => visible.has(album.source_folder)
-                ? { ...album, include: false, release_type: "exclude" }
-                : album));
-            }}>Exclude visible</button>
-            <button type="button" className="btn-sm" disabled={!primaryGenre.trim()} onClick={() => {
-              const visible = new Set(visibleAlbums.map((album) => album.source_folder));
-              const genre = primaryGenre.trim();
-              setAlbums((current) => current.map((album) => visible.has(album.source_folder)
-                ? { ...album, genre }
-                : album));
-            }}>Apply default genre to visible</button>
-            <button type="button" className="btn-sm" onClick={() => {
-              const visible = new Set(visibleAlbums.map((album) => album.source_folder));
-              setAlbums((current) => current.map((album) => visible.has(album.source_folder)
-                ? { ...album, genre: null }
-                : album));
-            }}>Clear visible genre overrides</button>
+          <div className="discography-editor__controls">
+            <div className="discography-editor__filter-tabs">
+              {(["repair", "included", "excluded", "all"] as const).map((value) => (
+                <button type="button" className={`btn-sm${filter === value ? " btn-sm--active" : ""}`} key={value} onClick={() => setFilter(value)}>
+                  {value === "repair" ? "Needs repair" : value[0].toUpperCase() + value.slice(1)}
+                </button>
+              ))}
+            </div>
+            <div className="discography-editor__bulk-actions">
+              <button type="button" className="btn-sm" onClick={() => {
+                const visible = new Set(visibleAlbums.map((album) => album.source_folder));
+                setAlbums((current) => current.map((album) => visible.has(album.source_folder)
+                  ? { ...album, accepted_unknown_album_artist: true }
+                  : album));
+              }}>Accept unknown artists for visible</button>
+              <button type="button" className="btn-sm" onClick={() => {
+                const visible = new Set(visibleAlbums.map((album) => album.source_folder));
+                setAlbums((current) => current.map((album) => visible.has(album.source_folder)
+                  ? { ...album, lookup_later: true }
+                  : album));
+              }}>Mark visible lookup later</button>
+              <button type="button" className="btn-sm" onClick={() => {
+                const visible = new Set(visibleAlbums.map((album) => album.source_folder));
+                setAlbums((current) => current.map((album) => visible.has(album.source_folder)
+                  ? { ...album, include: false, release_type: "exclude" }
+                  : album));
+              }}>Exclude visible</button>
+              <button type="button" className="btn-sm" disabled={!primaryGenre.trim()} onClick={() => {
+                const visible = new Set(visibleAlbums.map((album) => album.source_folder));
+                const genre = primaryGenre.trim();
+                setAlbums((current) => current.map((album) => visible.has(album.source_folder)
+                  ? { ...album, genre }
+                  : album));
+              }}>Apply default genre to visible</button>
+              <button type="button" className="btn-sm" onClick={() => {
+                const visible = new Set(visibleAlbums.map((album) => album.source_folder));
+                setAlbums((current) => current.map((album) => visible.has(album.source_folder)
+                  ? { ...album, genre: null }
+                  : album));
+              }}>Clear visible genre overrides</button>
+            </div>
           </div>
 
           <div className="discography-editor__releases">
@@ -289,70 +294,70 @@ export default function DiscographyEditor({
               return (
                 <div className="album-edit-row" key={album.source_folder}>
                   <div className="album-edit-row__include">
-                      <input
-                        aria-label={`Include ${album.album}`}
-                        type="checkbox"
-                        checked={album.include && album.release_type !== "exclude"}
-                        onChange={(event) => updateAlbum(album.source_folder, {
-                          include: event.target.checked,
-                          release_type: event.target.checked && album.release_type === "exclude"
-                            ? "album"
-                            : album.release_type,
-                        })}
-                      />
+                    <input
+                      aria-label={`Include ${album.album}`}
+                      type="checkbox"
+                      checked={album.include && album.release_type !== "exclude"}
+                      onChange={(event) => updateAlbum(album.source_folder, {
+                        include: event.target.checked,
+                        release_type: event.target.checked && album.release_type === "exclude"
+                          ? "album"
+                          : album.release_type,
+                      })}
+                    />
                   </div>
                   <div>
-                      <input
-                        className="discography-editor__year"
-                        aria-label={`Year for ${album.album}`}
-                        value={album.year ?? ""}
-                        placeholder="YYYY"
-                        onChange={(event) => updateAlbum(album.source_folder, {
-                          year: event.target.value || null,
-                        })}
-                      />
-                      <MetadataSuggestionChips
-                        label={`Year for ${album.album}`}
-                        field="year"
-                        candidates={source?.metadata_candidates?.year ?? []}
-                        currentValue={album.year ?? ""}
-                        onApply={(value) => updateAlbum(album.source_folder, { year: value })}
-                        maxVisible={1}
-                      />
+                    <input
+                      className="discography-editor__year"
+                      aria-label={`Year for ${album.album}`}
+                      value={album.year ?? ""}
+                      placeholder="YYYY"
+                      onChange={(event) => updateAlbum(album.source_folder, {
+                        year: event.target.value || null,
+                      })}
+                    />
+                    <MetadataSuggestionChips
+                      label={`Year for ${album.album}`}
+                      field="year"
+                      candidates={source?.metadata_candidates?.year ?? []}
+                      currentValue={album.year ?? ""}
+                      onApply={(value) => updateAlbum(album.source_folder, { year: value })}
+                      maxVisible={1}
+                    />
                   </div>
                   <div className="album-edit-row__title">
-                      <input
-                        aria-label={`Title for ${album.source_folder}`}
-                        value={album.album}
-                        onChange={(event) => updateAlbum(album.source_folder, {
-                          album: event.target.value,
-                        })}
-                      />
-                      <MetadataSuggestionChips
-                        label={`Title for ${album.source_folder}`}
-                        field="album_title"
-                        candidates={source?.metadata_candidates?.album_title ?? []}
-                        currentValue={album.album}
-                        onApply={(value) => updateAlbum(album.source_folder, { album: value })}
-                        maxVisible={1}
-                      />
+                    <input
+                      aria-label={`Title for ${album.source_folder}`}
+                      value={album.album}
+                      onChange={(event) => updateAlbum(album.source_folder, {
+                        album: event.target.value,
+                      })}
+                    />
+                    <MetadataSuggestionChips
+                      label={`Title for ${album.source_folder}`}
+                      field="album_title"
+                      candidates={source?.metadata_candidates?.album_title ?? []}
+                      currentValue={album.album}
+                      onApply={(value) => updateAlbum(album.source_folder, { album: value })}
+                      maxVisible={1}
+                    />
                   </div>
                   <div>
-                      <select
-                        aria-label={`Release type for ${album.album}`}
-                        value={album.release_type}
-                        onChange={(event) => {
-                          const releaseType = event.target.value as DiscographyReleaseType;
-                          updateAlbum(album.source_folder, {
-                            release_type: releaseType,
-                            include: releaseType !== "exclude",
-                          });
-                        }}
-                      >
-                        {RELEASE_TYPES.map((option) => (
-                          <option key={option.value} value={option.value}>{option.label}</option>
-                        ))}
-                      </select>
+                    <select
+                      aria-label={`Release type for ${album.album}`}
+                      value={album.release_type}
+                      onChange={(event) => {
+                        const releaseType = event.target.value as DiscographyReleaseType;
+                        updateAlbum(album.source_folder, {
+                          release_type: releaseType,
+                          include: releaseType !== "exclude",
+                        });
+                      }}
+                    >
+                      {RELEASE_TYPES.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
                   </div>
                   <div className="album-edit-row__genre">
                     <input
@@ -363,7 +368,7 @@ export default function DiscographyEditor({
                         genre: event.target.value || null,
                       })}
                     />
-                    <small>
+                    <small className={album.genre?.trim() ? "album-genre-pill album-genre-pill--override" : primaryGenre.trim() ? "album-genre-pill album-genre-pill--inherited" : "album-genre-pill album-genre-pill--empty"}>
                       {album.genre?.trim()
                         ? `Genre: ${album.genre.trim()}`
                         : primaryGenre.trim()
@@ -402,15 +407,18 @@ export default function DiscographyEditor({
           </div>
         </div>
 
-        <div className="metadata-editor__actions discography-editor__footer">
+        <div className="discography-editor__footer">
           <span className="discography-editor__resize-hint">
-            Drag the bottom-right corner to resize
+            <i className="ti ti-arrows-diagonal" />
+            Drag corner to resize
           </span>
-          <button type="button" className="btn" disabled={saving} onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn btn--green" disabled={saving || !valid}>
-            <i className={`ti ti-${saving ? "loader-2 spinner" : "device-floppy"}`} />
-            Save discography corrections
-          </button>
+          <div className="discography-editor__footer-actions">
+            <button type="button" className="btn" disabled={saving} onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn btn--green" disabled={saving || !valid}>
+              <i className={`ti ti-${saving ? "loader-2 spinner" : "device-floppy"}`} />
+              Save discography corrections
+            </button>
+          </div>
         </div>
       </form>
     </div>
