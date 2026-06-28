@@ -1225,15 +1225,15 @@ def _create_audiobook_batch(db: Session, source: Path) -> IngestBatch | None:
     audio_files = files["audio"]
     if not audio_files:
         return None
-    checksums = {file_sha256(path) for path in audio_files}
-    existing_checksums = {
-        row.checksum
-        for row in db.query(IngestFile)
-        .filter(IngestFile.checksum.in_(checksums))
-        .all()
-        if row.checksum
-    }
-    if checksums and checksums.issubset(existing_checksums):
+    existing = (
+        db.query(IngestBatch)
+        .filter(
+            IngestBatch.source_path == str(source),
+            IngestBatch.status != "quarantined",
+        )
+        .first()
+    )
+    if existing:
         return None
 
     metadata = build_audiobook_metadata(source, settings.audiobooks_dir)
@@ -1290,7 +1290,7 @@ def _create_audiobook_batch(db: Session, source: Path) -> IngestBatch | None:
             file_name=path.name,
             extension=path.suffix.lower(),
             size_bytes=path.stat().st_size,
-            checksum=file_sha256(path),
+            checksum=None,
             detected_role=role,
             metadata_json=None,
         ))
