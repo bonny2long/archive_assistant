@@ -12,6 +12,7 @@ import type {
   LibrarySummary as LibrarySummaryData,
   MovieCollectionReviewUpdate,
   MovieMetadataUpdate,
+  ScanJobStatus,
   SystemTimeResponse,
   TabKey,
   TvMetadataUpdate,
@@ -75,6 +76,7 @@ export default function App() {
   const [qaSummary, setQaSummary] = useState<QaSummary | null>(null);
   const [systemTime, setSystemTime] = useState<SystemTimeResponse | null>(null);
   const [ingestPath, setIngestPath] = useState<string | null>(null);
+  const [scanStatus, setScanStatus] = useState<ScanJobStatus | null>(null);
 
   const showToast = useCallback((msg: string, type: ToastState["type"] = "info") => {
     setToast({ msg, type });
@@ -132,7 +134,60 @@ export default function App() {
     void api.systemPaths()
       .then((paths) => setIngestPath(paths.ingest_root))
       .catch(() => setIngestPath(null));
+    void api.scanStatus()
+      .then((status) => setScanStatus(status))
+      .catch(() => setScanStatus(null));
   }, [loadBatches]);
+
+  useEffect(() => {
+    if (scanStatus?.status !== "running" || !scanStatus.job_id) return;
+
+    let cancelled = false;
+    let lastBatchReload = 0;
+
+    const applyCompletedScan = async (status: ScanJobStatus) => {
+      const items = await loadBatches();
+      if (cancelled) return;
+      const result = status.result;
+      if (!result) return;
+      const warnings = items.flatMap((batch) => batch.metadata_warnings);
+      const tvCounts = result.tv_shows_found > 0
+        ? ` | TV shows found: ${result.tv_shows_found} | TV episodes found: ${result.tv_episodes_found}`
+        : "";
+      setQaSummary({
+        title: "Scan summary",
+        text: `Movies found: ${result.movie_batches_found}${tvCounts} | Audiobooks found: ${result.audiobook_batches_found} | Music albums found: ${result.music_albums_found} | Discographies found: ${result.discographies_found} | Unknown items: ${result.unknown_items} | Unsupported files: ${result.unsupported_files}`,
+        notices: [`Audiobook files found: ${result.audiobook_files_found} | Ignored system files: ${result.ignored_system_files} | Sidecar-only folders skipped: ${result.ignored_sidecar_only_folders} | Artwork files found: ${result.artwork_files_found} | Subtitle files found: ${result.subtitle_files_found} | ${warnings.filter((warning) => warning === "release_folder_grouping_used").length} release-folder grouping used`],
+      });
+      showToast(`Scan complete - ${result.created} new, ${result.skipped_duplicates} skipped duplicate(s)`);
+    };
+
+    const poll = async () => {
+      try {
+        const next = await api.scanStatus();
+        if (cancelled) return;
+        setScanStatus(next);
+        const now = Date.now();
+        if (next.status === "running" && now - lastBatchReload >= 4500) {
+          lastBatchReload = now;
+          void loadBatches();
+        } else if (next.status === "completed") {
+          await applyCompletedScan(next);
+        } else if (next.status === "failed") {
+          showToast(next.error_message || "Scan failed", "error");
+        }
+      } catch {
+        if (!cancelled) showToast("Unable to read scan status", "error");
+      }
+    };
+
+    void poll();
+    const intervalId = window.setInterval(() => void poll(), 1500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [scanStatus?.job_id, scanStatus?.status, loadBatches, showToast]);
 
   const filtered = batches.filter((batch) => {
     if (tab === "all") return true;
@@ -530,20 +585,18 @@ export default function App() {
   const handleScan = async () => {
     setLoadingAction("scan");
     try {
-      const result = await api.scanMusic();
-      const items = await loadBatches();
-      const warnings = items.flatMap((batch) => batch.metadata_warnings);
-      const tvCounts = result.tv_shows_found > 0
-        ? ` | TV shows found: ${result.tv_shows_found} | TV episodes found: ${result.tv_episodes_found}`
-        : "";
-      setQaSummary({
-        title: "Scan summary",
-        text: `Movies found: ${result.movie_batches_found}${tvCounts} | Audiobooks found: ${result.audiobook_batches_found} | Music albums found: ${result.music_albums_found} | Discographies found: ${result.discographies_found} | Unknown items: ${result.unknown_items} | Unsupported files: ${result.unsupported_files}`,
-        notices: [`Audiobook files found: ${result.audiobook_files_found} | Ignored system files: ${result.ignored_system_files} | Sidecar-only folders skipped: ${result.ignored_sidecar_only_folders} | Artwork files found: ${result.artwork_files_found} | Subtitle files found: ${result.subtitle_files_found} | ${warnings.filter((warning) => warning === "release_folder_grouping_used").length} release-folder grouping used`],
-      });
-      showToast(`Scan complete - ${result.created} new, ${result.skipped_duplicates} skipped duplicate(s)`);
-    } catch {
-      showToast("Scan failed", "error");
+      const status = await api.scanMusic();
+      setScanStatus(status);
+      if (status.already_running) {
+        showToast("Scan already running");
+      } else {
+        showToast("Scan started");
+      }
+    } catch (scanError: unknown) {
+      showToast(
+        scanError instanceof Error ? scanError.message : "Scan failed",
+        "error",
+      );
     } finally {
       setLoadingAction(null);
     }
@@ -627,6 +680,28 @@ export default function App() {
           : null}
         ingestPath={ingestPath}
       />
+      {scanStatus && scanStatus.status !== "idle" && (
+        <section className={`scan-status scan-status--${scanStatus.status}`}>
+          <div>
+            <strong>
+              {scanStatus.status === "running"
+                ? "Scan running"
+                : scanStatus.status === "failed"
+                ? "Scan failed"
+                : "Scan complete"}
+            </strong>
+            <span>{scanStatus.phase || scanStatus.message || "Waiting for scan status"}</span>
+          </div>
+          <small>
+            {scanStatus.message ? `${scanStatus.message} | ` : ""}
+            {typeof scanStatus.elapsed_seconds === "number"
+              ? `${scanStatus.elapsed_seconds.toFixed(1)}s elapsed`
+              : "elapsed time unavailable"}
+            {scanStatus.current_path ? ` | ${scanStatus.current_path}` : ""}
+          </small>
+          {scanStatus.error_message ? <small>{scanStatus.error_message}</small> : null}
+        </section>
+      )}
       <div className="app-content">
         <LibrarySummary summary={librarySummary} />
         {qaSummary && (

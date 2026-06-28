@@ -18,6 +18,7 @@ import type {
   MoveResult,
   PaginatedResponse,
   ScanMusicResponse,
+  ScanJobStatus,
   SystemPathsResponse,
   SystemTimeResponse,
   TvMetadataUpdate,
@@ -107,7 +108,8 @@ export const api = {
     request<BatchSummary>(`/batches/${id}/audiobook-metadata`, "PATCH", update),
   updateReviewConfirmation: (id: number, update: ReviewConfirmationUpdate) =>
     request<BatchSummary>(`/batches/${id}/review-confirmation`, "PATCH", update),
-  scanMusic: () => request<ScanMusicResponse>("/scan/music", "POST"),
+  scanMusic: () => request<ScanJobStatus>("/scan/music", "POST"),
+  scanStatus: () => request<ScanJobStatus>("/scan/status"),
   approveBatch: (id: number) => request<BatchActionResult>(`/batches/${id}/approve`, "POST"),
   approveSelected: (batchIds: number[]) =>
     request<BulkApproveResult>("/batches/approve-selected", "POST", { batch_ids: batchIds }),

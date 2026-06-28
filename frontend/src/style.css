@@ -2447,3 +2447,43 @@ button:focus-visible, input:focus-visible {
   .suite-brand { width: 44px; height: 38px; }
   .suite-brand__logo { width: 31px; height: 31px; }
 }
+.scan-status {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-soft);
+  padding: 0.9rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.scan-status > div {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.scan-status strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.scan-status span,
+.scan-status small {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.scan-status--running {
+  border-color: rgba(59, 130, 246, 0.35);
+}
+
+.scan-status--failed {
+  border-color: rgba(239, 68, 68, 0.45);
+}
+
+.scan-status--completed {
+  border-color: rgba(16, 185, 129, 0.35);
+}

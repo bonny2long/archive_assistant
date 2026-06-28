@@ -27,7 +27,6 @@ from app.schemas.archive import (
     MoveActionOut,
     MoveResponse,
     PaginatedResponse,
-    ScanMusicResponse,
     TvMetadataUpdate,
     TvEpisodeReviewUpdate,
     ReviewConfirmationUpdate,
@@ -54,7 +53,7 @@ from app.services.music_metadata import (
     sort_music_tracks,
     suggest_music_destination,
 )
-from app.services.scanner import scan_music_ingest
+from app.services.scan_runtime import get_scan_status, start_scan_job
 from app.services.mover import _lock_metadata_for_move, move_approved_batches
 from app.services.quarantine import quarantine_batch, restore_quarantined_batch
 from app.services.video_metadata import safe_movie_path_part, safe_tv_path_part
@@ -104,6 +103,25 @@ def system_paths():
     def path_value(path: Path) -> str:
         return str(path.resolve())
 
+    def path_health(path: Path) -> dict:
+        result = {
+            "exists": path.exists(),
+            "is_dir": path.is_dir(),
+            "writable": False,
+            "error": None,
+        }
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+            probe = path / ".archive_assistant_write_test"
+            probe.write_text("ok", encoding="utf-8")
+            probe.unlink(missing_ok=True)
+            result["exists"] = path.exists()
+            result["is_dir"] = path.is_dir()
+            result["writable"] = True
+        except Exception as exc:
+            result["error"] = f"{type(exc).__name__}: {exc}"
+        return result
+
     return {
         "data_root": path_value(settings.data_root),
         "ingest_root": path_value(settings.ingest_root),
@@ -115,32 +133,22 @@ def system_paths():
         "music_mp3_dir": path_value(settings.music_mp3_dir),
         "books_dir": path_value(settings.books_dir),
         "audiobooks_dir": path_value(settings.audiobooks_dir),
+        "path_health": {
+            "data_root": path_health(settings.data_root),
+            "ingest_root": path_health(settings.ingest_root),
+            "reports_dir": path_health(settings.reports_dir),
+        },
     }
 
 
-@router.post("/scan/music", response_model=ScanMusicResponse)
-def scan_music(db: Session = Depends(get_db)):
-    result = scan_music_ingest(db)
-    return ScanMusicResponse(
-        created=result.created,
-        skipped_duplicates=result.skipped_duplicates,
-        batches=result.batches,
-        music_albums_found=result.music_albums_found,
-        discographies_found=result.discographies_found,
-        unknown_items=result.unknown_items,
-        unsupported_files=result.unsupported_files,
-        ignored_system_files=result.ignored_system_files,
-        ignored_sidecar_only_folders=result.ignored_sidecar_only_folders,
-        artwork_files_found=result.artwork_files_found,
-        movie_batches_found=result.movie_batches_found,
-        tv_shows_found=result.tv_shows_found,
-        tv_episodes_found=result.tv_episodes_found,
-        subtitle_files_found=result.subtitle_files_found,
-        book_batches_found=result.book_batches_found,
-        book_files_found=result.book_files_found,
-        audiobook_batches_found=result.audiobook_batches_found,
-        audiobook_files_found=result.audiobook_files_found,
-    )
+@router.post("/scan/music")
+def scan_music():
+    return start_scan_job()
+
+
+@router.get("/scan/status")
+def scan_status():
+    return get_scan_status()
 
 
 @router.post("/dev/reset/music-test", response_model=DevResetResponse)

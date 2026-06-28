@@ -522,6 +522,29 @@ export type ScanMusicResponse = {
   audiobook_files_found: number;
 };
 
+export type ScanJobStatus = {
+  job_id: string | null;
+  status: "idle" | "running" | "completed" | "failed";
+  phase?: string | null;
+  message?: string | null;
+  current_path?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  elapsed_seconds?: number;
+  created?: number;
+  skipped_duplicates?: number;
+  result?: ScanMusicResponse | null;
+  error_message?: string | null;
+  already_running?: boolean;
+};
+
+export type PathHealth = {
+  exists: boolean;
+  is_dir: boolean;
+  writable: boolean;
+  error?: string | null;
+};
+
 export type SystemPathsResponse = {
   data_root: string;
   ingest_root: string;
@@ -533,6 +556,11 @@ export type SystemPathsResponse = {
   music_mp3_dir: string;
   books_dir: string;
   audiobooks_dir: string;
+  path_health?: {
+    data_root?: PathHealth;
+    ingest_root?: PathHealth;
+    reports_dir?: PathHealth;
+  };
 };
 
 export type DevResetResponse = {

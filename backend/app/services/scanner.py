@@ -1,6 +1,7 @@
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 import re
 
 from sqlalchemy.orm import Session
@@ -2014,12 +2015,32 @@ def _create_discography_batch(
     return batch
 
 
-def scan_music_ingest(db: Session) -> ScanMusicResult:
+def scan_music_ingest(
+    db: Session,
+    progress: Callable[..., None] | None = None,
+) -> ScanMusicResult:
+    def report_progress(
+        phase: str,
+        message: str | None = None,
+        current_path: Path | None = None,
+    ) -> None:
+        if progress:
+            progress(
+                phase=phase,
+                message=message,
+                current_path=str(current_path) if current_path else None,
+            )
+
     settings.ingest_root.mkdir(parents=True, exist_ok=True)
+    report_progress("Reading ready folder", current_path=settings.ingest_root)
     classifications = {
         item: classify_ingest_item(item)
         for item in sorted(settings.ingest_root.iterdir())
     }
+    report_progress(
+        "Classifying media",
+        message=f"Checked {len(classifications)} top-level ready item(s)",
+    )
     repaired_batches = repair_stale_media_batches(db, classifications)
     batches: list[IngestBatch] = list(repaired_batches)
     tv_batches = [
@@ -2027,6 +2048,7 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
         for batch in repaired_batches
         if batch.detected_type == "video_tv_show"
     ]
+    report_progress("Scanning TV shows")
     for item, classification in classifications.items():
         if classification != "video_tv_show":
             continue
@@ -2039,6 +2061,7 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
         for batch in repaired_batches
         if batch.detected_type == "video_movie"
     ]
+    report_progress("Scanning movies")
     for item, classification in classifications.items():
         if classification != "video_movie":
             continue
@@ -2049,6 +2072,7 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
     book_batches = [
         batch for batch in repaired_batches if batch.detected_type == "book"
     ]
+    report_progress("Scanning books")
     for item, classification in classifications.items():
         if classification != "book":
             continue
@@ -2061,6 +2085,7 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
         for batch in repaired_batches
         if batch.detected_type == "audiobook"
     ]
+    report_progress("Scanning audiobooks")
     for item, classification in classifications.items():
         if classification != "audiobook":
             continue
@@ -2100,8 +2125,10 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
         unknown_batches.append(grouped_loose_batch)
     batches.extend(unknown_batches)
 
+    report_progress("Scanning music", message="Collecting audio files")
     audio_files = _root_music_audio_files()
     if not audio_files:
+        report_progress("Complete")
         return ScanMusicResult(
             created=len(batches),
             skipped_duplicates=0,
@@ -2166,6 +2193,7 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
             ),
         )
 
+    report_progress("Scanning music", message="Extracting metadata and checking duplicates")
     file_metadata: dict[str, dict] = {}
     file_checksums: dict[str, str] = {}
 
@@ -2452,6 +2480,7 @@ def scan_music_ingest(db: Session) -> ScanMusicResult:
         write_json_report(settings.reports_dir, batch.id, album_meta)
         batches.append(batch)
 
+    report_progress("Complete")
     return ScanMusicResult(
         created=len(batches),
         skipped_duplicates=skipped_duplicates,
