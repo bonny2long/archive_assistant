@@ -27,6 +27,19 @@ const RELEASE_TYPES: Array<{ value: DiscographyReleaseType; label: string }> = [
   { value: "exclude", label: "Exclude" },
 ];
 
+const GENRE_CHIPS = [
+  "Hip-Hop",
+  "R&B",
+  "Alternative R&B",
+  "Alternative",
+  "Indie Rock",
+  "Pop",
+  "Soul",
+  "Jazz",
+  "Electronic",
+  "Rock",
+];
+
 const RELEASE_BUCKETS: Record<Exclude<DiscographyReleaseType, "exclude">, string> = {
   album: "Albums",
   ep: "EPs",
@@ -48,6 +61,7 @@ function initialAlbums(batch: BatchSummary): DiscographyAlbumUpdate[] {
       source_folder: album.source_folder,
       album: album.album,
       year: album.year ?? null,
+      genre: album.genre ?? null,
       release_type: releaseType,
       include: album.include !== false && releaseType !== "exclude",
       accepted_unknown_album_artist: album.accepted_unknown_album_artist ?? false,
@@ -85,6 +99,9 @@ export default function DiscographyEditor({
     () => batch.suggested_metadata?.artist ?? batch.artist ?? "",
   );
   const [albums, setAlbums] = useState(() => initialAlbums(batch));
+  const [primaryGenre, setPrimaryGenre] = useState(
+    () => batch.primary_genre ?? batch.suggested_metadata?.genre ?? "",
+  );
   const [acceptedUnknownArtist, setAcceptedUnknownArtist] = useState(
     Boolean(batch.accepted_unknown_discography_artist),
   );
@@ -136,6 +153,7 @@ export default function DiscographyEditor({
           event.preventDefault();
           if (valid) void onSave({
             artist: artist.trim() || "Unknown Artist",
+            primary_genre: primaryGenre.trim() || null,
             albums,
             accepted_unknown_discography_artist: acceptedUnknownArtist,
             lookup_later: lookupLater,
@@ -145,7 +163,7 @@ export default function DiscographyEditor({
         <div className="metadata-editor__header">
           <div>
             <h2>Correct discography</h2>
-            <p>Edit the collection and release move plan without changing audio tags.</p>
+            <p>Edit collection metadata, release genres, and the move plan without changing audio tags.</p>
           </div>
           <button type="button" className="btn-sm" disabled={saving} onClick={onClose}>
             <i className="ti ti-x" />
@@ -172,7 +190,25 @@ export default function DiscographyEditor({
                 onApply={setArtist}
               />
             </label>
-            <div className="metadata-editor__preview">
+            <label>
+              <span>Default genre</span>
+              <input
+                value={primaryGenre}
+                placeholder="Used for manifests and downstream apps"
+                onChange={(event) => setPrimaryGenre(event.target.value)}
+              />
+              <small className="discography-editor__genre-help">
+                Used for manifests and downstream apps. Audio tags are not changed.
+              </small>
+              <div className="discography-editor__genre-chips">
+                {GENRE_CHIPS.map((genre) => (
+                  <button type="button" className="btn-sm" key={genre} onClick={() => setPrimaryGenre(genre)}>
+                    {genre}
+                  </button>
+                ))}
+              </div>
+            </label>
+            <div className="metadata-editor__preview discography-editor__destination-preview">
               <span>Destination preview</span>
               <code>{collectionDestination}</code>
             </div>
@@ -222,6 +258,19 @@ export default function DiscographyEditor({
                 ? { ...album, include: false, release_type: "exclude" }
                 : album));
             }}>Exclude visible</button>
+            <button type="button" className="btn-sm" disabled={!primaryGenre.trim()} onClick={() => {
+              const visible = new Set(visibleAlbums.map((album) => album.source_folder));
+              const genre = primaryGenre.trim();
+              setAlbums((current) => current.map((album) => visible.has(album.source_folder)
+                ? { ...album, genre }
+                : album));
+            }}>Apply default genre to visible</button>
+            <button type="button" className="btn-sm" onClick={() => {
+              const visible = new Set(visibleAlbums.map((album) => album.source_folder));
+              setAlbums((current) => current.map((album) => visible.has(album.source_folder)
+                ? { ...album, genre: null }
+                : album));
+            }}>Clear visible genre overrides</button>
           </div>
 
           <div className="discography-editor__releases">
@@ -230,6 +279,7 @@ export default function DiscographyEditor({
               <span>Year</span>
               <span>Album title</span>
               <span>Release type</span>
+              <span>Genre</span>
               <span>Destination preview</span>
               <span>Warnings</span>
             </div>
@@ -303,6 +353,25 @@ export default function DiscographyEditor({
                           <option key={option.value} value={option.value}>{option.label}</option>
                         ))}
                       </select>
+                  </div>
+                  <div className="album-edit-row__genre">
+                    <input
+                      aria-label={`Genre for ${album.album}`}
+                      value={album.genre ?? ""}
+                      placeholder={primaryGenre.trim() ? `Inherit ${primaryGenre.trim()}` : source?.genre ? `Detected ${source.genre}` : "Genre"}
+                      onChange={(event) => updateAlbum(album.source_folder, {
+                        genre: event.target.value || null,
+                      })}
+                    />
+                    <small>
+                      {album.genre?.trim()
+                        ? `Genre: ${album.genre.trim()}`
+                        : primaryGenre.trim()
+                          ? `Inherits: ${primaryGenre.trim()}`
+                          : source?.genre_source
+                            ? `Source: ${source.genre_source}`
+                            : "No genre set"}
+                    </small>
                   </div>
                   <code className="album-edit-row__destination" title={destination}>
                     {destination}

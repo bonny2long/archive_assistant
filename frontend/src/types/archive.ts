@@ -244,6 +244,8 @@ export type DiscographyAlbum = {
   artist?: string | null;
   album: string;
   year?: string | null;
+  genre?: string | null;
+  genre_source?: string | null;
   format?: string;
   track_count: number;
   disc_count?: number;
@@ -265,6 +267,7 @@ export type DiscographyAlbumUpdate = {
   source_folder: string;
   album: string;
   year: string | null;
+  genre?: string | null;
   release_type: DiscographyReleaseType;
   include: boolean;
   accepted_unknown_album_artist: boolean;
@@ -275,6 +278,7 @@ export type DiscographyAlbumUpdate = {
 
 export type DiscographyMetadataUpdate = {
   artist: string;
+  primary_genre?: string | null;
   albums?: DiscographyAlbumUpdate[];
   accepted_unknown_discography_artist?: boolean;
   lookup_later?: boolean;

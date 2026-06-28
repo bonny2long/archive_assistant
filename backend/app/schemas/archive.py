@@ -273,6 +273,7 @@ class DiscographyAlbumUpdate(BaseModel):
     source_folder: str = Field(min_length=1)
     album: str = Field(min_length=1)
     year: str | None = Field(default=None, pattern=r"^(19|20)\d{2}$")
+    genre: str | None = None
     release_type: Literal[
         "album",
         "single",
@@ -291,6 +292,7 @@ class DiscographyAlbumUpdate(BaseModel):
 
 class DiscographyMetadataUpdate(BaseModel):
     artist: str = Field(min_length=1)
+    primary_genre: str | None = None
     albums: list[DiscographyAlbumUpdate] | None = None
     accepted_unknown_discography_artist: bool = False
     lookup_later: bool = False

@@ -1840,6 +1840,12 @@ def _create_discography_batch(
             track_metadata,
             compilation=release_type == "compilation",
         )
+        representative_genre = _representative_value(track_metadata, "genre", "Unknown")
+        genre_source = (
+            "track tags"
+            if normalize_key(representative_genre) not in UNKNOWN_VALUES
+            else "unknown"
+        )
 
         album_summaries.append(
             {
@@ -1847,6 +1853,8 @@ def _create_discography_batch(
                 "artist": artist,
                 "album": album,
                 "year": year,
+                "genre": representative_genre,
+                "genre_source": genre_source,
                 "format": album_format,
                 "track_count": len(paths),
                 "disc_count": disc_count,
@@ -1877,6 +1885,8 @@ def _create_discography_batch(
                 "source_folder": child.name,
                 "album": album,
                 "year": year,
+                "genre": representative_genre,
+                "genre_source": genre_source,
                 "format": album_format,
                 "release_type": release_type,
                 "include": True,
@@ -1906,6 +1916,8 @@ def _create_discography_batch(
                             "source_folder": child.name,
                             "album": album,
                             "year": year,
+                            "genre": representative_genre,
+                            "genre_source": genre_source,
                             "format": album_format,
                             "release_type": release_type,
                             "include": True,

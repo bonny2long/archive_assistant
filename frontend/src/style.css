@@ -522,10 +522,38 @@ button:focus-visible, input:focus-visible {
 }
 .discography-editor__collection {
   display: grid;
-  grid-template-columns: minmax(240px, 0.7fr) minmax(320px, 1.3fr);
+  grid-template-columns: minmax(240px, 0.7fr) minmax(240px, 0.7fr) minmax(320px, 1.3fr);
   gap: 0.75rem;
 }
-.discography-editor__release-summary {
+.discography-editor__genre-help {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+.discography-editor__genre-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+.album-edit-row__genre {
+  display: grid;
+  gap: 4px;
+}
+.album-edit-row__genre small {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(59,130,246,0.1);
+  color: var(--accent-blue);
+  font-size: 9px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}.discography-editor__release-summary {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -573,11 +601,11 @@ button:focus-visible, input:focus-visible {
 }
 .album-edit-row {
   display: grid;
-  grid-template-columns: 72px 110px minmax(280px, 1fr) 150px minmax(320px, 1fr) 220px;
+  grid-template-columns: 72px 110px minmax(260px, 1fr) 150px 190px minmax(320px, 1fr) 220px;
   gap: 12px;
   align-items: center;
   padding: 8px 10px;
-  min-width: 1180px;
+  min-width: 1380px;
   border-bottom: 1px solid var(--border);
   color: var(--text-secondary);
   font-size: 11px;

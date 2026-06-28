@@ -1191,6 +1191,17 @@ def update_discography_metadata(
     artist = update.artist.strip()
     metadata = dict(batch.metadata_json or {})
     metadata["artist"] = artist
+    primary_genre = (update.primary_genre or "").strip()
+    existing_sources = metadata.get("sources")
+    sources = dict(existing_sources) if isinstance(existing_sources, dict) else {}
+    if primary_genre:
+        metadata["genre"] = primary_genre
+        metadata["primary_genre"] = primary_genre
+        sources["genre"] = "manual correction"
+    else:
+        metadata["genre"] = metadata.get("genre") or "Unknown"
+        metadata["primary_genre"] = metadata.get("primary_genre") or None
+    metadata["sources"] = sources
     metadata["accepted_unknown_discography_artist"] = (
         update.accepted_unknown_discography_artist
     )
@@ -1202,6 +1213,7 @@ def update_discography_metadata(
         item.source_folder: item
         for item in (update.albums or [])
     }
+    genre_by_source: dict[str, tuple[str, str]] = {}
     albums = []
     for album in metadata.get("albums", []):
         album_copy = dict(album)
@@ -1225,6 +1237,22 @@ def update_discography_metadata(
                 correction.accepted_unknown_year
             )
             album_copy["lookup_later"] = correction.lookup_later
+            release_genre = (correction.genre or "").strip()
+            existing_album_genre = str(album_copy.get("genre") or "").strip()
+            effective_genre = release_genre or primary_genre or existing_album_genre or "Unknown"
+            genre_source = (
+                "manual correction"
+                if release_genre
+                else "inherited from discography"
+                if primary_genre
+                else album_copy.get("genre_source") or "unknown"
+            )
+            album_copy["genre"] = effective_genre
+            album_copy["genre_source"] = genre_source
+            genre_by_source[str(album_copy.get("source_folder") or "")] = (
+                effective_genre,
+                str(genre_source),
+            )
             album_warnings = [
                 warning
                 for warning in album_copy.get("warnings", [])
@@ -1277,6 +1305,30 @@ def update_discography_metadata(
             correction.accepted_unknown_year
         )
         album_metadata["lookup_later"] = correction.lookup_later
+        effective_genre, genre_source = genre_by_source.get(
+            str(album_metadata.get("source_folder") or ""),
+            (
+                (correction.genre or "").strip()
+                or primary_genre
+                or str(album_metadata.get("genre") or "").strip()
+                or "Unknown",
+                "manual correction"
+                if (correction.genre or "").strip()
+                else "inherited from discography"
+                if primary_genre
+                else str(album_metadata.get("genre_source") or "unknown"),
+            ),
+        )
+        album_metadata["genre"] = effective_genre
+        album_metadata["genre_source"] = genre_source
+        current_track_genre = str(track_metadata.get("genre") or "").strip()
+        if not current_track_genre or current_track_genre.lower() == "unknown":
+            track_metadata["genre"] = effective_genre
+        track_sources = track_metadata.get("sources")
+        if not isinstance(track_sources, dict):
+            track_sources = {}
+        track_sources["genre"] = genre_source
+        track_metadata["sources"] = track_sources
         track_metadata["_discography_album"] = album_metadata
         ingest_file.metadata_json = track_metadata
     warnings = [
