@@ -6,7 +6,7 @@ export default function SuiteNav() {
           <i className="ti ti-inbox" aria-hidden="true" /> Intake Watcher
         </a>
         <a
-          href="http://localhost:5174"
+          href="http://localhost:5174, http://localhost:5173"
           className="suite-nav__tab suite-nav__tab--active"
           aria-current="page"
         >
