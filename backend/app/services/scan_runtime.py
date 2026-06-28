@@ -131,7 +131,7 @@ def _result_to_dict(result: Any) -> dict[str, Any]:
     }
 
 
-def start_scan_job() -> dict[str, Any]:
+def start_scan_job(scan_func=scan_music_ingest) -> dict[str, Any]:
     global _worker
     with _lock:
         if _state.status == "running" and _worker and _worker.is_alive():
@@ -155,6 +155,7 @@ def start_scan_job() -> dict[str, Any]:
 
         _worker = Thread(
             target=_run_scan_job,
+            args=(scan_func,),
             name="archive-scan-worker",
             daemon=True,
         )
@@ -164,11 +165,11 @@ def start_scan_job() -> dict[str, Any]:
         return snap
 
 
-def _run_scan_job() -> None:
+def _run_scan_job(scan_func=scan_music_ingest) -> None:
     db = SessionLocal()
     try:
         _set_progress(phase="Reading ready folder", message="Starting scan")
-        result = scan_music_ingest(db, progress=_set_progress)
+        result = scan_func(db, progress=_set_progress)
         result_dict = _result_to_dict(result)
         with _lock:
             _state.status = "completed"

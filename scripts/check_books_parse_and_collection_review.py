@@ -28,7 +28,6 @@ def main() -> None:
                 "author": "Frank Herbert",
                 "title": "Dune",
                 "year": "1965",
-                "series_index": "1",
             },
         ),
         (
@@ -37,7 +36,6 @@ def main() -> None:
                 "author": "Frank Herbert",
                 "title": "Dune Messiah",
                 "year": "1969",
-                "series_index": "2",
             },
         ),
         (

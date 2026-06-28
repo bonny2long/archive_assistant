@@ -21,6 +21,7 @@ CHECK_TIMEOUT_SECONDS = 30
 
 CHECKS = [
     "scripts/check_universal_review_contract.py",
+    "scripts/check_scan_runtime_contract.py",
     "scripts/check_movie_final_polish.py",
     "scripts/check_movie_collection_split_review.py",
     "scripts/check_movie_collection_approval_fix.py",

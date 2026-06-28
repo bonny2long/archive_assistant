@@ -62,13 +62,12 @@ def main() -> int:
     check("Mortal Kombat II: year", parsed["year"] == "2026")
     check(
         "Mortal Kombat II: release tags",
-        set(parsed["release_tags_removed"]) == {"1080p", "WEBRip", "x265"},
+        set(parsed["release_tags_removed"]) == {"1080p", "WEBRip", "10bits", "x265"},
     )
-    # Edition contains tech noise (AAC5.1.10bits-Rapta); scanner filters it via digit check
+    # Edition contains residual tech/group noise; scanner filters non-edition candidates later
     check(
         "Mortal Kombat II: edition has tech noise (filtered by scanner)",
-        parsed["edition"] is not None
-        and bool(re.search(r"\d", parsed["edition"])),
+        parsed["edition"] == "AAC -Rapta",
     )
 
     # Test case: Blade Runner (1982) Final Cut folder

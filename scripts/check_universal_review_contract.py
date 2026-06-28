@@ -56,7 +56,8 @@ TEST_CASES = [
         "metadata": {
             "metadata_warnings": [],
         },
-        "expected_blockers": {"artist_missing", "album_missing", "year_missing"},
+        "expected_blockers": {"artist_missing", "album_missing"},
+        "expected_non_blockers": {"year_missing"},
     },
     {
         "detected_type": "music_discography",
@@ -87,7 +88,8 @@ TEST_CASES = [
         "metadata": {
             "metadata_warnings": [],
         },
-        "expected_blockers": {"movie_title_missing", "movie_year_missing"},
+        "expected_blockers": {"movie_title_missing"},
+        "expected_non_blockers": {"movie_year_missing"},
     },
     {
         "detected_type": "video_tv_show",
@@ -164,6 +166,18 @@ def run():
                     f"Got: {actual_blocker_types}"
                 )
 
+        # Check expected non-blocking review items
+        expected_non_blockers = case.get("expected_non_blockers", set())
+        actual_non_blocker_types = {
+            item.get("type") for item in result.get("non_blocking_review_items", [])
+        }
+        for expected_non_blocker in expected_non_blockers:
+            if expected_non_blocker not in actual_non_blocker_types:
+                failures.append(
+                    f"Case {idx} ({detected_type}): expected non-blocking item "
+                    f"'{expected_non_blocker}' not found. Got: {actual_non_blocker_types}"
+                )
+
         # Check confidence cap when blockers exist
         blockers = result.get("blocking_review_items", [])
         if blockers:
@@ -174,12 +188,12 @@ def run():
                 )
 
     if failures:
-        print("FAIL — Universal review contract failures:")
+        print("FAIL - Universal review contract failures:")
         for f in failures:
             print(f"  x {f}")
         sys.exit(1)
     else:
-        print(f"PASS — Universal review contract verified for {len(TEST_CASES)} test cases")
+        print(f"PASS - Universal review contract verified for {len(TEST_CASES)} test cases")
 
 
 if __name__ == "__main__":
