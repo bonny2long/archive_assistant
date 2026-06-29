@@ -305,7 +305,10 @@ def detect_audiobook_collection(source: Path, audio: list[Path]) -> dict:
 
 def _first_tag_value(tags, keys: tuple[str, ...]) -> str | None:
     for key in keys:
-        value = tags.get(key) if tags is not None else None
+        try:
+            value = tags.get(key) if tags is not None else None
+        except (AttributeError, KeyError, TypeError, ValueError):
+            value = None
         if not value:
             continue
         if isinstance(value, (list, tuple)):
@@ -315,7 +318,6 @@ def _first_tag_value(tags, keys: tuple[str, ...]) -> str | None:
             if text:
                 return text
     return None
-
 
 def extract_audio_metadata(path: Path) -> dict:
     try:

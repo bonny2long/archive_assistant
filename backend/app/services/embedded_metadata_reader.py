@@ -97,7 +97,7 @@ def _tag_value(tags: Any, aliases: tuple[str, ...]) -> str | None:
         value = None
         try:
             value = tags.get(alias)
-        except AttributeError:
+        except (AttributeError, KeyError, TypeError, ValueError):
             value = None
         if value is None:
             continue
@@ -105,7 +105,6 @@ def _tag_value(tags: Any, aliases: tuple[str, ...]) -> str | None:
         if text:
             return text
     return None
-
 
 def _split_number(value: str | None) -> tuple[str | None, str | None]:
     if not value:

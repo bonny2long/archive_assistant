@@ -11,6 +11,7 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from app.services.embedded_metadata_reader import (  # noqa: E402
     EmbeddedMetadataResult,
+    _tag_value,
     apply_embedded_metadata_evidence,
     embedded_field_envelopes,
     read_embedded_metadata,
@@ -33,6 +34,12 @@ def main() -> None:
     assert result.read_ok is False
     assert "unsupported_embedded_metadata_type" in result.warnings
 
+
+    class BrokenTags:
+        def get(self, key):
+            raise ValueError
+
+    assert _tag_value(BrokenTags(), ("title", "album")) is None
     fake = EmbeddedMetadataResult(
         path=str(unsupported),
         media_type="music_album",
