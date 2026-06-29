@@ -71,6 +71,7 @@ from app.services.metadata_candidates import (
     METADATA_ASSIST_VERSION,
     normalize_metadata_text,
 )
+from app.services.metadata_contract import apply_manual_field_envelopes
 from app.services.audiobook_metadata import audiobook_destination
 from app.core.config import settings
 from app.core.time import configured_timezone, now_local, now_utc, serialize_utc
@@ -452,6 +453,11 @@ def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Sessio
         meta["format"] = update.format.strip().upper()
     if update.note is not None:
         meta["review_note"] = update.note.strip() or None
+    apply_manual_field_envelopes(
+        meta,
+        ("artist", "albumartist", "album", "year", "genre", "format"),
+        reason="Saved from music album metadata review.",
+    )
     
     # Re-evaluate quality
     quality_res = evaluate_music_album_metadata(meta)
@@ -603,6 +609,11 @@ def update_movie_metadata(
     )
     if movie_format:
         metadata["format"] = movie_format
+    apply_manual_field_envelopes(
+        metadata,
+        ("title", "year", "edition", "format"),
+        reason="Saved from movie metadata review.",
+    )
 
     folder = safe_movie_path_part(
         f"{year or 'Unknown Year'} - {title}"
@@ -829,6 +840,11 @@ def update_book_metadata(
         "confidence": 1.0,
         "review_confirmed": True,
     })
+    apply_manual_field_envelopes(
+        metadata,
+        ("title", "author", "year", "format"),
+        reason="Saved from book metadata review.",
+    )
     metadata = build_review_state("book", metadata)
     batch.metadata_json = metadata
     batch.suggested_metadata = {
@@ -1140,6 +1156,19 @@ def update_audiobook_metadata(
         "confidence": 1.0,
         "review_confirmed": True,
     })
+    apply_manual_field_envelopes(
+        metadata,
+        (
+            "title",
+            "author",
+            "year",
+            "narrator",
+            "series",
+            "series_index",
+            "format",
+        ),
+        reason="Saved from audiobook metadata review.",
+    )
     metadata = build_review_state("audiobook", metadata)
     batch.metadata_json = metadata
     batch.suggested_metadata = {

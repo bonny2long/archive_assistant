@@ -9,6 +9,10 @@ from typing import Iterable
 from app.core.config import settings
 from app.core.time import serialize_utc
 from app.core.version import ARCHIVE_ASSISTANT_VERSION
+from app.services.metadata_contract import (
+    metadata_manifest_header,
+    summarize_metadata_sources,
+)
 
 
 MANIFEST_VERSION = "v1"
@@ -485,6 +489,7 @@ def _markdown(manifest: dict) -> str:
         f"# Move Manifest - {heading}",
         "",
         f"Archive Assistant version: {manifest['archive_assistant_version']}  ",
+        f"Metadata contract: {manifest['metadata_contract_version']}  ",
         f"Moved at: {manifest['created_at']}  ",
         f"Batch ID: {manifest['batch_id']}  ",
         f"Type: {manifest['review_type']}  ",
@@ -734,6 +739,12 @@ def write_move_manifest(
             })
 
     manifest = {
+        **metadata_manifest_header(
+            manifest_type="move",
+            manifest_version=MANIFEST_VERSION,
+            media_type=batch.detected_type,
+            sources_summary=summarize_metadata_sources(metadata),
+        ),
         "manifest_version": MANIFEST_VERSION,
         "archive_assistant_version": ARCHIVE_ASSISTANT_VERSION,
         "created_at": serialize_utc(created_at),

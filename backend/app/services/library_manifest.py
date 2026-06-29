@@ -3,6 +3,26 @@ from pathlib import Path
 from typing import Any
 
 from app.core.time import now_utc, serialize_utc
+from app.services.metadata_contract import (
+    metadata_manifest_header,
+    summarize_metadata_sources,
+)
+
+
+MANIFEST_VERSION = 1
+
+
+def _manifest_type_from_filename(filename: str) -> str:
+    mapping = {
+        "music-album.json": "music_album",
+        "music-release.json": "music_release",
+        "book.json": "book",
+        "audiobook.json": "audiobook",
+        "movie.json": "movie",
+        "tv-show.json": "tv_show",
+        "discography.json": "music_discography",
+    }
+    return mapping.get(filename, Path(filename).stem.replace("-", "_"))
 
 
 def _relative_library_path(path: Path) -> str:
@@ -31,10 +51,17 @@ def write_library_manifest(
     metadata_dir = destination / "metadata"
     metadata_dir.mkdir(parents=True, exist_ok=True)
     path = metadata_dir / filename
+    header = metadata_manifest_header(
+        manifest_type=_manifest_type_from_filename(filename),
+        manifest_version=MANIFEST_VERSION,
+        media_type=payload.get("media_kind"),
+        sources_summary=summarize_metadata_sources(payload),
+    )
     document = {
         "schema_version": 1,
         "generated_at": serialize_utc(now_utc()),
         "library_path": _relative_library_path(destination),
+        **header,
         **payload,
     }
     path.write_text(

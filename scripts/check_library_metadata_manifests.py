@@ -1,7 +1,7 @@
 import json
 import os
+from datetime import datetime, timezone
 import sys
-import tempfile
 from pathlib import Path
 
 
@@ -73,52 +73,57 @@ def _assert_mover_integrations() -> None:
 
 
 def main() -> None:
-    temp_root = Path("C:/tmp")
+    temp_root = PROJECT_ROOT / ".tmp"
     temp_root.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(
-        prefix="archive-manifest-check-",
-        dir=temp_root,
-    ) as temp:
-        root = Path(temp) / "data"
-        for batch_id, case in enumerate(CASES, start=1):
-            media_kind, relative_destination, filename, index_relative, log_name = case
-            destination = root / relative_destination
-            metadata_dir = destination / "metadata"
-            metadata_dir.mkdir(parents=True)
-            move_log = metadata_dir / log_name
-            move_log.write_text('{"status": "completed"}', encoding="utf-8")
+    # tempfile.mkdtemp can hang in this Windows Python environment.
+    # Use a deterministic isolated fixture path and leave it for cleanup.
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
+    temp = temp_root / f"archive-manifest-check-{os.getpid()}-{stamp}"
+    temp.mkdir(parents=True, exist_ok=False)
+    root = temp / "data"
+    for batch_id, case in enumerate(CASES, start=1):
+        media_kind, relative_destination, filename, index_relative, log_name = case
+        destination = root / relative_destination
+        metadata_dir = destination / "metadata"
+        metadata_dir.mkdir(parents=True)
+        move_log = metadata_dir / log_name
+        move_log.write_text('{"status": "completed"}', encoding="utf-8")
 
-            manifest_path = write_library_manifest(
-                destination,
-                filename,
-                {
-                    "media_kind": media_kind,
-                    "title": "Title",
-                    "batch_id": batch_id,
-                },
-            )
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            assert manifest["library_path"] == relative_destination.as_posix()
-            assert not Path(manifest["library_path"]).is_absolute()
-            assert ":" not in manifest["library_path"]
-            assert move_log.exists(), f"Move log was removed for {media_kind}"
-
-            index_dir = root / index_relative
-            entry = {
+        manifest_path = write_library_manifest(
+            destination,
+            filename,
+            {
                 "media_kind": media_kind,
                 "title": "Title",
-                "library_path": _relative_library_path(destination),
                 "batch_id": batch_id,
-            }
-            append_library_index_entry(index_dir, entry)
-            append_library_index_entry(index_dir, entry)
-            index_path = index_dir / "library-index.json"
-            index = json.loads(index_path.read_text(encoding="utf-8"))
-            assert len(index) == 1, f"Index entry was not replaced for {media_kind}"
-            assert index[0]["library_path"] == relative_destination.as_posix()
+            },
+        )
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        assert manifest["library_path"] == relative_destination.as_posix()
+        assert manifest["metadata_contract_version"] == "aa-m0.1"
+        assert manifest["manifest_type"]
+        assert manifest["metadata_version"]
+        assert manifest["metadata_generated_at"]
+        assert "metadata_sources_summary" in manifest
+        assert not Path(manifest["library_path"]).is_absolute()
+        assert ":" not in manifest["library_path"]
+        assert move_log.exists(), f"Move log was removed for {media_kind}"
 
-        _assert_mover_integrations()
+        index_dir = root / index_relative
+        entry = {
+            "media_kind": media_kind,
+            "title": "Title",
+            "library_path": _relative_library_path(destination),
+            "batch_id": batch_id,
+        }
+        append_library_index_entry(index_dir, entry)
+        append_library_index_entry(index_dir, entry)
+        index_path = index_dir / "library-index.json"
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+        assert len(index) == 1, f"Index entry was not replaced for {media_kind}"
+        assert index[0]["library_path"] == relative_destination.as_posix()
 
+    _assert_mover_integrations()
     print("Library metadata manifest checks passed.")
 
 
