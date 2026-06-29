@@ -105,6 +105,7 @@ class BatchSummary(BaseModel):
     suggested_destination: str | None = None
     suggested_metadata: dict | None = None
     metadata_confirmed: bool = False
+    music_review_summary: dict | None = None
     action_message: str | None = None
     media_category: str | None = None
     media_label: str | None = None

@@ -75,6 +75,7 @@ from app.services.metadata_inheritance import (
     apply_discography_inheritance,
     apply_track_inheritance,
     rehydrate_music_review_metadata_after_manual_save,
+    build_compact_music_review_summary,
 )
 from app.services.metadata_contract import (
     apply_manual_field_envelopes,
@@ -2124,6 +2125,11 @@ def _batch_to_summary(
         suggested_destination=batch.suggested_destination,
         suggested_metadata=batch.suggested_metadata,
         metadata_confirmed=batch.metadata_confirmed,
+        music_review_summary=(
+            build_compact_music_review_summary(meta)
+            if batch.detected_type in {"music_album", "music_discography"}
+            else None
+        ),
         action_message=action_message,
         **display,
         created_at=batch.created_at,

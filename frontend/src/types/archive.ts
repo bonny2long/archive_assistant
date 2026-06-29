@@ -18,6 +18,7 @@ export type IngestBatch = {
   suggested_metadata?: SuggestedMetadata | null;
   metadata_json?: Record<string, unknown> | null;
   metadata_confirmed: boolean;
+  music_review_summary?: MusicReviewSummary | null;
   created_at: string;
   approved_at?: string | null;
   files: IngestFile[];
@@ -39,6 +40,40 @@ export type UnresolvedVideoFile = {
   relative_source?: string | null;
   raw_name?: string | null;
   show_title?: string | null;
+};
+
+export type FieldEnvelope = {
+  value?: unknown;
+  source?: string | null;
+  confidence?: number | null;
+  reason?: string | null;
+  approval_state?: string | null;
+  approved?: boolean | null;
+  approved_at?: string | null;
+  approved_by?: string | null;
+  updated_at?: string | null;
+};
+
+export type MusicTrackProfileSummary = {
+  file_name?: string | null;
+  track_profile?: Record<string, FieldEnvelope> | null;
+  inheritance_summary?: Record<string, unknown> | null;
+};
+
+export type MusicReviewSummary = {
+  core_metadata_status?: string | null;
+  approved_core_fields?: string[];
+  inherited_to_track_count?: number;
+  inherited_fields?: string[];
+  missing_optional_fields?: string[];
+  blocking_issue_count?: number;
+  needs_review_issue_count?: number;
+  info_issue_count?: number;
+  setup_warnings?: string[];
+  profile_consistency?: string | null;
+  artist_profile?: Record<string, FieldEnvelope>;
+  release_profile?: Record<string, FieldEnvelope>;
+  track_profiles?: MusicTrackProfileSummary[];
 };
 
 export type BatchSummary = {
@@ -133,6 +168,7 @@ export type BatchSummary = {
   suggested_destination?: string | null;
   suggested_metadata?: SuggestedMetadata | null;
   metadata_confirmed: boolean;
+  music_review_summary?: MusicReviewSummary | null;
   action_message?: string | null;
   media_category?: string | null;
   media_label?: string | null;

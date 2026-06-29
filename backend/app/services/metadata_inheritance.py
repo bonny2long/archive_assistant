@@ -555,3 +555,61 @@ def rehydrate_music_review_metadata_after_manual_save(
     stale_warnings = validate_music_profile_consistency(metadata)
     metadata["metadata_warnings"] = list(dict.fromkeys([*warnings, *stale_warnings]))
     return metadata
+
+
+OPTIONAL_RADIO_FIELDS = (
+    "subgenres", "moods", "energy", "era", "region", "scene", "related_artists",
+)
+SETUP_WARNINGS = {"embedded_metadata_reader_unavailable", "mutagen_unavailable"}
+NEEDS_REVIEW_WARNINGS = {
+    "year_missing", "year_invalid", "genre_missing", "raw_folder_name_detected",
+    "profile_inheritance_stale", "track_album_mismatch_detected",
+    "track_artist_mismatch_detected",
+}
+
+
+def build_compact_music_review_summary(metadata: Mapping[str, Any]) -> dict[str, Any]:
+    contract_fields = _contract_fields(metadata)
+    artist_profile = _profile_fields(metadata.get("artist_profile"))
+    release_profile = _profile_fields(metadata.get("release_profile"))
+    track_profiles = list(metadata.get("track_profiles") or [])
+    warnings = list(metadata.get("metadata_warnings") or [])
+    extraction_warnings = list(metadata.get("extraction_warnings") or [])
+    setup_warnings = sorted({warning for warning in [*warnings, *extraction_warnings] if warning in SETUP_WARNINGS})
+    blocking_items = list(metadata.get("blocking_review_items") or [])
+    non_blocking_items = list(metadata.get("non_blocking_review_items") or [])
+    approved_core = [
+        field for field in ("artist", "album", "year", "genre", "format")
+        if _is_approved(contract_fields.get(field))
+    ]
+    inherited_fields = sorted({
+        explanation.get("field")
+        for explanation in (metadata.get("inheritance_summary") or {}).get("explanations", [])
+        if explanation.get("inherited") and explanation.get("field")
+    })
+    inherited_track_count = sum(
+        1 for item in track_profiles
+        if (item.get("inheritance_summary") or {}).get("inherited_field_count", 0) > 0
+    )
+    missing_optional = [
+        field for field in OPTIONAL_RADIO_FIELDS
+        if not _has_value(release_profile.get(field)) and not _has_value(artist_profile.get(field))
+    ]
+    needs_review_warnings = sorted({warning for warning in warnings if warning in NEEDS_REVIEW_WARNINGS})
+    info_warnings = sorted({warning for warning in [*warnings, *extraction_warnings] if warning not in NEEDS_REVIEW_WARNINGS})
+    profile_consistency = "stale" if "profile_inheritance_stale" in warnings else "ok"
+    return {
+        "core_metadata_status": metadata.get("metadata_quality", "unknown"),
+        "approved_core_fields": approved_core,
+        "inherited_to_track_count": inherited_track_count,
+        "inherited_fields": inherited_fields,
+        "missing_optional_fields": missing_optional,
+        "blocking_issue_count": len(blocking_items),
+        "needs_review_issue_count": len(needs_review_warnings) or len(non_blocking_items),
+        "info_issue_count": len(info_warnings),
+        "setup_warnings": setup_warnings,
+        "profile_consistency": profile_consistency,
+        "artist_profile": artist_profile,
+        "release_profile": release_profile,
+        "track_profiles": track_profiles,
+    }
