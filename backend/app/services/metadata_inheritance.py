@@ -362,3 +362,196 @@ def apply_track_inheritance(
         explanations,
     )
     return track_metadata
+
+
+MUSIC_ALBUM_PROFILE_FIELD_MAP = {
+    "artist": "artist",
+    "albumartist": "album_artist",
+    "album_artist": "album_artist",
+    "album": "release_title",
+    "year": "year",
+    "date": "release_date",
+    "genre": "genre",
+    "primary_genre": "primary_genre",
+    "format": "format",
+}
+
+
+def _contract_fields(metadata: Mapping[str, Any]) -> dict[str, Any]:
+    contract = metadata.get("metadata_contract")
+    if not isinstance(contract, Mapping):
+        return {}
+    fields = contract.get("fields")
+    return dict(fields) if isinstance(fields, Mapping) else {}
+
+
+def _approved_contract_value(
+    metadata: Mapping[str, Any],
+    *field_names: str,
+) -> Any:
+    fields = _contract_fields(metadata)
+    for field_name in field_names:
+        value = fields.get(field_name)
+        if _is_approved(value) and _has_value(value):
+            return value
+    return None
+
+
+def _approved_or_top_level(
+    metadata: Mapping[str, Any],
+    field_name: str,
+    *aliases: str,
+) -> dict[str, Any] | None:
+    approved = _approved_contract_value(metadata, field_name, *aliases)
+    if approved is not None:
+        return dict(approved)
+    for name in (field_name, *aliases):
+        if _has_value(metadata.get(name)):
+            return _approved_envelope(
+                metadata.get(name),
+                reason=f"Rehydrated approved {field_name} from saved review metadata.",
+            )
+    return None
+
+
+def validate_music_profile_consistency(metadata: Mapping[str, Any]) -> list[str]:
+    warnings: list[str] = []
+    artist_profile = _profile_fields(metadata.get("artist_profile"))
+    release_profile = _profile_fields(metadata.get("release_profile"))
+    comparisons = (
+        ("artist", metadata.get("artist"), artist_profile.get("artist")),
+        ("album", metadata.get("album"), release_profile.get("release_title")),
+        ("year", metadata.get("year") or metadata.get("date"), release_profile.get("year")),
+        ("genre", metadata.get("genre"), release_profile.get("genre")),
+    )
+    for field_name, top_value, profile_value in comparisons:
+        approved = _approved_contract_value(metadata, field_name)
+        if approved is None and field_name == "album":
+            approved = _approved_contract_value(metadata, "album", "release_title")
+        if approved is None:
+            continue
+        if str(field_value(profile_value) or "") != str(field_value(approved) or top_value or ""):
+            warnings.append("profile_inheritance_stale")
+            break
+    return warnings
+
+
+def rehydrate_music_review_metadata_after_manual_save(
+    metadata: dict[str, Any],
+    track_rows: list[Any] | None = None,
+) -> dict[str, Any]:
+    """Rebuild music album profiles and safe track metadata after manual save."""
+    metadata = dict(metadata)
+    warnings = [
+        warning
+        for warning in metadata.get("metadata_warnings", [])
+        if warning != "profile_inheritance_stale"
+    ]
+
+    artist = _approved_or_top_level(metadata, "artist", "albumartist", "album_artist")
+    album_artist = _approved_or_top_level(metadata, "albumartist", "album_artist", "artist")
+    release_title = _approved_or_top_level(metadata, "album", "release_title")
+    year = _approved_or_top_level(metadata, "year", "date", "release_date")
+    genre = _approved_or_top_level(metadata, "genre", "primary_genre")
+    primary_genre = _approved_or_top_level(metadata, "primary_genre", "genre")
+    fmt = _approved_or_top_level(metadata, "format")
+
+    artist_profile: dict[str, Any] = {}
+    if artist is not None:
+        artist_profile["artist"] = artist
+    if primary_genre is not None:
+        artist_profile["primary_genre"] = primary_genre
+    elif genre is not None:
+        artist_profile["primary_genre"] = genre
+    for field_name in (
+        "subgenres", "moods", "energy", "era", "region", "scene",
+        "language", "related_artists",
+    ):
+        value = _approved_or_top_level(metadata, field_name)
+        if value is not None:
+            artist_profile[field_name] = value
+
+    release_profile: dict[str, Any] = {}
+    if release_title is not None:
+        release_profile["release_title"] = release_title
+    if year is not None:
+        release_profile["year"] = year
+        release_profile["release_date"] = year
+    if genre is not None:
+        release_profile["genre"] = genre
+    if primary_genre is not None:
+        release_profile["primary_genre"] = primary_genre
+    elif genre is not None:
+        release_profile["primary_genre"] = inherit_field(
+            genre,
+            source="artist_profile",
+            confidence=0.95,
+            reason="Primary genre rehydrated from approved manual genre.",
+        )
+        release_profile["primary_genre"]["approved"] = bool(genre.get("approved"))
+        release_profile["primary_genre"]["approved_by"] = genre.get("approved_by")
+        release_profile["primary_genre"]["approved_at"] = genre.get("approved_at")
+    if fmt is not None:
+        release_profile["format"] = fmt
+    for field_name in MUSIC_INHERITABLE_FIELDS:
+        if field_name in release_profile:
+            continue
+        value = _approved_or_top_level(metadata, field_name)
+        if value is not None:
+            release_profile[field_name] = value
+
+    metadata["artist_profile"] = artist_profile
+    metadata["release_profile"] = release_profile
+
+    safe_values = {
+        "albumartist": field_value(album_artist) if album_artist is not None else field_value(artist),
+        "artist": field_value(artist),
+        "album": field_value(release_title),
+        "date": field_value(year),
+        "year": field_value(year),
+        "genre": field_value(genre),
+        "format": field_value(fmt),
+    }
+    safe_values = {
+        key: value for key, value in safe_values.items()
+        if value is not None and str(value).strip() != ""
+    }
+
+    track_profiles = []
+    track_explanations: list[dict[str, Any]] = []
+    for row in track_rows or []:
+        track_metadata = dict(getattr(row, "metadata_json", row) or {})
+        track_contract_fields = _contract_fields(track_metadata)
+        for key, value in safe_values.items():
+            approved_track_value = track_contract_fields.get(key)
+            if _is_approved(approved_track_value):
+                continue
+            track_metadata[key] = value
+        apply_track_inheritance(track_metadata, release_profile)
+        track_profiles.append({
+            "file_name": getattr(row, "file_name", track_metadata.get("source_filename")),
+            "track_profile": track_metadata.get("track_profile"),
+            "inheritance_summary": track_metadata.get("inheritance_summary"),
+        })
+        track_explanations.extend(
+            track_metadata.get("inheritance_summary", {}).get("explanations", [])
+        )
+        if hasattr(row, "metadata_json"):
+            row.metadata_json = track_metadata
+
+    metadata["track_profiles"] = track_profiles
+    release_explanations = []
+    for field_name, value in release_profile.items():
+        release_explanations.append({
+            "field": field_name,
+            "source": value.get("source") if is_field_envelope(value) else "manual",
+            "reason": value.get("reason") if is_field_envelope(value) else "Rehydrated from manual save.",
+            "inherited": value.get("source") in {"artist_profile", "release_profile"} if is_field_envelope(value) else False,
+        })
+    metadata["inheritance_summary"] = explain_inheritance_chain(
+        [*release_explanations, *track_explanations]
+    )
+
+    stale_warnings = validate_music_profile_consistency(metadata)
+    metadata["metadata_warnings"] = list(dict.fromkeys([*warnings, *stale_warnings]))
+    return metadata

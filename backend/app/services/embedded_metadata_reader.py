@@ -158,6 +158,7 @@ def read_embedded_metadata(
     try:
         from mutagen import File as MutagenFile
     except ImportError:
+        result.warnings.append("embedded_metadata_reader_unavailable")
         result.warnings.append("mutagen_unavailable")
         return result
     try:

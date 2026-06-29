@@ -74,6 +74,7 @@ from app.services.metadata_candidates import (
 from app.services.metadata_inheritance import (
     apply_discography_inheritance,
     apply_track_inheritance,
+    rehydrate_music_review_metadata_after_manual_save,
 )
 from app.services.metadata_contract import (
     apply_manual_field_envelopes,
@@ -494,6 +495,14 @@ def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Sessio
     )
     
     meta["review_confirmed"] = True
+    meta = rehydrate_music_review_metadata_after_manual_save(
+        meta,
+        [
+            ingest_file
+            for ingest_file in batch.files
+            if ingest_file.detected_role != "artwork"
+        ],
+    )
     meta = build_review_state(batch.detected_type, meta)
     batch.metadata_json = meta
     batch.suggested_destination = str(new_dest)
