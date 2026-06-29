@@ -38,6 +38,19 @@ VALID_APPROVAL_STATES = {
     "unknown",
 }
 
+PLACEHOLDER_METADATA_VALUES = {
+    "",
+    "missing",
+    "n/a",
+    "none",
+    "null",
+    "unkn",
+    "unknown",
+    "unknown album",
+    "unknown artist",
+    "unknown year",
+    "unknown ye",
+}
 
 def now_metadata_timestamp() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -115,6 +128,18 @@ def field_value(value: Any, default: Any = None) -> Any:
     if is_field_envelope(value):
         return value.get("value", default)
     return default if value is None else value
+
+
+def is_placeholder_metadata_value(value: Any) -> bool:
+    raw = field_value(value)
+    if raw is None:
+        return True
+    if isinstance(raw, str):
+        normalized = raw.strip().casefold()
+        return normalized in PLACEHOLDER_METADATA_VALUES
+    if isinstance(raw, (list, tuple, set, dict)):
+        return not bool(raw)
+    return False
 
 
 def field_source(value: Any, default: str = "unknown") -> str:

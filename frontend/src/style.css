@@ -2722,6 +2722,10 @@ button:focus-visible, input:focus-visible {
   background: rgba(255, 255, 255, 0.06);
   color: var(--text-muted);
 }
+.metadata-badge--inherited {
+  background: rgba(59, 130, 246, 0.14);
+  color: #93c5fd;
+}
 .inheritance-summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

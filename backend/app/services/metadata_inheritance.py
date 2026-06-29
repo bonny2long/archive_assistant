@@ -6,6 +6,7 @@ from typing import Any
 from app.services.metadata_contract import (
     METADATA_CONTRACT_VERSION,
     field_value,
+    is_placeholder_metadata_value,
     inherit_field,
     is_field_envelope,
     metadata_field,
@@ -104,18 +105,11 @@ def _ensure_envelope(
 
 
 def _has_value(value: Any) -> bool:
-    raw = field_value(value)
-    if raw is None:
-        return False
-    if isinstance(raw, str):
-        return raw.strip().casefold() not in {"", "unknown", "unknown year"}
-    if isinstance(raw, (list, tuple, set, dict)):
-        return bool(raw)
-    return True
+    return not is_placeholder_metadata_value(value)
 
 
 def _is_approved(value: Any) -> bool:
-    return is_field_envelope(value) and bool(value.get("approved"))
+    return is_field_envelope(value) and bool(value.get("approved")) and _has_value(value)
 
 
 def resolve_inherited_field(
@@ -416,8 +410,8 @@ def _approved_or_top_level(
 
 def validate_music_profile_consistency(metadata: Mapping[str, Any]) -> list[str]:
     warnings: list[str] = []
-    artist_profile = _profile_fields(metadata.get("artist_profile"))
-    release_profile = _profile_fields(metadata.get("release_profile"))
+    artist_profile = _summary_profile_fields(metadata.get("artist_profile"))
+    release_profile = _summary_profile_fields(metadata.get("release_profile"))
     comparisons = (
         ("artist", metadata.get("artist"), artist_profile.get("artist")),
         ("album", metadata.get("album"), release_profile.get("release_title")),
@@ -568,10 +562,24 @@ NEEDS_REVIEW_WARNINGS = {
 }
 
 
+def _summary_profile_fields(profile: Mapping[str, Any] | None) -> dict[str, Any]:
+    fields: dict[str, Any] = {}
+    for field_name, value in _profile_fields(profile).items():
+        if is_field_envelope(value) and is_placeholder_metadata_value(value):
+            adjusted = dict(value)
+            adjusted["approved"] = False
+            adjusted["approval_state"] = "needs_review"
+            adjusted["reason"] = adjusted.get("reason") or "Placeholder value needs manual review."
+            fields[field_name] = adjusted
+        else:
+            fields[field_name] = value
+    return fields
+
+
 def build_compact_music_review_summary(metadata: Mapping[str, Any]) -> dict[str, Any]:
     contract_fields = _contract_fields(metadata)
-    artist_profile = _profile_fields(metadata.get("artist_profile"))
-    release_profile = _profile_fields(metadata.get("release_profile"))
+    artist_profile = _summary_profile_fields(metadata.get("artist_profile"))
+    release_profile = _summary_profile_fields(metadata.get("release_profile"))
     track_profiles = list(metadata.get("track_profiles") or [])
     warnings = list(metadata.get("metadata_warnings") or [])
     extraction_warnings = list(metadata.get("extraction_warnings") or [])

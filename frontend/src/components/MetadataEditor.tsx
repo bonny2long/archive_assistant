@@ -28,6 +28,8 @@ const REVIEW_WARNINGS = new Set([
   "track_album_mismatch_detected",
   "track_artist_mismatch_detected",
 ]);
+const DIVIDER = " | ";
+
 const OPTIONAL_FIELD_LABELS: Record<string, string> = {
   subgenres: "subgenres",
   moods: "moods",
@@ -94,15 +96,45 @@ function readableWarning(value: string): string {
     ?? value.replace(/_/g, " ").replace(/^\w/, (letter: string) => letter.toUpperCase());
 }
 
-function isUnknown(value: string): boolean {
-  const normalized = value.trim().toLowerCase();
-  return normalized === ""
-    || normalized === "unknown"
-    || normalized === "unknown artist"
-    || normalized === "unknown album"
-    || normalized === "unkn";
+function isPlaceholderValue(value: unknown): boolean {
+  if (value === null || value === undefined) return true;
+  if (Array.isArray(value)) return value.length === 0;
+  if (typeof value === "object") return Object.keys(value).length === 0;
+  const normalized = String(value).trim().toLowerCase();
+  return [
+    "",
+    "missing",
+    "n/a",
+    "none",
+    "null",
+    "unkn",
+    "unknown",
+    "unknown album",
+    "unknown artist",
+    "unknown year",
+    "unknown ye",
+  ].includes(normalized);
 }
 
+function isUnknown(value: string): boolean {
+  return isPlaceholderValue(value);
+}
+
+function normalizeTrackTitleForDisplay(value: unknown, trackNumber?: unknown): string {
+  let current = String(value ?? "").trim();
+  const expected = Number.parseInt(String(trackNumber ?? "").match(/\d+/)?.[0] ?? "", 10);
+  for (let index = 0; index < 4; index += 1) {
+    const combined = current.match(/^\s*0*\d{1,3}\s*-\s*0*(\d{1,3})\s*(?:[-._]\s*)+(.+?)\s*$/);
+    const single = combined ?? current.match(/^\s*0*(\d{1,3})\s*(?:[-._]\s*)+(.+?)\s*$/);
+    if (!single) break;
+    const parsed = Number.parseInt(single[1], 10);
+    if (Number.isFinite(expected) && parsed !== expected) break;
+    const next = single[2].replace(/_/g, " ").replace(/\s+/g, " ").replace(/^[ ._-]+|[ ._-]+$/g, "");
+    if (!next || next === current) break;
+    current = next;
+  }
+  return current;
+}
 function buildLiveMusicIssues(params: {
   artist: string;
   album: string;
@@ -141,7 +173,7 @@ function buildLiveMusicIssues(params: {
 function envelopeValue(field?: FieldEnvelope | null): string {
   const value = field?.value;
   if (Array.isArray(value)) return value.join(", ");
-  if (value === null || value === undefined || value === "") return "Missing";
+  if (isPlaceholderValue(value)) return "Missing";
   return String(value);
 }
 
@@ -160,11 +192,15 @@ function sourceLabel(source?: string | null): string {
 }
 
 function FieldBadge({ field }: { field?: FieldEnvelope | null }) {
-  const approved = Boolean(field?.approved);
+  const placeholder = isPlaceholderValue(field?.value);
+  const approved = Boolean(field?.approved) && !placeholder;
+  const inherited = field?.approval_state === "inherited" && !placeholder;
   const source = sourceLabel(field?.source);
+  const status = placeholder ? "Missing" : inherited ? "Inherited" : approved ? "Approved" : "Needs review";
+  const tone = placeholder ? "missing" : inherited ? "inherited" : approved ? "approved" : "pending";
   return (
-    <span className={`metadata-badge ${approved ? "metadata-badge--approved" : "metadata-badge--pending"}`}>
-      {approved ? "Approved" : "Needs review"} ? {source}
+    <span className={`metadata-badge metadata-badge--${tone}`}>
+      {status}{DIVIDER}{source}
     </span>
   );
 }
@@ -213,7 +249,7 @@ function CandidatePanel({ candidates }: { candidates: Record<string, MetadataCan
         <div className="candidate-row" key={`${field}-${candidate.source}-${candidate.value}`}>
           <strong>{candidate.value}</strong>
           <span>{field.replace(/_/g, " ")}</span>
-          <small>{candidate.confidence_label} ? {candidate.source_label}</small>
+          <small>{candidate.confidence_label}{DIVIDER}{candidate.source_label}</small>
         </div>
       ))}
     </div>
@@ -232,7 +268,7 @@ function TrackInheritanceSection({ tracks }: { tracks: MusicTrackProfileSummary[
         return (
           <div className="track-inheritance-row" key={`${track.file_name ?? "track"}-${index}`}>
             <span>{index + 1}</span>
-            <strong>{envelopeValue(profile.track_title) || track.file_name || "Untitled track"}</strong>
+            <strong>{normalizeTrackTitleForDisplay(envelopeValue(profile.track_title) || track.file_name || "Untitled track", profile.track_number?.value ?? profile.tracknumber?.value ?? index + 1)}</strong>
             <small>{envelopeValue(profile.genre ?? profile.primary_genre)}</small>
             <FieldBadge field={profile.genre ?? profile.primary_genre} />
           </div>
@@ -350,10 +386,10 @@ export default function MusicAlbumReviewEditor({
       >
         <div className="editor-shell__header metadata-cockpit__header">
           <div>
-            <span className="metadata-cockpit__eyebrow">Music Album ? {batch.status.replace(/_/g, " ")}</span>
-            <h2>{artist || "Unknown Artist"} ? {album || "Unknown Album"}</h2>
+            <span className="metadata-cockpit__eyebrow">Music Album{DIVIDER}{batch.status.replace(/_/g, " ")}</span>
+            <h2>{artist || "Unknown Artist"}{DIVIDER}{album || "Unknown Album"}</h2>
             <p>
-              {batch.track_count} tracks ? {batch.disc_count} disc{batch.disc_count === 1 ? "" : "s"} ? {batch.format ?? "Unknown format"} ? Confidence {Math.round((batch.confidence ?? 0) * 100)}%
+              {batch.track_count} tracks{DIVIDER}{batch.disc_count} disc{batch.disc_count === 1 ? "" : "s"}{DIVIDER}{batch.format ?? "Unknown format"}{DIVIDER}Confidence {Math.round((batch.confidence ?? 0) * 100)}%
             </p>
           </div>
           <button type="button" className="btn-sm" title="Close" onClick={onClose}>
@@ -368,7 +404,7 @@ export default function MusicAlbumReviewEditor({
             <div>
               <span>Move readiness</span>
               <strong>{valid && issueGroups.blockers.length === 0 ? "Ready after save" : "Needs review"}</strong>
-              <small>{batch.metadata_quality.replace(/_/g, " ")} metadata ? {summary?.profile_consistency === "stale" ? "profile stale" : "profile consistent"}</small>
+              <small>{batch.metadata_quality.replace(/_/g, " ")} metadata{DIVIDER}{summary?.profile_consistency === "stale" ? "profile stale" : "profile consistent"}</small>
             </div>
             <div>
               <span>Destination</span>

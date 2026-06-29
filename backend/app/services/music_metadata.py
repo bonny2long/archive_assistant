@@ -342,6 +342,35 @@ def _clean_spacing(value: str) -> str:
     return value
 
 
+
+
+def normalize_track_title_for_destination(
+    title: str,
+    track_number: str | int | None = None,
+) -> str:
+    """Remove leading filename track indexes without changing numbered song titles."""
+    current = str(title or "").strip()
+    expected_track = _positive_int(track_number)
+    for _ in range(4):
+        combined = re.match(
+            r"^\s*0*\d{1,3}\s*-\s*0*(\d{1,3})\s*(?:[-._]\s*)+(.+?)\s*$",
+            current,
+        )
+        match = combined or re.match(
+            r"^\s*0*(\d{1,3})\s*(?:[-._]\s*)+(.+?)\s*$",
+            current,
+        )
+        if not match:
+            break
+        parsed_track = int(match.group(1))
+        if expected_track is not None and parsed_track != expected_track:
+            break
+        next_value = _clean_spacing(match.group(2))
+        if not next_value or next_value == current:
+            break
+        current = next_value
+    return current or str(title or "").strip()
+
 def _clean_artist_text(value: str) -> str:
     value = re.sub(r"(?i)(?:_|\s)+(?:and|x|&)(?:_|\s)+", " & ", value)
     value = _clean_spacing(value)
@@ -617,12 +646,18 @@ def build_music_metadata_candidates(
         add(field, display[:4] if field == "year" else display, source, label, confidence)
 
     for metadata in track_metadata:
-        title = metadata.get("title")
+        title = normalize_track_title_for_destination(
+            metadata.get("title"),
+            metadata.get("tracknumber"),
+        )
         source = "audio_tag_title"
         source_label = "Embedded track title tag"
         confidence = 0.85
         if not _usable_music_candidate("track_title", title):
-            title = Path(str(metadata.get("source_filename") or "")).stem
+            title = normalize_track_title_for_destination(
+                Path(str(metadata.get("source_filename") or "")).stem,
+                metadata.get("tracknumber"),
+            )
             source = "filename"
             source_label = "Audio filename"
             confidence = 0.65
@@ -648,11 +683,16 @@ def extract_music_metadata(path: Path) -> dict:
     embedded = read_embedded_metadata(path, media_type="music_audio")
     fields = embedded.fields
     technical = embedded.technical
+    raw_title = fields.get("title") or path.stem
+    normalized_title = normalize_track_title_for_destination(
+        raw_title,
+        fields.get("track_number"),
+    )
     metadata = {
         "albumartist": fields.get("album_artist") or "Unknown Artist",
         "artist": fields.get("artist") or "Unknown Artist",
         "album": fields.get("album") or path.parent.name or "Unknown Album",
-        "title": fields.get("title") or path.stem,
+        "title": normalized_title,
         "tracknumber": fields.get("track_number") or "1",
         "discnumber": fields.get("disc_number") or _parse_disc(None, path),
         "date": (fields.get("date") or "Unknown Year")[:10],
@@ -664,6 +704,9 @@ def extract_music_metadata(path: Path) -> dict:
         "container": technical.get("container"),
         "extension": path.suffix.lower(),
     }
+    if str(raw_title).strip() != normalized_title:
+        metadata["raw_track_title"] = str(raw_title).strip()
+
     for source_name, metadata_name in {
         "original_date": "original_date",
         "total_tracks": "total_tracks",
@@ -690,7 +733,6 @@ def extract_music_metadata(path: Path) -> dict:
         },
     )
     return metadata
-
 
 def album_group_key(metadata: dict) -> str:
     artist = normalize_key(metadata["albumartist"])
@@ -759,10 +801,11 @@ def music_track_filename(
     source_filename: str = "",
 ) -> str:
     fallback_title = Path(source_filename).stem or "Unknown Track"
-    title_value = str(metadata.get("title") or fallback_title)
-    title = "".join(c if c not in '<>:"/\\|?*' else "_" for c in title_value)
     disc, parsed_track = music_track_numbers(metadata, source_filename)
     track = parsed_track or 1
+    title_value = str(metadata.get("title") or fallback_title)
+    clean_title = normalize_track_title_for_destination(title_value, track)
+    title = "".join(c if c not in '<>:"/\\|?*' else "_" for c in clean_title)
     if disc_count > 1:
         return f"{disc}-{track:02d} - {title}{extension}"
     return f"{track:02d} - {title}{extension}"

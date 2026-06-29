@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.db.session import get_db
 from app.models.archive import ArchiveItem, IngestBatch, IngestFile, MoveAction
 from app.schemas.archive import (
-    ApproveResponse, 
+    ApproveResponse,
     BulkApproveError,
     BulkApproveRequest,
     BulkApproveResponse,
@@ -13,13 +13,13 @@ from app.schemas.archive import (
     BatchMetadataUpdate,
     BatchReview,
     BatchReviewTrack,
-    BatchSummary, 
+    BatchSummary,
     AudiobookMetadataUpdate,
     BookCollectionReviewUpdate,
     BookMetadataUpdate,
     DiscographyMetadataUpdate,
     DevResetResponse,
-    IngestBatchOut, 
+    IngestBatchOut,
     IngestFileOut,
     LibrarySummary,
     MovieCollectionReviewUpdate,
@@ -50,6 +50,7 @@ from app.services.music_metadata import (
     is_compilation_artist,
     music_track_filename,
     music_track_numbers,
+    normalize_track_title_for_destination,
     sort_music_tracks,
     suggest_music_destination,
 )
@@ -198,7 +199,7 @@ def list_batches(
         .limit(page_size)
         .all()
     )
-    
+
     items = [_batch_to_summary(b) for b in batches]
     return PaginatedResponse(
         items=items,
@@ -225,7 +226,7 @@ def list_pending_batches(
         .limit(page_size)
         .all()
     )
-    
+
     items = [_batch_to_summary(b) for b in batches]
     return PaginatedResponse(
         items=items,
@@ -317,9 +318,9 @@ def get_batch_review(batch_id: int, db: Session = Depends(get_db)):
                 position=position,
                 disc=disc,
                 track=track,
-                title=str(
-                    track_metadata.get("title")
-                    or Path(ingest_file.file_name).stem
+                title=normalize_track_title_for_destination(
+                    str(track_metadata.get("title") or Path(ingest_file.file_name).stem),
+                    track,
                 ),
                 source_filename=ingest_file.file_name,
                 destination_filename=music_track_filename(
@@ -424,12 +425,12 @@ def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Sessio
     batch = db.get(IngestBatch, batch_id)
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
-    
+
     if batch.status in {"moved", "move_failed", "merged"}:
         raise HTTPException(status_code=400, detail="Moved batches cannot be edited")
 
     meta = build_review_state(batch.detected_type, batch.metadata_json)
-    
+
     # Update core fields
     raw_artist = update.artist.strip()
     display_artist, artist_cleanup = clean_compilation_artist(raw_artist)
@@ -467,7 +468,7 @@ def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Sessio
         ("artist", "albumartist", "album", "year", "genre", "format"),
         reason="Saved from music album metadata review.",
     )
-    
+
     # Re-evaluate quality
     quality_res = evaluate_music_album_metadata(meta)
     meta.update(quality_res)
@@ -482,7 +483,7 @@ def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Sessio
         warnings = list(meta.get("metadata_warnings", []))
         warnings.extend(["compilation_detected", "compilation_prefix_removed"])
         meta["metadata_warnings"] = list(dict.fromkeys(warnings))
-    
+
     file_format = str(meta.get("format", "MP3")).lower()
     new_dest = suggest_music_destination(
         {
@@ -494,7 +495,7 @@ def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Sessio
         settings.music_flac_dir,
         settings.music_mp3_dir
     )
-    
+
     meta["review_confirmed"] = True
     meta = rehydrate_music_review_metadata_after_manual_save(
         meta,
@@ -528,7 +529,7 @@ def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Sessio
         batch.status = "metadata_recovery"
     else:
         batch.status = "needs_metadata_review"
-    
+
     batch.updated_at = now_utc()
     db.flush()
 
@@ -1776,12 +1777,12 @@ def approve_batch(batch_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Batch not found")
     if batch.detected_type in {"unknown_type", "unsupported_file"}:
         raise HTTPException(status_code=400, detail="Unknown items cannot be approved")
-    
+
     meta = build_review_state(batch.detected_type, batch.metadata_json)
     if meta["blocking_review_items"]:
         return ApproveResponse(
-            batch_id=batch.id, 
-            status=batch.status, 
+            batch_id=batch.id,
+            status=batch.status,
             message="Batch requires metadata review before approval.",
             metadata_quality=meta.get("metadata_quality"),
             metadata_warnings=meta.get("metadata_warnings", [])
