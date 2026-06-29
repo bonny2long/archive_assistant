@@ -71,7 +71,10 @@ from app.services.metadata_candidates import (
     METADATA_ASSIST_VERSION,
     normalize_metadata_text,
 )
-from app.services.metadata_contract import apply_manual_field_envelopes
+from app.services.metadata_contract import (
+    apply_manual_field_envelopes,
+    resolve_approval_actor,
+)
 from app.services.audiobook_metadata import audiobook_destination
 from app.core.config import settings
 from app.core.time import configured_timezone, now_local, now_utc, serialize_utc
@@ -1770,7 +1773,7 @@ def approve_batch(batch_id: int, db: Session = Depends(get_db)):
 
     batch.status = "approved"
     batch.approved_at = now_utc()
-    batch.approved_by = "bonny-local"
+    batch.approved_by = resolve_approval_actor()
     batch.updated_at = now_utc()
     _lock_metadata_for_move(batch)
     db.commit()
@@ -1811,7 +1814,7 @@ def approve_selected_batches(
         else:
             batch.status = "approved"
             batch.approved_at = now_utc()
-            batch.approved_by = "bonny-local"
+            batch.approved_by = resolve_approval_actor()
             batch.updated_at = now_utc()
             _lock_metadata_for_move(batch)
             approved.append(batch_id)

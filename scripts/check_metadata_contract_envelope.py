@@ -34,10 +34,10 @@ def main() -> None:
     assert field_value("scalar") == "scalar"
     assert field_source(metadata_field("x", source="bad-source")) == "unknown"
 
-    approved = approve_field(field, approved_by="bonny", reason="accepted")
+    approved = approve_field(field, approved_by="local_admin", reason="accepted")
     assert approved["approval_state"] == "approved"
     assert approved["approved"] is True
-    assert approved["approved_by"] == "bonny"
+    assert approved["approved_by"] == "local_admin"
     assert approved["approved_at"]
 
     header = metadata_manifest_header(

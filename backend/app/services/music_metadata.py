@@ -2,6 +2,10 @@ import re
 from collections import Counter
 from pathlib import Path
 
+from app.services.embedded_metadata_reader import (
+    apply_embedded_metadata_evidence,
+    read_embedded_metadata,
+)
 from app.services.metadata_candidates import add_candidate, make_candidate
 
 AUDIO_EXTENSIONS = {".mp3", ".flac", ".m4a", ".aac", ".wav", ".ogg", ".opus"}
@@ -641,18 +645,51 @@ def build_music_metadata_candidates(
 
 
 def extract_music_metadata(path: Path) -> dict:
-    return {
-        "albumartist": "Unknown Artist",
-        "artist": "Unknown Artist",
-        "album": path.parent.name or "Unknown Album",
-        "title": path.stem,
-        "tracknumber": "1",
-        "discnumber": _parse_disc(None, path),
-        "date": "Unknown Year",
-        "genre": "Unknown",
-        "duration_seconds": 0,
+    embedded = read_embedded_metadata(path, media_type="music_audio")
+    fields = embedded.fields
+    technical = embedded.technical
+    metadata = {
+        "albumartist": fields.get("album_artist") or "Unknown Artist",
+        "artist": fields.get("artist") or "Unknown Artist",
+        "album": fields.get("album") or path.parent.name or "Unknown Album",
+        "title": fields.get("title") or path.stem,
+        "tracknumber": fields.get("track_number") or "1",
+        "discnumber": fields.get("disc_number") or _parse_disc(None, path),
+        "date": (fields.get("date") or "Unknown Year")[:10],
+        "genre": fields.get("genre") or "Unknown",
+        "duration_seconds": technical.get("duration_seconds", 0),
+        "bitrate": technical.get("bitrate"),
+        "sample_rate": technical.get("sample_rate"),
+        "codec": technical.get("codec"),
+        "container": technical.get("container"),
         "extension": path.suffix.lower(),
     }
+    for source_name, metadata_name in {
+        "original_date": "original_date",
+        "total_tracks": "total_tracks",
+        "total_discs": "total_discs",
+        "composer": "composer",
+        "album_sort": "album_sort",
+        "artist_sort": "artist_sort",
+        "musicbrainz_artist_id": "musicbrainz_artist_id",
+        "musicbrainz_release_id": "musicbrainz_release_id",
+        "musicbrainz_recording_id": "musicbrainz_recording_id",
+        "acoustid": "acoustid",
+        "bpm": "bpm",
+        "compilation": "compilation",
+    }.items():
+        if fields.get(source_name) is not None:
+            metadata[metadata_name] = fields[source_name]
+    apply_embedded_metadata_evidence(
+        metadata,
+        embedded,
+        field_map={
+            "album_artist": "albumartist",
+            "track_number": "tracknumber",
+            "disc_number": "discnumber",
+        },
+    )
+    return metadata
 
 
 def album_group_key(metadata: dict) -> str:

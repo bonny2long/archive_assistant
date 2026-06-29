@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+import os
 from datetime import datetime, timezone
 from typing import Any
 
@@ -39,6 +40,11 @@ VALID_APPROVAL_STATES = {
 
 def now_metadata_timestamp() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def resolve_approval_actor(request=None, fallback: str = "local_admin") -> str:
+    actor = os.getenv("APPROVAL_ACTOR", "").strip()
+    return actor or fallback
 
 
 def _normalize_source(source: str | None) -> str:
@@ -126,7 +132,7 @@ def field_confidence(value: Any, default: Any = None) -> Any:
 def approve_field(
     field_or_value: Any,
     *,
-    approved_by: str = "bonny",
+    approved_by: str | None = None,
     reason: str | None = None,
 ) -> dict[str, Any]:
     field = (
@@ -135,6 +141,7 @@ def approve_field(
         else metadata_field(field_or_value)
     )
     timestamp = now_metadata_timestamp()
+    approved_by = approved_by or resolve_approval_actor()
     field.update({
         "approval_state": "approved",
         "approved": True,
@@ -246,8 +253,9 @@ def apply_manual_field_envelopes(
     fields: list[str] | tuple[str, ...],
     *,
     reason: str,
-    approved_by: str = "bonny",
+    approved_by: str | None = None,
 ) -> dict[str, Any]:
+    approved_by = approved_by or resolve_approval_actor()
     contract = dict(metadata.get("metadata_contract") or {})
     contract["version"] = METADATA_CONTRACT_VERSION
     contract_fields = dict(contract.get("fields") or {})
