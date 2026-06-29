@@ -55,6 +55,11 @@ from app.services.video_metadata import (
     useful_movie_name,
 )
 from app.services.review_state import build_review_state
+from app.services.metadata_inheritance import (
+    apply_discography_inheritance,
+    apply_music_inheritance,
+    apply_track_inheritance,
+)
 from app.services.metadata_candidates import (
     METADATA_ASSIST_VERSION,
     add_candidate,
@@ -1892,6 +1897,15 @@ def _create_discography_batch(
                 "release_type": release_type,
                 "include": True,
             }
+            inherited_album = apply_discography_inheritance({
+                "artist": artist,
+                "albums": [metadata["_discography_album"]],
+            })["albums"][0]
+            metadata["_discography_album"] = inherited_album
+            apply_track_inheritance(
+                metadata,
+                inherited_album.get("release_profile", {}),
+            )
             ingest_files.append(
                 IngestFile(
                     file_path=str(path),
@@ -1990,6 +2004,7 @@ def _create_discography_batch(
         ),
     )
     metadata["metadata_candidates"] = metadata_candidates
+    metadata = apply_discography_inheritance(metadata)
     metadata = build_review_state("music_discography", metadata)
     batch = IngestBatch(
         source_kind="manual-drop",
@@ -2422,6 +2437,7 @@ def scan_music_ingest(
             album_meta["confidence"] = min(float(album_meta["confidence"]), 0.5)
             status = "needs_metadata_review"
 
+        album_meta = apply_music_inheritance(album_meta)
         album_meta = build_review_state("music_album", album_meta)
         batch = IngestBatch(
             source_kind="manual-drop",

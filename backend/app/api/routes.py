@@ -71,6 +71,10 @@ from app.services.metadata_candidates import (
     METADATA_ASSIST_VERSION,
     normalize_metadata_text,
 )
+from app.services.metadata_inheritance import (
+    apply_discography_inheritance,
+    apply_track_inheritance,
+)
 from app.services.metadata_contract import (
     apply_manual_field_envelopes,
     resolve_approval_actor,
@@ -1423,6 +1427,19 @@ def update_discography_metadata(
     )
     metadata["confidence"] = 0.6 if blocking else 1.0
     metadata["review_confirmed"] = True
+    metadata = apply_discography_inheritance(metadata)
+    release_profiles = {
+        str(album.get("source_folder") or ""): album.get("release_profile", {})
+        for album in metadata.get("albums", [])
+        if isinstance(album, dict)
+    }
+    for ingest_file in batch.files:
+        track_metadata = dict(ingest_file.metadata_json or {})
+        album_metadata = dict(track_metadata.get("_discography_album") or {})
+        release_profile = release_profiles.get(str(album_metadata.get("source_folder") or ""))
+        if release_profile is not None:
+            apply_track_inheritance(track_metadata, release_profile)
+            ingest_file.metadata_json = track_metadata
     metadata = build_review_state(batch.detected_type, metadata)
 
     batch.metadata_json = metadata

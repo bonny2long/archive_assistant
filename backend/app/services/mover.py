@@ -20,6 +20,7 @@ from app.services.book_metadata import (
     build_book_item_destination,
 )
 from app.services.audiobook_metadata import audiobook_destination
+from app.services.metadata_inheritance import apply_music_inheritance
 from app.services.library_manifest import (
     _relative_library_path,
     append_library_index_entry,
@@ -1340,6 +1341,17 @@ def _move_discography_batch(
                     sum(release_type_counts.values()),
                 ),
                 "track_count": metadata.get("track_count", track_count),
+                "artist_profile": metadata.get("artist_profile"),
+                "release_profiles": [
+                    {
+                        "source_folder": album.get("source_folder"),
+                        "release_profile": album.get("release_profile"),
+                        "inheritance_summary": album.get("inheritance_summary"),
+                    }
+                    for album in metadata.get("albums", [])
+                    if isinstance(album, dict)
+                ],
+                "inheritance_summary": metadata.get("inheritance_summary"),
                 "albums_completed": release_type_counts.get("album", 0),
                 "singles_completed": release_type_counts.get("single", 0),
                 "eps_completed": release_type_counts.get("ep", 0),
@@ -2488,6 +2500,7 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                 artwork_count = sum(
                     is_artwork_file(Path(path)) for path in moved_files
                 )
+                inherited_album_meta = apply_music_inheritance(dict(album_meta))
                 _safe_write_library_metadata(
                     destination_dir,
                     "music-album.json",
@@ -2514,6 +2527,9 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
                             track_count,
                         ),
                         "disc_count": album_meta.get("disc_count", 1),
+                        "artist_profile": inherited_album_meta.get("artist_profile"),
+                        "release_profile": inherited_album_meta.get("release_profile"),
+                        "inheritance_summary": inherited_album_meta.get("inheritance_summary"),
                         "artwork_count": album_meta.get(
                             "artwork_count",
                             artwork_count,

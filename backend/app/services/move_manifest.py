@@ -764,6 +764,29 @@ def write_move_manifest(
         "confirmed_metadata": _confirmed_metadata(
             batch.detected_type, metadata
         ),
+        "artist_profile": metadata.get("artist_profile"),
+        "release_profile": metadata.get("release_profile"),
+        "release_profiles": [
+            {
+                "source_folder": album.get("source_folder"),
+                "release_profile": album.get("release_profile"),
+                "inheritance_summary": album.get("inheritance_summary"),
+            }
+            for album in metadata.get("albums", [])
+            if isinstance(album, dict) and album.get("release_profile")
+        ],
+        "track_profiles": [
+            {
+                "file_name": item.file_name,
+                "track_profile": (item.metadata_json or {}).get("track_profile"),
+                "inheritance_summary": (item.metadata_json or {}).get(
+                    "inheritance_summary"
+                ),
+            }
+            for item in batch.files
+            if (item.metadata_json or {}).get("track_profile")
+        ],
+        "inheritance_summary": metadata.get("inheritance_summary"),
         "accepted_unknowns": _accepted_unknowns(
             batch.detected_type, metadata
         ),

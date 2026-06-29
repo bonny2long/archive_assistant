@@ -17,6 +17,7 @@ VALID_METADATA_SOURCES = {
     "archive_assistant_rule",
     "artist_profile",
     "release_profile",
+    "track_override",
     "series_profile",
     "show_profile",
     "movie_profile",
