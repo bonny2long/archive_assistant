@@ -27,6 +27,8 @@ const REVIEW_WARNINGS = new Set([
   "profile_inheritance_stale",
   "track_album_mismatch_detected",
   "track_artist_mismatch_detected",
+  "track_number_conflict_detected",
+  "track_order_ambiguous",
 ]);
 const DIVIDER = " | ";
 
@@ -91,6 +93,8 @@ function readableWarning(value: string): string {
     year_invalid: "Year invalid",
     artist_missing: "Artist missing",
     album_missing: "Album missing",
+    track_number_conflict_detected: "Track numbers conflict; filename order will be used",
+    track_order_ambiguous: "Track order is ambiguous",
   };
   return labels[value]
     ?? value.replace(/_/g, " ").replace(/^\w/, (letter: string) => letter.toUpperCase());

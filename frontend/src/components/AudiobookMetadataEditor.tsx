@@ -184,6 +184,9 @@ export default function AudiobookMetadataEditor({
                 {batch.artwork_files?.[0]
                   ? ` · ${batch.artwork_files[0]}`
                   : ""}
+                {batch.embedded_artwork_count
+                  ? ` · ${batch.embedded_artwork_count} embedded`
+                  : ""}
               </span>
               <span>Sidecars: {batch.ignored_sidecar_count}</span>
             </div>

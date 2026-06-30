@@ -42,6 +42,7 @@ BLOCKING_WARNING_TYPES = {
     "tv_review_count_mismatch",
     "tv_file_metadata_not_ready",
     "book_collection_duplicate_destination",
+    "track_order_ambiguous",
 }
 
 
@@ -90,6 +91,16 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
             ) if detail else _item(
                 warning,
                 "Some TV file metadata is not ready for moving.",
+            ))
+        elif warning == "track_number_conflict_detected":
+            target.append(_item(
+                warning,
+                "Embedded track numbers conflict with filename order; filename order will be used for destination numbering.",
+            ))
+        elif warning == "track_order_ambiguous":
+            target.append(_item(
+                warning,
+                "Track order is ambiguous. Confirm track order before approval.",
             ))
         else:
             target.append(_item(warning, warning.replace("_", " ").capitalize()))
@@ -140,7 +151,7 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
                     source_folder=source,
                 ))
     elif detected_type == "video_movie":
-        # Determine resolved review_type — preserve movie_collection if set
+        # Determine resolved review_type â€” preserve movie_collection if set
         existing_review_type = str(meta.get("review_type") or "")
         has_movie_items = bool(meta.get("movie_items"))
         if existing_review_type == "movie_collection" or has_movie_items:
@@ -172,7 +183,7 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
                 if _all_same_movie(video_files):
                     non_blocking.append(_item(
                         "multiple_movie_editions",
-                        f"{video_file_count} video files detected — looks like multiple editions or versions of the same movie.",
+                        f"{video_file_count} video files detected â€” looks like multiple editions or versions of the same movie.",
                     ))
                 else:
                     blocking.append(_item(
@@ -309,7 +320,7 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
                     episode_code=code,
                 ))
 
-        # Unresolved video files — each is a blocking item with no safe destination
+        # Unresolved video files â€” each is a blocking item with no safe destination
         for unresolved in meta.get("unresolved_video_files", []):
             source_file = unresolved.get("source_file")
             blocking.append(_item(
@@ -318,7 +329,7 @@ def build_review_state(detected_type: str, metadata: dict | None) -> dict:
                 file_name=source_file,
             ))
 
-        # Special episodes — check for missing labels and duplicate labels
+        # Special episodes â€” check for missing labels and duplicate labels
         special_labels_seen: dict[str, list[str]] = {}
         for special in meta.get("special_episodes", []):
             source_file = special.get("source_file")

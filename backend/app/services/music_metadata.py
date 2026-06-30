@@ -61,7 +61,7 @@ DISCOGRAPHY_TOKENS = {
     "albums",
     "studio albums",
 }
-DISCOGRAPHY_YEAR_RANGE = re.compile(r"(?<!\d)(19\d{2}|20\d{2})\s*[-–]\s*(19\d{2}|20\d{2})(?!\d)")
+DISCOGRAPHY_YEAR_RANGE = re.compile(r"(?<!\d)(19\d{2}|20\d{2})\s*[-ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“]\s*(19\d{2}|20\d{2})(?!\d)")
 DISCOGRAPHY_FORMAT_TAG = re.compile(
     r"(?i)(?:[\[(]\s*)?(flac(?:\s+songs)?|mp3|320\s*kbps|(?:16|24)\s*bit|"
     r"(?:44[.]1|48)\s*khz)(?:\s*[\])])?"
@@ -218,11 +218,191 @@ def _positive_int(value, default: int | None = None) -> int | None:
     return parsed if parsed > 0 else default
 
 
+
+
+def _filename_track_numbers(filename: str) -> tuple[int | None, int | None, str | None]:
+    name = Path(str(filename or "")).stem
+    combined = re.match(r"^\s*0*(\d{1,3})\s*-\s*0*(\d{1,3})\b", name)
+    if combined:
+        return int(combined.group(1)), int(combined.group(2)), "combined_disc_track_filename_prefix"
+    single = re.match(r"^\s*0*(\d{1,3})\s*(?:[-._\s]+|$)", name)
+    if single:
+        return None, int(single.group(1)), "filename_prefix"
+    return None, None, None
+
+
+def _embedded_track_number(metadata: dict | None) -> tuple[int | None, str | None]:
+    metadata = metadata or {}
+    raw_track = metadata.get("tracknumber")
+    if raw_track in (None, ""):
+        return None, None
+    parsed = _positive_int(raw_track)
+    if parsed is None:
+        return None, "invalid_tracknumber"
+    combined = re.match(r"^\s*(\d+)\s*-\s*(\d+)", str(raw_track or ""))
+    if combined:
+        return int(combined.group(2)), None
+    return parsed, None
+
+
+def track_number_evidence(metadata: dict | None, filename: str) -> dict:
+    metadata = metadata or {}
+    filename_disc, filename_track, filename_source = _filename_track_numbers(filename)
+    embedded_track, embedded_warning = _embedded_track_number(metadata)
+    raw_disc = metadata.get("discnumber")
+    disc = filename_disc or _positive_int(raw_disc, 1) or 1
+    warnings: list[str] = []
+    if embedded_warning:
+        warnings.append(embedded_warning)
+    if filename_track is not None and embedded_track is not None and filename_track != embedded_track:
+        warnings.append("filename_embedded_tracknumber_mismatch")
+    if filename_track is not None and embedded_track is None:
+        warnings.append("missing_tracknumber_but_filename_available")
+
+    if filename_track is not None and warnings:
+        resolved_track = filename_track
+        preferred_source = filename_source or "filename_prefix"
+        confidence = 0.9
+    elif embedded_track is not None:
+        resolved_track = embedded_track
+        preferred_source = "embedded_tracknumber"
+        confidence = 0.86
+    elif filename_track is not None:
+        resolved_track = filename_track
+        preferred_source = filename_source or "filename_prefix"
+        confidence = 0.8
+    else:
+        resolved_track = None
+        preferred_source = "fallback_position"
+        confidence = 0.35
+
+    return {
+        "filename_track": filename_track,
+        "embedded_track": embedded_track,
+        "resolved_track": resolved_track,
+        "disc": disc,
+        "preferred_source": preferred_source,
+        "confidence": confidence,
+        "warnings": list(dict.fromkeys(warnings)),
+    }
+
+
+def _metadata_for_track_item(item) -> dict:
+    if isinstance(item, dict):
+        return item
+    return getattr(item, "metadata_json", None) or {}
+
+
+def _filename_for_track_item(item, metadata: dict) -> str:
+    return str(getattr(item, "file_name", "") or metadata.get("source_filename") or "")
+
+
+def find_music_track_number_conflicts(files: list) -> dict:
+    evidences: list[dict] = []
+    embedded_by_disc: dict[int, list[int]] = {}
+    for item in files:
+        metadata = _metadata_for_track_item(item)
+        filename = _filename_for_track_item(item, metadata)
+        evidence = dict(metadata.get("track_number_evidence") or track_number_evidence(metadata, filename))
+        evidences.append(evidence)
+        embedded = evidence.get("embedded_track")
+        if embedded is not None:
+            disc = int(evidence.get("disc") or 1)
+            embedded_by_disc.setdefault(disc, []).append(int(embedded))
+
+    duplicate_embedded = sorted({
+        number
+        for values in embedded_by_disc.values()
+        for number, count in Counter(values).items()
+        if count > 1
+    })
+    mismatch_count = sum(
+        1 for evidence in evidences
+        if "filename_embedded_tracknumber_mismatch" in evidence.get("warnings", [])
+    )
+    missing_with_filename_count = sum(
+        1 for evidence in evidences
+        if "missing_tracknumber_but_filename_available" in evidence.get("warnings", [])
+    )
+    invalid_count = sum(
+        1 for evidence in evidences
+        if "invalid_tracknumber" in evidence.get("warnings", [])
+    )
+    filename_preferred_count = sum(
+        1 for evidence in evidences
+        if str(evidence.get("preferred_source") or "").startswith("filename")
+        or evidence.get("preferred_source") == "combined_disc_track_filename_prefix"
+    )
+    ambiguous_count = sum(
+        1 for evidence in evidences
+        if evidence.get("resolved_track") is None
+        or "track_order_ambiguous" in evidence.get("warnings", [])
+    )
+    conflict_count = (
+        mismatch_count
+        + missing_with_filename_count
+        + invalid_count
+        + len(duplicate_embedded)
+    )
+    return {
+        "conflict_count": conflict_count,
+        "duplicate_embedded_track_numbers": duplicate_embedded,
+        "filename_embedded_mismatch_count": mismatch_count,
+        "missing_tracknumber_but_filename_available_count": missing_with_filename_count,
+        "invalid_tracknumber_count": invalid_count,
+        "filename_preferred_count": filename_preferred_count,
+        "ambiguous_count": ambiguous_count,
+    }
+
+
+def apply_track_number_conflict_warnings(metadata: dict, files: list) -> dict:
+    summary_files = []
+    for item in files:
+        item_metadata = _metadata_for_track_item(item)
+        filename = _filename_for_track_item(item, item_metadata)
+        evidence = track_number_evidence(item_metadata, filename)
+        item_metadata["track_number_evidence"] = evidence
+        if hasattr(item, "metadata_json"):
+            item.metadata_json = item_metadata
+        summary_files.append(item)
+
+    summary = find_music_track_number_conflicts(summary_files)
+    duplicate_numbers = set(summary.get("duplicate_embedded_track_numbers") or [])
+    for item in summary_files:
+        item_metadata = _metadata_for_track_item(item)
+        evidence = dict(item_metadata.get("track_number_evidence") or {})
+        if evidence.get("embedded_track") in duplicate_numbers:
+            warnings = list(evidence.get("warnings") or [])
+            warnings.append("duplicate_embedded_tracknumber")
+            if evidence.get("filename_track") is not None:
+                evidence["resolved_track"] = evidence["filename_track"]
+                evidence["preferred_source"] = "filename_prefix"
+                warnings.append("track_order_source_filename_preferred")
+            else:
+                warnings.append("track_order_ambiguous")
+            evidence["warnings"] = list(dict.fromkeys(warnings))
+            item_metadata["track_number_evidence"] = evidence
+            if hasattr(item, "metadata_json"):
+                item.metadata_json = item_metadata
+
+    summary = find_music_track_number_conflicts(summary_files)
+    metadata["track_number_conflicts"] = summary
+    warnings = list(metadata.get("metadata_warnings") or [])
+    if summary.get("conflict_count", 0) > 0:
+        warnings.append("track_number_conflict_detected")
+    if summary.get("ambiguous_count", 0) > 0 and not summary.get("filename_preferred_count", 0):
+        warnings.append("track_order_ambiguous")
+    metadata["metadata_warnings"] = list(dict.fromkeys(warnings))
+    return metadata
+
 def music_track_numbers(
     metadata: dict | None,
     filename: str = "",
 ) -> tuple[int, int | None]:
     metadata = metadata or {}
+    evidence = metadata.get("track_number_evidence") if isinstance(metadata, dict) else None
+    if isinstance(evidence, dict) and evidence.get("resolved_track") is not None:
+        return int(evidence.get("disc") or 1), int(evidence["resolved_track"])
     raw_disc = metadata.get("discnumber")
     raw_track = str(metadata.get("tracknumber") or "").strip()
     disc = _positive_int(raw_disc, 1) or 1
@@ -268,7 +448,7 @@ def normalize_key(value: str) -> str:
 def canonical_text_key(value: str) -> str:
     """Normalize text for duplicate comparison, not display."""
     normalized = str(value or "").lower().replace("_", " ")
-    normalized = re.sub(r"['’]", "", normalized)
+    normalized = re.sub(r"['ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢]", "", normalized)
     normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
     return re.sub(r"\s+", " ", normalized).strip()
 

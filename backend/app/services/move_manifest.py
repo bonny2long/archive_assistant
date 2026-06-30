@@ -810,7 +810,8 @@ def write_move_manifest(
         "tracks": [
             {
                 "track_number": (
-                    (item.metadata_json or {}).get("tracknumber")
+                    ((item.metadata_json or {}).get("track_number_evidence") or {}).get("resolved_track")
+                    or (item.metadata_json or {}).get("tracknumber")
                 ),
                 "disc_number": (
                     (item.metadata_json or {}).get("discnumber")
@@ -819,6 +820,7 @@ def write_move_manifest(
                 "track_artist": (item.metadata_json or {}).get("artist"),
                 "file_name": item.file_name,
                 "format": item.extension.lstrip(".").upper(),
+                "track_number_evidence": (item.metadata_json or {}).get("track_number_evidence"),
             }
             for item in batch.files
             if batch.detected_type in {

@@ -20,6 +20,7 @@ from app.services.music_metadata import (
     common_track_artist,
     evaluate_music_album_metadata,
     extract_music_metadata,
+    apply_track_number_conflict_warnings,
     has_mixed_track_artists,
     is_audio_file,
     is_artwork_file,
@@ -78,6 +79,7 @@ from app.services.book_metadata import (
     parse_book_name,
 )
 from app.services.audiobook_metadata import (
+    build_audiobook_file_metadata,
     build_audiobook_metadata,
     collect_audiobook_files,
     has_explicit_audiobook_signal,
@@ -490,7 +492,7 @@ def _tv_batch_data(source: Path) -> dict | None:
         for path in files["subtitles"]
     ]
 
-    # TV warning details — per-file information for actionable warnings
+    # TV warning details: per-file information for actionable warnings
     unparsed_video_files = [
         {
             "source_file": metadata["source_file"],
@@ -1289,7 +1291,23 @@ def _create_audiobook_batch(db: Session, source: Path) -> IngestBatch | None:
         + [(path, "audiobook_artwork") for path in files["artwork"]]
         + [(path, "audiobook_sidecar") for path in files["sidecars"]]
     )
+    embedded_artwork_count = 0
+    embedded_artwork_files: list[str] = []
     for path, role in roles:
+        file_metadata = (
+            build_audiobook_file_metadata(path)
+            if role == "audiobook_audio"
+            else None
+        )
+        if file_metadata:
+            file_embedded_artwork_count = int(
+                file_metadata.get("embedded_artwork_count") or 0
+            )
+            if file_embedded_artwork_count:
+                embedded_artwork_count += file_embedded_artwork_count
+                embedded_artwork_files.append(
+                    str(path.relative_to(source)) if source.is_dir() else path.name
+                )
         db.add(IngestFile(
             batch_id=batch.id,
             file_path=str(path),
@@ -1298,8 +1316,13 @@ def _create_audiobook_batch(db: Session, source: Path) -> IngestBatch | None:
             size_bytes=path.stat().st_size,
             checksum=None,
             detected_role=role,
-            metadata_json=None,
+            metadata_json=file_metadata,
         ))
+    if embedded_artwork_count:
+        metadata["embedded_artwork_count"] = embedded_artwork_count
+        metadata["embedded_artwork_files"] = embedded_artwork_files
+        metadata["artwork_count"] = int(metadata.get("artwork_count") or 0) + embedded_artwork_count
+        batch.metadata_json = metadata
     db.commit()
     db.refresh(batch)
     write_json_report(settings.reports_dir, batch.id, metadata)
@@ -1841,6 +1864,17 @@ def _create_discography_batch(
         child_blocking = "album_missing_title" in child_warnings
         artwork_paths = _artwork_files(child)
         ignored_sidecars = _ignored_music_sidecars(child)
+        child_conflict_metadata = {"metadata_warnings": child_warnings}
+        apply_track_number_conflict_warnings(
+            child_conflict_metadata,
+            [file_metadata[str(path)] for path in paths],
+        )
+        child_warnings = list(child_conflict_metadata.get("metadata_warnings") or [])
+        if "track_number_conflict_detected" in child_warnings:
+            warnings.append("track_number_conflict_detected")
+        if "track_order_ambiguous" in child_warnings:
+            warnings.append("track_order_ambiguous")
+        child_blocking = child_blocking or "track_order_ambiguous" in child_warnings
         album_candidates, track_candidates = build_music_metadata_candidates(
             child,
             track_metadata,
@@ -1874,6 +1908,7 @@ def _create_discography_batch(
                     "warning" if child_warnings else "ready"
                 ),
                 "warnings": list(dict.fromkeys(child_warnings)),
+                "track_number_conflicts": child_conflict_metadata.get("track_number_conflicts"),
                 "release_tags_removed": release_tags,
                 "metadata_candidates": album_candidates,
                 "track_candidates": track_candidates,
@@ -2214,6 +2249,7 @@ def scan_music_ingest(
 
     for path in audio_files:
         metadata = extract_music_metadata(path)
+        metadata["source_filename"] = path.name
         file_metadata[str(path)] = metadata
         file_checksums[str(path)] = file_sha256(path)
 
@@ -2422,6 +2458,16 @@ def scan_music_ingest(
         if not new_paths:
             skipped_duplicates += 1
             continue
+
+        album_meta = apply_track_number_conflict_warnings(
+            album_meta,
+            [file_metadata[str(path)] for path in paths],
+        )
+        if "track_order_ambiguous" in album_meta.get("metadata_warnings", []):
+            album_meta["metadata_quality"] = "weak"
+            album_meta["confidence"] = min(float(album_meta.get("confidence") or 0.6), 0.6)
+            quality["metadata_quality"] = "weak"
+            quality["confidence"] = min(float(quality.get("confidence") or 0.6), 0.6)
 
         status = "pending_review"
         if quality["metadata_quality"] == "weak":

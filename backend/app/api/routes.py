@@ -2032,6 +2032,8 @@ def _batch_to_summary(
         format=meta.get("format") or ", ".join(meta.get("format_summary", [])) or "MP3",
         track_count=meta.get("track_count", 0),
         artwork_count=meta.get("artwork_count", 0),
+        embedded_artwork_count=meta.get("embedded_artwork_count", 0),
+        embedded_artwork_files=list(meta.get("embedded_artwork_files") or []),
         ignored_sidecar_count=meta.get("ignored_sidecar_count", 0),
         subtitle_count=meta.get("subtitle_count", 0),
         video_file_count=meta.get("video_file_count", 0),

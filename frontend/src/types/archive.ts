@@ -87,6 +87,8 @@ export type BatchSummary = {
   format?: string | null;
   track_count: number;
   artwork_count: number;
+  embedded_artwork_count?: number;
+  embedded_artwork_files?: string[];
   ignored_sidecar_count: number;
   subtitle_count: number;
   video_file_count: number;

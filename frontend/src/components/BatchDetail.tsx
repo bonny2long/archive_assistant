@@ -966,7 +966,15 @@ function AudiobookBatchDetail({ batch, moveSummary }: Props) {
             <div><dt>Series index</dt><dd>{String(metadata.series_index ?? "-")}</dd></div>
             <div><dt>Format</dt><dd>{String(metadata.format ?? "-")}</dd></div>
             <div><dt>Audio files</dt><dd>{String(metadata.audiobook_file_count ?? audioFiles.length)}</dd></div>
-            <div><dt>Artwork</dt><dd>{String(metadata.artwork_count ?? 0)}</dd></div>
+            <div>
+              <dt>Artwork</dt>
+              <dd>
+                {String(metadata.artwork_count ?? 0)}
+                {metadata.embedded_artwork_count
+                  ? ` (${metadata.embedded_artwork_count} embedded)`
+                  : ""}
+              </dd>
+            </div>
           </dl>
         </section>
         <section className="library-card">

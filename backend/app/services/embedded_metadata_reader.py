@@ -66,6 +66,7 @@ class EmbeddedMetadataResult:
     media_type: str
     fields: dict[str, Any] = field(default_factory=dict)
     technical: dict[str, Any] = field(default_factory=dict)
+    artwork: list[dict[str, Any]] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     read_ok: bool = False
 
@@ -136,6 +137,73 @@ def _technical(media: Any, path: Path) -> dict[str, Any]:
     return technical
 
 
+def _artwork_size(value: Any) -> int | None:
+    data = getattr(value, "data", None)
+    if isinstance(data, bytes):
+        return len(data)
+    if isinstance(value, bytes):
+        return len(value)
+    return None
+
+
+def _artwork_mime(value: Any) -> str | None:
+    mime = getattr(value, "mime", None) or getattr(value, "mime_type", None)
+    if mime:
+        return str(mime)
+    imageformat = getattr(value, "imageformat", None)
+    if imageformat:
+        return f"image/{str(imageformat).lower()}"
+    if isinstance(value, bytes):
+        if value.startswith(b"\xff\xd8\xff"):
+            return "image/jpeg"
+        if value.startswith(b"\x89PNG\r\n\x1a\n"):
+            return "image/png"
+    return None
+
+
+def _embedded_artwork(tags: Any) -> list[dict[str, Any]]:
+    if tags is None:
+        return []
+    values: list[tuple[str, Any]] = []
+    try:
+        items = list(tags.items())
+    except (AttributeError, TypeError, ValueError):
+        items = []
+    for key, value in items:
+        key_text = str(key)
+        if (
+            key_text.startswith("APIC")
+            or key_text == "covr"
+            or key_text.startswith("metadata_block_picture")
+        ):
+            if isinstance(value, (list, tuple)):
+                values.extend((key_text, item) for item in value)
+            else:
+                values.append((key_text, value))
+    pictures = getattr(tags, "pictures", None)
+    if pictures:
+        values.extend(("picture", item) for item in pictures)
+
+    artwork: list[dict[str, Any]] = []
+    for index, (source, value) in enumerate(values, start=1):
+        item: dict[str, Any] = {
+            "index": index,
+            "source": source,
+            "embedded": True,
+        }
+        mime = _artwork_mime(value)
+        if mime:
+            item["mime_type"] = mime
+        size = _artwork_size(value)
+        if size is not None:
+            item["size_bytes"] = size
+        description = getattr(value, "desc", None)
+        if description:
+            item["description"] = str(description)
+        artwork.append(item)
+    return artwork
+
+
 def read_embedded_metadata(
     path: str | Path,
     media_type: str | None = None,
@@ -162,6 +230,7 @@ def read_embedded_metadata(
         return result
     try:
         media = MutagenFile(str(file_path), easy=True)
+        media_full = MutagenFile(str(file_path), easy=False)
     except Exception as exc:
         result.warnings.append(f"embedded_metadata_read_error:{type(exc).__name__}")
         return result
@@ -187,7 +256,10 @@ def read_embedded_metadata(
         result.fields["total_discs"] = total_discs
 
     result.technical.update(_technical(media, file_path))
-    result.read_ok = bool(result.fields or len(result.technical) > 1)
+    result.artwork = _embedded_artwork(getattr(media_full, "tags", None))
+    if result.artwork:
+        result.technical["embedded_artwork_count"] = len(result.artwork)
+    result.read_ok = bool(result.fields or result.artwork or len(result.technical) > 1)
     if not result.fields:
         result.warnings.append("embedded_metadata_tags_empty")
     return result
@@ -258,6 +330,7 @@ def apply_embedded_metadata_evidence(
         "media_type": result.media_type,
         "fields": result.fields,
         "technical": result.technical,
+        "artwork": result.artwork,
         "warnings": result.warnings,
     }
     metadata["embedded_metadata_fields"] = result.fields

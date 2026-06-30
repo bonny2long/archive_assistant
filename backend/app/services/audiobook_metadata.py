@@ -10,6 +10,10 @@ from app.services.metadata_candidates import (
     make_candidate,
     preferred_candidate_value,
 )
+from app.services.embedded_metadata_reader import (
+    apply_embedded_metadata_evidence,
+    read_embedded_metadata,
+)
 
 AUDIOBOOK_EXTENSIONS = {
     ".mp3", ".m4b", ".m4a", ".aac", ".flac", ".wav", ".ogg", ".opus",
@@ -353,6 +357,54 @@ def extract_audio_metadata(path: Path) -> dict:
         if value
     }
 
+
+
+
+def build_audiobook_file_metadata(path: Path) -> dict:
+    embedded = read_embedded_metadata(path, media_type="audiobook_audio")
+    fields = embedded.fields
+    technical = embedded.technical
+    metadata = {
+        "media_kind": "audiobook_audio",
+        "extension": path.suffix.lower(),
+        "embedded_metadata": {
+            "read_ok": embedded.read_ok,
+            "media_type": embedded.media_type,
+            "fields": dict(fields),
+            "technical": dict(technical),
+            "artwork": list(embedded.artwork),
+            "warnings": list(embedded.warnings),
+        },
+        "embedded_metadata_fields": dict(fields),
+        "embedded_technical": dict(technical),
+        "embedded_artwork": list(embedded.artwork),
+        "embedded_artwork_count": len(embedded.artwork),
+        "extraction_warnings": list(embedded.warnings),
+    }
+    values = {
+        "title": fields.get("title"),
+        "author": fields.get("album_artist") or fields.get("artist"),
+        "album": fields.get("album"),
+        "narrator": fields.get("narrator"),
+        "tracknumber": fields.get("track_number"),
+        "discnumber": fields.get("disc_number"),
+        "duration_seconds": technical.get("duration_seconds"),
+        "bitrate": technical.get("bitrate"),
+        "sample_rate": technical.get("sample_rate"),
+        "container": technical.get("container"),
+    }
+    metadata.update({key: value for key, value in values.items() if value is not None})
+    apply_embedded_metadata_evidence(
+        metadata,
+        embedded,
+        field_map={
+            "album_artist": "author",
+            "artist": "author",
+            "track_number": "tracknumber",
+            "disc_number": "discnumber",
+        },
+    )
+    return metadata
 
 def build_audiobook_metadata_candidates(
     source: Path,

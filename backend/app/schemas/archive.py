@@ -27,6 +27,8 @@ class BatchSummary(BaseModel):
     format: str | None = None
     track_count: int = 0
     artwork_count: int = 0
+    embedded_artwork_count: int = 0
+    embedded_artwork_files: list[str] = Field(default_factory=list)
     ignored_sidecar_count: int = 0
     subtitle_count: int = 0
     video_file_count: int = 0

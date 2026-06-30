@@ -11,6 +11,7 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from app.services.embedded_metadata_reader import (  # noqa: E402
     EmbeddedMetadataResult,
+    _embedded_artwork,
     _tag_value,
     apply_embedded_metadata_evidence,
     embedded_field_envelopes,
@@ -45,6 +46,7 @@ def main() -> None:
         media_type="music_album",
         fields={"artist": "Embedded Artist", "album": "Embedded Album"},
         technical={"duration_seconds": 123.4},
+        artwork=[{"index": 1, "source": "APIC:", "mime_type": "image/jpeg", "size_bytes": 4}],
         warnings=[],
         read_ok=True,
     )
@@ -72,6 +74,23 @@ def main() -> None:
     assert fields["embedded_artist"]["value"] == "Embedded Artist"
     assert metadata["metadata_conflicts"][0]["field"] == "artist"
 
+    class FakeTags:
+        def items(self):
+            picture = type(
+                "Picture",
+                (),
+                {"mime": "image/jpeg", "data": b"1234"},
+            )()
+            return [("APIC:", picture)]
+
+    artwork = _embedded_artwork(FakeTags())
+    assert artwork == [{
+        "index": 1,
+        "source": "APIC:",
+        "embedded": True,
+        "mime_type": "image/jpeg",
+        "size_bytes": 4,
+    }]
     header = metadata_manifest_header(
         manifest_type="embedded_metadata_check",
         manifest_version="v1",
