@@ -6,9 +6,11 @@ from sqlalchemy.orm import selectinload
 from app.core.config import settings
 from app.db.session import Base, SessionLocal, engine
 from app.models import archive  # noqa: F401
+from app.models import media_metadata  # noqa: F401
 from app.models.archive import IngestBatch
 from app.services.music_metadata import build_suggested_metadata, suggest_music_destination
 from app.services.video_metadata import safe_movie_path_part, safe_tv_path_part
+from app.services.metadata_database import seed_genre_taxonomy
 
 
 def _backfill_suggested_metadata() -> None:
@@ -103,6 +105,9 @@ def init_db():
     ):
         directory.mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(bind=engine)
+    with SessionLocal() as db:
+        seed_genre_taxonomy(db)
+        db.commit()
     columns = {column["name"] for column in inspect(engine).get_columns("ingest_batches")}
     with engine.begin() as connection:
         if "suggested_metadata" not in columns:

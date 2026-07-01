@@ -56,6 +56,7 @@ from app.services.video_metadata import (
     useful_movie_name,
 )
 from app.services.review_state import build_review_state
+from app.services.metadata_database import snapshot_batch_metadata
 from app.services.metadata_inheritance import (
     apply_discography_inheritance,
     apply_music_inheritance,
@@ -2059,6 +2060,8 @@ def _create_discography_batch(
     for ingest_file in sort_music_tracks(ingest_files):
         ingest_file.batch_id = batch.id
         db.add(ingest_file)
+    db.flush()
+    snapshot_batch_metadata(db, batch)
     db.commit()
     db.refresh(batch)
     write_json_report(settings.reports_dir, batch.id, metadata)
@@ -2537,6 +2540,8 @@ def scan_music_ingest(
                 }
             )
 
+        db.flush()
+        snapshot_batch_metadata(db, batch)
         db.commit()
         db.refresh(batch)
         write_json_report(settings.reports_dir, batch.id, album_meta)
