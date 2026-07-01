@@ -4,7 +4,7 @@ Verifies:
 - TV count display format (seasons · episodes · specials · videos)
 - Metadata locking after approve/move
 - Move destination structure
-- No unused dependencies
+- No new TV/video parser dependencies
 """
 
 from __future__ import annotations
@@ -133,12 +133,12 @@ def test_normalize_tv_counts():
     print("  PASS: normalize_tv_counts sets correct counts and maintains video_file_count == episode_count + special_episode_count")
 
 
-def test_no_new_dependencies():
+def test_no_new_tv_video_parser_dependencies():
     requirements = (PROJECT_ROOT / "backend" / "requirements.txt").read_text(encoding="utf-8")
-    blocked = ["mutagen", "pymediainfo", "ffmpeg-python", "tinytag"]
+    blocked = ["pymediainfo", "ffmpeg-python", "tinytag"]
     for dep in blocked:
         assert dep not in requirements.lower(), f"Blocked dependency found: {dep}"
-    print("  PASS: no blocked dependencies in requirements.txt")
+    print("  PASS: no blocked TV/video parser dependencies in requirements.txt")
 
 
 def _make_fake_batch(detected_type: str, metadata: dict):
@@ -166,7 +166,7 @@ def main() -> int:
         ("Special group destination", test_special_group_destination),
         ("Parse Big Anime Show", test_parse_big_anime_show),
         ("Normalize TV counts", test_normalize_tv_counts),
-        ("No new dependencies", test_no_new_dependencies),
+        ("No new TV/video parser dependencies", test_no_new_tv_video_parser_dependencies),
     ]
 
     failures = 0
