@@ -26,6 +26,7 @@ type Props = {
   onQuarantine: (id: number) => void;
   onRestoreQuarantine: (id: number) => void;
   onEdit: (batch: BatchSummary) => void;
+  onOpenWorkspace: (batch: BatchSummary) => void;
 };
 
 function confidenceColor(percent: number): string {
@@ -93,6 +94,7 @@ export default function BatchRow({
   onQuarantine,
   onRestoreQuarantine,
   onEdit,
+  onOpenWorkspace,
 }: Props) {
   const awaitingQuarantine = batch.status === "needs_quarantine_review";
   const quarantined = batch.status === "quarantined";
@@ -104,6 +106,7 @@ export default function BatchRow({
   const editKind = getBatchEditKind(batch);
   const year = batch.year ?? "-";
   const percent = Math.round((batch.confidence ?? 0) * 100);
+  const canOpenWorkspace = batch.status !== "moved" && !quarantineReview;
 
   return (
     <>
@@ -201,6 +204,16 @@ export default function BatchRow({
           >
             <i className="ti ti-pencil" />
           </button>
+          {canOpenWorkspace && (
+            <button
+              className="btn-sm"
+              title="Open Review Workspace"
+              style={{ color: "var(--accent-blue)" }}
+              onClick={(event) => { event.stopPropagation(); onOpenWorkspace(batch); }}
+            >
+              <i className="ti ti-layout-sidebar" />
+            </button>
+          )}
           <button
             className="btn-sm"
             title="Send to recovery"

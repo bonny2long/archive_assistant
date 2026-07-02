@@ -17,6 +17,7 @@ import type {
   TabKey,
   TvMetadataUpdate,
   TvEpisodeReviewUpdate,
+  UniversalReviewActionUpdate,
 } from "./types/archive";
 import { api } from "./api/client";
 import ActionBar from "./components/ActionBar";
@@ -27,6 +28,7 @@ import Toast from "./components/Toast";
 import LibrarySummary from "./components/LibrarySummary";
 import BulkApproveModal from "./components/BulkApproveModal";
 import MediaReviewRouter from "./components/MediaReviewRouter";
+import ReviewWorkspace from "./components/ReviewWorkspace";
 import {
   archiveTimezone,
   configureArchiveTimezone,
@@ -70,6 +72,7 @@ export default function App() {
   const [toast, setToast] = useState<ToastState | null>(null);
   const [loadingAction, setLoadingAction] = useState<ActionKey | null>(null);
   const [editingBatch, setEditingBatch] = useState<BatchSummary | null>(null);
+  const [workspaceBatch, setWorkspaceBatch] = useState<BatchSummary | null>(null);
   const [savingMetadata, setSavingMetadata] = useState(false);
   const [devToolsEnabled, setDevToolsEnabled] = useState(false);
   const [librarySummary, setLibrarySummary] = useState<LibrarySummaryData>(EMPTY_LIBRARY_SUMMARY);
@@ -230,6 +233,7 @@ export default function App() {
   };
 
   const selectedBatches = batches.filter((batch) => selected.has(batch.id));
+  const workspaceDetail = workspaceBatch ? details[workspaceBatch.id] : null;
 
   const handleLoadDetail = async (id: number) => {
     if (details[id] || detailLoading.has(id)) return;
@@ -260,6 +264,18 @@ export default function App() {
         return next;
       });
     }
+  };
+  const handleOpenWorkspace = async (batch: BatchSummary) => {
+    setWorkspaceBatch(batch);
+    await handleLoadDetail(batch.id);
+  };
+
+  const handleWorkspaceAction = async (batchId: number, update: UniversalReviewActionUpdate) => {
+    await api.createUniversalIngestionAction(batchId, update);
+  };
+
+  const handleWorkspaceClearAction = async (batchId: number, actionId: number) => {
+    await api.clearUniversalIngestionAction(batchId, actionId);
   };
 
   const handleApprove = async (id: number) => {
@@ -744,6 +760,7 @@ export default function App() {
           onQuarantine={(id) => void handleQuarantine(id)}
           onRestoreQuarantine={(id) => void handleRestoreQuarantine(id)}
           onEdit={setEditingBatch}
+          onOpenWorkspace={(batch) => void handleOpenWorkspace(batch)}
           onBulkApprove={() => {
             setShowBulkApprove(true);
             return Promise.resolve();
@@ -770,6 +787,25 @@ export default function App() {
           type={toast.type}
           visible
           onHide={() => setToast(null)}
+        />
+      )}
+      {workspaceBatch && !workspaceDetail && (
+        <div className="review-workspace" role="dialog" aria-modal="true" aria-label="Review Workspace loading">
+          <div className="review-workspace__state">
+            <i className="ti ti-loader-2 spinner" /> Loading Review Workspace...
+          </div>
+        </div>
+      )}
+      {workspaceBatch && workspaceDetail && (
+        <ReviewWorkspace
+          batch={workspaceDetail}
+          onClose={() => setWorkspaceBatch(null)}
+          onSaveAction={handleWorkspaceAction}
+          onClearAction={handleWorkspaceClearAction}
+          onApprove={async (batchId) => {
+            await handleApprove(batchId);
+            setWorkspaceBatch(null);
+          }}
         />
       )}
       {editingBatch && (

@@ -933,6 +933,22 @@ export type TvEpisodeReviewUpdate = {
 
 export type TabKey = "all" | "pending" | "needs_metadata" | "quarantine" | "approved" | "moved";
 
+export type WorkspaceCandidateState = "blocked" | "review" | "safe" | "approved";
+
+export type WorkspaceFilter =
+  | "all"
+  | "blocked"
+  | "review"
+  | "safe"
+  | "music"
+  | "audiobook"
+  | "ebook"
+  | "comic"
+  | "movie"
+  | "tv"
+  | "artwork"
+  | "unknown";
+
 export interface RoutingDecision {
   batch_id: number;
   decision: "music_editor_allowed" | "universal_review_required" | "universal_review_recommended" | "blocked_conflict" | "not_analyzed";
