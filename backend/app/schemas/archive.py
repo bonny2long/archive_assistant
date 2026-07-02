@@ -43,6 +43,122 @@ class BatchMetadataQualityOut(BaseModel):
     flag_counts: dict[str, int] = Field(default_factory=dict)
     items: list[MetadataQualityDecisionOut] = Field(default_factory=list)
 
+
+class UniversalIngestionSummaryOut(BaseModel):
+    source_fragment_count: int = 0
+    candidate_count: int = 0
+    member_count: int = 0
+    mixed_media_flag_count: int = 0
+    decision_counts: dict[str, int] = Field(default_factory=dict)
+    media_class_counts: dict[str, int] = Field(default_factory=dict)
+    worst_decision: str = "safe_group"
+
+
+class SourceFragmentOut(BaseModel):
+    id: int
+    batch_id: int
+    fragment_group_key: str | None = None
+    source_root: str
+    source_path: str
+    fragment_label: str | None = None
+    file_count: int = 0
+    media_class_counts: dict[str, int] = Field(default_factory=dict)
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    @field_serializer("created_at", "updated_at")
+    def serialize_fragment_time(self, value: datetime | None) -> str | None:
+        return serialize_utc(value) if value else None
+
+
+class CandidateMemberOut(BaseModel):
+    id: int
+    candidate_id: int
+    media_file_id: int | None = None
+    ingest_file_id: int | None = None
+    relative_path: str
+    filename: str
+    extension: str | None = None
+    media_class: str
+    size_bytes: int | None = None
+    duration_seconds: str | None = None
+    track_number: str | None = None
+    disc_number: str | None = None
+    season_number: str | None = None
+    episode_number: str | None = None
+    title: str | None = None
+    artist_or_author: str | None = None
+    album_or_series: str | None = None
+    member_role: str
+    confidence: float | None = None
+    reason: str | None = None
+
+
+class MediaIdentityCandidateOut(BaseModel):
+    id: int
+    batch_id: int
+    candidate_key: str
+    candidate_media_type: str
+    candidate_title: str | None = None
+    candidate_primary_creator: str | None = None
+    candidate_secondary_creator: str | None = None
+    candidate_year: str | None = None
+    candidate_series: str | None = None
+    candidate_series_index: str | None = None
+    candidate_confidence: float = 0.0
+    candidate_confidence_label: str = "Unknown"
+    member_count: int = 0
+    source_fragment_count: int = 0
+    recommended_action: str | None = None
+    summary_reason: str | None = None
+    members: list[CandidateMemberOut] = Field(default_factory=list)
+
+
+class FragmentReconstructionDecisionOut(BaseModel):
+    id: int
+    batch_id: int
+    candidate_id: int | None = None
+    source_fragment_id: int | None = None
+    decision: str
+    severity: str
+    reason: str | None = None
+    recommended_action: str | None = None
+    conflict_flags: list[str] = Field(default_factory=list)
+    created_at: datetime | None = None
+
+    @field_serializer("created_at")
+    def serialize_decision_time(self, value: datetime | None) -> str | None:
+        return serialize_utc(value) if value else None
+
+
+class MixedMediaFlagOut(BaseModel):
+    id: int
+    batch_id: int
+    source_fragment_id: int | None = None
+    candidate_id: int | None = None
+    flag_type: str
+    severity: str
+    message: str
+    media_classes_involved: list[str] = Field(default_factory=list)
+    example_paths: list[str] = Field(default_factory=list)
+    recommended_action: str | None = None
+    created_at: datetime | None = None
+
+    @field_serializer("created_at")
+    def serialize_flag_time(self, value: datetime | None) -> str | None:
+        return serialize_utc(value) if value else None
+
+
+class BatchUniversalIngestionOut(BaseModel):
+    batch_id: int
+    phase: str
+    analysis_status: str = "not_analyzed"
+    summary: UniversalIngestionSummaryOut
+    source_fragments: list[SourceFragmentOut] = Field(default_factory=list)
+    candidates: list[MediaIdentityCandidateOut] = Field(default_factory=list)
+    reconstruction_decisions: list[FragmentReconstructionDecisionOut] = Field(default_factory=list)
+    mixed_media_flags: list[MixedMediaFlagOut] = Field(default_factory=list)
+
 class BatchSummary(BaseModel):
     id: int
     detected_type: str

@@ -1,6 +1,7 @@
 import { Fragment, useState, type ReactNode } from "react";
 import type { BatchMoveSummary, BatchReview, IngestBatch } from "../types/archive";
 import MetadataQualityPanel from "./MetadataQualityPanel";
+import UniversalIngestionPanel from "./UniversalIngestionPanel";
 import { formatArchiveTime } from "../utils/archiveTime";
 import { getBatchDisplayTitle, getReleaseCount, tvCountSummary } from "../utils/batchDisplay";
 
@@ -14,11 +15,11 @@ function isMusicQualityBatch(batch: IngestBatch): boolean {
   return batch.detected_type === "music_album" || batch.detected_type === "music_discography";
 }
 
-function MusicQualityShell({ batch, children }: { batch: IngestBatch; children: ReactNode }) {
-  if (!isMusicQualityBatch(batch)) return <>{children}</>;
+function BatchReviewShell({ batch, children }: { batch: IngestBatch; children: ReactNode }) {
   return (
     <>
-      <MetadataQualityPanel batchId={batch.id} />
+      <UniversalIngestionPanel batchId={batch.id} />
+      {isMusicQualityBatch(batch) && <MetadataQualityPanel batchId={batch.id} />}
       {children}
     </>
   );
@@ -1277,32 +1278,52 @@ export default function BatchDetail({ batch, moveSummary, review }: Props) {
   }
   if (batch.detected_type === "music_discography") {
     return (
-      <MusicQualityShell batch={batch}>
+      <BatchReviewShell batch={batch}>
         <DiscographyBatchDetail batch={batch} moveSummary={moveSummary} />
-      </MusicQualityShell>
+      </BatchReviewShell>
     );
   }
   if (batch.detected_type === "video_movie") {
-    return <MovieBatchDetail batch={batch} moveSummary={moveSummary} />;
+    return (
+      <BatchReviewShell batch={batch}>
+        <MovieBatchDetail batch={batch} moveSummary={moveSummary} />
+      </BatchReviewShell>
+    );
   }
   if (batch.detected_type === "video_tv_show") {
-    return <TvBatchDetail batch={batch} moveSummary={moveSummary} />;
+    return (
+      <BatchReviewShell batch={batch}>
+        <TvBatchDetail batch={batch} moveSummary={moveSummary} />
+      </BatchReviewShell>
+    );
   }
   if (batch.detected_type === "book") {
-    return <BookBatchDetail batch={batch} moveSummary={moveSummary} />;
+    return (
+      <BatchReviewShell batch={batch}>
+        <BookBatchDetail batch={batch} moveSummary={moveSummary} />
+      </BatchReviewShell>
+    );
   }
   if (batch.detected_type === "audiobook") {
-    return <AudiobookBatchDetail batch={batch} moveSummary={moveSummary} />;
+    return (
+      <BatchReviewShell batch={batch}>
+        <AudiobookBatchDetail batch={batch} moveSummary={moveSummary} />
+      </BatchReviewShell>
+    );
   }
   if (batch.status === "moved") {
-    return <MovedBatchDetail batch={batch} moveSummary={moveSummary} />;
+    return (
+      <BatchReviewShell batch={batch}>
+        <MovedBatchDetail batch={batch} moveSummary={moveSummary} />
+      </BatchReviewShell>
+    );
   }
 
   if (batch.status === "pending_review" || batch.status === "needs_metadata_review" || batch.status === "approved") {
     return (
-      <MusicQualityShell batch={batch}>
+      <BatchReviewShell batch={batch}>
         <ReviewBatchDetail batch={batch} moveSummary={moveSummary} review={review} />
-      </MusicQualityShell>
+      </BatchReviewShell>
     );
   }
 

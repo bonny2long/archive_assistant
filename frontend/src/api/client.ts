@@ -5,6 +5,7 @@ import type {
   BatchMoveSummary,
   BatchMetadataQuality,
   BatchReview,
+  BatchUniversalIngestion,
   AudiobookMetadataUpdate,
   BookCollectionReviewUpdate,
   BookMetadataUpdate,
@@ -90,6 +91,8 @@ export const api = {
   getBatchReview: (id: number) => request<BatchReview>(`/batches/${id}/review`),
   getBatchMetadataQuality: (id: number) =>
     request<BatchMetadataQuality>(`/batches/${id}/metadata-quality`),
+  getBatchUniversalIngestion: (id: number, snapshot = false) =>
+    request<BatchUniversalIngestion>(`/batches/${id}/universal-ingestion${snapshot ? "?snapshot=true" : ""}`),
   getBatchMoves: (id: number) => request<BatchMoveSummary>(`/batches/${id}/moves`),
   updateBatchMetadata: (id: number, update: BatchMetadataUpdate) =>
     request<BatchSummary>(`/batches/${id}/metadata`, "PATCH", update),

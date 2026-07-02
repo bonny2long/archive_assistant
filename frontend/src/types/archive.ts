@@ -108,6 +108,118 @@ export type BatchMetadataQuality = {
   flag_counts: Record<string, number>;
   items: MetadataQualityDecision[];
 };
+
+export type UniversalDecisionName =
+  | "safe_group"
+  | "split_recommended"
+  | "merge_recommended"
+  | "review_required"
+  | "blocked_conflict";
+
+export type UniversalIngestionSummary = {
+  source_fragment_count: number;
+  candidate_count: number;
+  member_count: number;
+  mixed_media_flag_count: number;
+  decision_counts: Record<string, number>;
+  media_class_counts: Record<string, number>;
+  worst_decision: UniversalDecisionName;
+};
+
+export type SourceFragment = {
+  id: number;
+  batch_id: number;
+  fragment_group_key?: string | null;
+  source_root: string;
+  source_path: string;
+  fragment_label?: string | null;
+  file_count: number;
+  media_class_counts: Record<string, number>;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type CandidateMember = {
+  id: number;
+  candidate_id: number;
+  media_file_id?: number | null;
+  ingest_file_id?: number | null;
+  relative_path: string;
+  filename: string;
+  extension?: string | null;
+  media_class: string;
+  size_bytes?: number | null;
+  duration_seconds?: string | null;
+  track_number?: string | null;
+  disc_number?: string | null;
+  season_number?: string | null;
+  episode_number?: string | null;
+  title?: string | null;
+  artist_or_author?: string | null;
+  album_or_series?: string | null;
+  member_role: string;
+  confidence?: number | null;
+  reason?: string | null;
+};
+
+export type MediaIdentityCandidate = {
+  id: number;
+  batch_id: number;
+  candidate_key: string;
+  candidate_media_type: string;
+  candidate_title?: string | null;
+  candidate_primary_creator?: string | null;
+  candidate_secondary_creator?: string | null;
+  candidate_year?: string | null;
+  candidate_series?: string | null;
+  candidate_series_index?: string | null;
+  candidate_confidence: number;
+  candidate_confidence_label: string;
+  member_count: number;
+  source_fragment_count: number;
+  recommended_action?: string | null;
+  summary_reason?: string | null;
+  members: CandidateMember[];
+};
+
+export type FragmentReconstructionDecision = {
+  id: number;
+  batch_id: number;
+  candidate_id?: number | null;
+  source_fragment_id?: number | null;
+  decision: UniversalDecisionName;
+  severity: string;
+  reason?: string | null;
+  recommended_action?: string | null;
+  conflict_flags: string[];
+  created_at?: string | null;
+};
+
+export type MixedMediaFlag = {
+  id: number;
+  batch_id: number;
+  source_fragment_id?: number | null;
+  candidate_id?: number | null;
+  flag_type: string;
+  severity: string;
+  message: string;
+  media_classes_involved: string[];
+  example_paths: string[];
+  recommended_action?: string | null;
+  created_at?: string | null;
+};
+
+export type BatchUniversalIngestion = {
+  batch_id: number;
+  phase: string;
+  analysis_status: "not_analyzed" | "analyzed" | string;
+  summary: UniversalIngestionSummary;
+  source_fragments: SourceFragment[];
+  candidates: MediaIdentityCandidate[];
+  reconstruction_decisions: FragmentReconstructionDecision[];
+  mixed_media_flags: MixedMediaFlag[];
+};
+
 export type BatchSummary = {
   id: number;
   detected_type: string;

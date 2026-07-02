@@ -15,6 +15,7 @@ from app.schemas.archive import (
     BatchReview,
     BatchReviewTrack,
     BatchSummary,
+    BatchUniversalIngestionOut,
     AudiobookMetadataUpdate,
     BookCollectionReviewUpdate,
     BookMetadataUpdate,
@@ -70,6 +71,7 @@ from app.services.book_metadata import (
 )
 from app.services.title_display import clean_display_title, destination_title
 from app.services.metadata_quality_gate import get_batch_metadata_quality
+from app.services.universal_ingestion_review import get_batch_universal_ingestion_review
 from app.services.metadata_candidates import (
     METADATA_ASSIST_VERSION,
     normalize_metadata_text,
@@ -429,6 +431,18 @@ def batch_metadata_quality(batch_id: int, db: Session = Depends(get_db)):
     if batch is None:
         raise HTTPException(status_code=404, detail="Batch not found")
     return get_batch_metadata_quality(db, batch_id)
+
+
+@router.get("/batches/{batch_id}/universal-ingestion", response_model=BatchUniversalIngestionOut)
+def batch_universal_ingestion(
+    batch_id: int,
+    snapshot: bool = Query(False),
+    db: Session = Depends(get_db),
+):
+    try:
+        return get_batch_universal_ingestion_review(db, batch_id, snapshot=snapshot)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Batch not found") from exc
 
 @router.patch("/batches/{batch_id}/metadata", response_model=BatchSummary)
 def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Session = Depends(get_db)):
