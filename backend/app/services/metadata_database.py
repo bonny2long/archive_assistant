@@ -561,6 +561,8 @@ def snapshot_ingest_file_metadata(db: Session, ingest_file: IngestFile, batch: I
 
     db.flush()
     _detect_flags(db, media_file=media_file, batch=batch, values=values)
+    from app.services.metadata_quality_gate import snapshot_or_update_quality_decision
+    snapshot_or_update_quality_decision(db, media_file.id)
     return media_file
 
 

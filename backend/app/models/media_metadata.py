@@ -38,6 +38,7 @@ class MediaFile(Base):
     raw_tags: Mapped[list["RawMediaTag"]] = relationship(back_populates="media_file", cascade="all, delete-orphan")
     music_profile: Mapped["NormalizedMusicProfile | None"] = relationship(back_populates="media_file", cascade="all, delete-orphan")
     review_flags: Mapped[list["MetadataReviewFlag"]] = relationship(back_populates="media_file", cascade="all, delete-orphan")
+    quality_decision: Mapped["MetadataQualityDecision | None"] = relationship(back_populates="media_file", cascade="all, delete-orphan")
 
 
 class RawMediaTag(Base):
@@ -157,3 +158,25 @@ class ArtistProfileOverride(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class MetadataQualityDecision(Base):
+    __tablename__ = "metadata_quality_decisions"
+    __table_args__ = (
+        UniqueConstraint("media_file_id", name="uq_metadata_quality_decisions_media_file_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    media_file_id: Mapped[int] = mapped_column(ForeignKey("media_files.id"), index=True)
+    normalized_music_profile_id: Mapped[int | None] = mapped_column(ForeignKey("normalized_music_profiles.id"), nullable=True, index=True)
+    batch_id: Mapped[int | None] = mapped_column(ForeignKey("ingest_batches.id"), nullable=True, index=True)
+    decision: Mapped[str] = mapped_column(String(50), index=True)
+    severity: Mapped[str] = mapped_column(String(50), default="info")
+    score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    reasons_json: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    blocking_flags_json: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    warning_flags_json: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+    media_file: Mapped[MediaFile] = relationship(back_populates="quality_decision")

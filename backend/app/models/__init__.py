@@ -5,6 +5,7 @@ from app.models.media_metadata import (
     GenreTaxonomy,
     MediaFile,
     MetadataReviewFlag,
+    MetadataQualityDecision,
     NormalizedMusicProfile,
     RawMediaTag,
 )
