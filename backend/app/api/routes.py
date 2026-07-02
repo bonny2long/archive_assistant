@@ -16,6 +16,7 @@ from app.schemas.archive import (
     BatchReviewTrack,
     BatchSummary,
     BatchUniversalIngestionOut,
+    CandidateMovePreviewOut,
     UniversalIngestionReviewActionOut,
     UniversalIngestionReviewActionUpdate,
     AudiobookMetadataUpdate,
@@ -74,6 +75,7 @@ from app.services.book_metadata import (
 )
 from app.services.title_display import clean_display_title, destination_title
 from app.services.metadata_quality_gate import get_batch_metadata_quality
+from app.services.candidate_move_plan_preview import build_candidate_move_plan_preview
 from app.services.universal_review_routing import get_batch_routing_decision
 from app.services.universal_ingestion_review import (
     clear_review_action,
@@ -434,6 +436,20 @@ def library_summary(db: Session = Depends(get_db)):
     )
 
 
+
+@router.get("/batches/{batch_id}/candidate-move-preview", response_model=CandidateMovePreviewOut)
+def get_candidate_move_preview(
+    batch_id: int,
+    snapshot: bool = Query(default=False),
+    db: Session = Depends(get_db),
+):
+    batch = db.get(IngestBatch, batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    try:
+        return build_candidate_move_plan_preview(db, batch_id, snapshot=snapshot)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 @router.get("/batches/{batch_id}/metadata-quality", response_model=BatchMetadataQualityOut)
 def batch_metadata_quality(batch_id: int, db: Session = Depends(get_db)):

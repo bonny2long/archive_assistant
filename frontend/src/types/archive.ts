@@ -960,3 +960,44 @@ export interface RoutingDecision {
     chunk_identity_risk: boolean;
   }>;
 }
+export interface CandidateMovePreviewSummary {
+  candidate_count: number;
+  source_fragment_count: number;
+  member_count: number;
+  media_class_counts: Record<string, number>;
+  decision_counts: Record<string, number>;
+  active_action_count: number;
+  mixed_media: boolean;
+  music_only_fragmented: boolean;
+  blocked_conflict_count: number;
+  review_required_count: number;
+}
+
+export interface CandidateMovePreviewGroup {
+  candidate_id: number;
+  candidate_media_type: string | null;
+  candidate_title: string | null;
+  candidate_primary_creator: string | null;
+  candidate_year?: string | number | null;
+  confidence?: string | null;
+  member_count: number;
+  source_fragment_count: number;
+  active_action?: Record<string, unknown> | null;
+  decision?: string | null;
+  recommended_action?: string | null;
+  target_library: string;
+  destination_preview: string;
+  source_fragment_names: string[];
+  warnings: string[];
+  blocked: boolean;
+  requires_review: boolean;
+}
+
+export interface CandidateMovePreview {
+  batch_id: number;
+  status: "not_analyzed" | "ready" | "review_required" | "blocked_conflict";
+  summary: CandidateMovePreviewSummary;
+  preview_groups: CandidateMovePreviewGroup[];
+  global_warnings: string[];
+  next_actions: string[];
+}

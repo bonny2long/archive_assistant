@@ -3,6 +3,7 @@ import type { BatchMoveSummary, BatchReview, IngestBatch, RoutingDecision } from
 import { api } from "../api/client";
 import MetadataQualityPanel from "./MetadataQualityPanel";
 import UniversalIngestionPanel from "./UniversalIngestionPanel";
+import CandidateMovePreviewPanel from "./CandidateMovePreviewPanel";
 import { formatArchiveTime } from "../utils/archiveTime";
 import { getBatchDisplayTitle, getReleaseCount, tvCountSummary } from "../utils/batchDisplay";
 
@@ -20,6 +21,7 @@ function BatchReviewShell({ batch, children }: { batch: IngestBatch; children: R
   return (
     <>
       <UniversalIngestionPanel batchId={batch.id} />
+      <CandidateMovePreviewPanel batchId={batch.id} compact />
       {isMusicQualityBatch(batch) && <MetadataQualityPanel batchId={batch.id} />}
       {children}
     </>

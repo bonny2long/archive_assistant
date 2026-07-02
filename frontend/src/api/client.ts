@@ -6,6 +6,7 @@ import type {
   BatchMetadataQuality,
   BatchReview,
   BatchUniversalIngestion,
+  CandidateMovePreview,
   AudiobookMetadataUpdate,
   BookCollectionReviewUpdate,
   BookMetadataUpdate,
@@ -102,6 +103,8 @@ export const api = {
     request<UniversalReviewAction>(`/batches/${id}/universal-ingestion/actions/${actionId}/clear`, "POST"),
   getReviewRouting: (id: number, targetEditor?: string) =>
     request<RoutingDecision>(`/batches/${id}/review-routing${targetEditor ? `?target_editor=${targetEditor}` : ""}`),
+  getCandidateMovePreview: (id: number, snapshot = false) =>
+    request<CandidateMovePreview>(`/batches/${id}/candidate-move-preview${snapshot ? "?snapshot=true" : ""}`),
   getBatchMoves: (id: number) => request<BatchMoveSummary>(`/batches/${id}/moves`),
   updateBatchMetadata: (id: number, update: BatchMetadataUpdate) =>
     request<BatchSummary>(`/batches/${id}/metadata`, "PATCH", update),

@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Generic, Literal, TypeVar
+from typing import Any, Generic, Literal, TypeVar
 from pydantic import BaseModel, Field, field_serializer
 from app.core.time import serialize_utc
 
@@ -245,6 +245,48 @@ class RoutingDecisionOut(BaseModel):
     requires_snapshot: bool = False
     summary: RoutingDecisionSummaryOut
     candidate_route_summaries: list[RoutingCandidateSummaryOut] = Field(default_factory=list)
+
+
+class CandidateMovePreviewSummaryOut(BaseModel):
+    candidate_count: int = 0
+    source_fragment_count: int = 0
+    member_count: int = 0
+    media_class_counts: dict[str, int] = Field(default_factory=dict)
+    decision_counts: dict[str, int] = Field(default_factory=dict)
+    active_action_count: int = 0
+    mixed_media: bool = False
+    music_only_fragmented: bool = False
+    blocked_conflict_count: int = 0
+    review_required_count: int = 0
+
+
+class CandidateMovePreviewGroupOut(BaseModel):
+    candidate_id: int
+    candidate_media_type: str | None = None
+    candidate_title: str | None = None
+    candidate_primary_creator: str | None = None
+    candidate_year: str | int | None = None
+    confidence: str | None = None
+    member_count: int = 0
+    source_fragment_count: int = 0
+    active_action: dict[str, Any] | None = None
+    decision: str | None = None
+    recommended_action: str | None = None
+    target_library: str
+    destination_preview: str
+    source_fragment_names: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    blocked: bool = False
+    requires_review: bool = False
+
+
+class CandidateMovePreviewOut(BaseModel):
+    batch_id: int
+    status: str
+    summary: CandidateMovePreviewSummaryOut
+    preview_groups: list[CandidateMovePreviewGroupOut] = Field(default_factory=list)
+    global_warnings: list[str] = Field(default_factory=list)
+    next_actions: list[str] = Field(default_factory=list)
 
 class BatchSummary(BaseModel):
     id: int
