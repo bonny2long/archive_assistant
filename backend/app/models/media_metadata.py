@@ -180,3 +180,87 @@ class MetadataQualityDecision(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
     media_file: Mapped[MediaFile] = relationship(back_populates="quality_decision")
+
+
+class SourceFragment(Base):
+    __tablename__ = "source_fragments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    batch_id: Mapped[int] = mapped_column(ForeignKey("ingest_batches.id"), index=True)
+    source_root: Mapped[str] = mapped_column(Text)
+    relative_fragment_path: Mapped[str] = mapped_column(Text)
+    fragment_group_key: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
+    fragment_label: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fragment_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    fragment_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    file_count: Mapped[int] = mapped_column(Integer, default=0)
+    media_class_counts_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class MediaIdentityCandidate(Base):
+    __tablename__ = "media_identity_candidates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    batch_id: Mapped[int] = mapped_column(ForeignKey("ingest_batches.id"), index=True)
+    candidate_key: Mapped[str] = mapped_column(Text, index=True)
+    candidate_media_type: Mapped[str] = mapped_column(String(50), index=True)
+    candidate_title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    candidate_primary_creator: Mapped[str | None] = mapped_column(Text, nullable=True)
+    candidate_secondary_creator: Mapped[str | None] = mapped_column(Text, nullable=True)
+    candidate_year: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    candidate_series: Mapped[str | None] = mapped_column(Text, nullable=True)
+    candidate_series_index: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    candidate_release_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    candidate_confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    identity_evidence_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class CandidateMember(Base):
+    __tablename__ = "candidate_members"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    candidate_id: Mapped[int] = mapped_column(ForeignKey("media_identity_candidates.id"), index=True)
+    media_file_id: Mapped[int | None] = mapped_column(ForeignKey("media_files.id"), nullable=True, index=True)
+    batch_file_id: Mapped[int | None] = mapped_column(ForeignKey("ingest_files.id"), nullable=True, index=True)
+    relative_path: Mapped[str] = mapped_column(Text)
+    media_class: Mapped[str] = mapped_column(String(50), index=True)
+    role_in_candidate: Mapped[str] = mapped_column(String(80), default="primary")
+    sort_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class FragmentReconstructionDecision(Base):
+    __tablename__ = "fragment_reconstruction_decisions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    batch_id: Mapped[int] = mapped_column(ForeignKey("ingest_batches.id"), index=True)
+    candidate_id: Mapped[int | None] = mapped_column(ForeignKey("media_identity_candidates.id"), nullable=True, index=True)
+    fragment_group_key: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
+    decision: Mapped[str] = mapped_column(String(50), index=True)
+    severity: Mapped[str] = mapped_column(String(30), default="info")
+    score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    reasons_json: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    conflict_flags_json: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    recommended_action: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class MixedMediaFlag(Base):
+    __tablename__ = "mixed_media_flags"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    batch_id: Mapped[int] = mapped_column(ForeignKey("ingest_batches.id"), index=True)
+    source_fragment_id: Mapped[int | None] = mapped_column(ForeignKey("source_fragments.id"), nullable=True, index=True)
+    candidate_id: Mapped[int | None] = mapped_column(ForeignKey("media_identity_candidates.id"), nullable=True, index=True)
+    flag_type: Mapped[str] = mapped_column(String(100), index=True)
+    severity: Mapped[str] = mapped_column(String(30), default="warning")
+    message: Mapped[str] = mapped_column(Text)
+    examples_json: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

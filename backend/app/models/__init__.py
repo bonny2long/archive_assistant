@@ -8,4 +8,9 @@ from app.models.media_metadata import (
     MetadataQualityDecision,
     NormalizedMusicProfile,
     RawMediaTag,
+    SourceFragment,
+    MediaIdentityCandidate,
+    CandidateMember,
+    FragmentReconstructionDecision,
+    MixedMediaFlag,
 )
