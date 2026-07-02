@@ -18,7 +18,24 @@ from app.models.media_metadata import (
 
 MUSIC_AUDIO_ROLES = {"music_track", "discography_track"}
 UNKNOWN_GENRE_FAMILY = "Unknown / Review Needed"
+BROAD_GENRE_FAMILIES = {"World / International"}
 UNKNOWN_VALUES = {"", "unknown", "unknown artist", "unknown album", "unknown title", "none", "null"}
+
+FLAG_SEVERITY = {
+    "mojibake_detected": "high",
+    "unknown_genre": "high",
+    "missing_artist": "high",
+    "missing_title": "high",
+    "unmapped_genre": "medium",
+    "classical_metadata_incomplete": "medium",
+    "missing_composer": "medium",
+    "missing_work_or_movement": "medium",
+    "missing_performer_or_ensemble": "medium",
+    "missing_album_artist": "medium",
+    "possible_broad_genre": "low",
+    "missing_album": "low",
+    "missing_track_number": "low",
+}
 
 MOJIBAKE_PATTERNS = (
     "\u00c3\u00a2??",
@@ -32,33 +49,46 @@ MOJIBAKE_PATTERNS = (
     "\u00ef\u00bf\u00bd",
 )
 
+# Overlap decisions are deterministic for M4B: bluegrass and americana map to
+# Folk, reggaeton maps to Latin / Caribbean, and rhythm and blues maps to R&B.
 GENRE_SEEDS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
-    ("Hip-Hop", "Hip-Hop / Rap / Mixtape", ("rap", "mixtape", "trap", "boom bap", "hip hop", "hip-hop")),
-    ("Electronic", "Electronic / EDM / House / Techno / IDM / Ambient", ("edm", "house", "techno", "idm", "ambient", "electronica", "dance")),
-    ("Classical", "Classical", ("classical", "opera", "symphony", "baroque", "chamber", "orchestral")),
-    ("Reggae", "Reggae / Dancehall / Dub / Ska", ("dancehall", "dub", "ska", "roots reggae")),
-    ("Afrobeats", "Afrobeats / Afro-fusion / Highlife / Amapiano / Afro-house", ("afrobeat", "afro-fusion", "highlife", "amapiano", "afro-house")),
-    ("Folk", "Folk / Singer-Songwriter / Americana / Traditional Folk", ("singer-songwriter", "americana", "traditional folk")),
-    ("Jazz", "Jazz", ("bebop", "fusion", "smooth jazz", "vocal jazz")),
-    ("R&B", "R&B / Soul / Funk", ("rnb", "r&b", "soul", "funk", "neo soul")),
-    ("Rock", "Rock / Alternative / Indie", ("alternative", "indie", "alt rock", "indie rock")),
-    ("Pop", "Pop", ("dance pop", "synthpop", "synth pop")),
-    ("Country", "Country", ("bluegrass", "country pop")),
-    ("Blues", "Blues", ("delta blues", "electric blues")),
-    ("Gospel", "Gospel", ("christian", "worship")),
-    ("Latin", "Latin / Caribbean", ("reggaeton", "salsa", "bachata", "merengue", "caribbean")),
-    ("Metal", "Metal", ("heavy metal", "death metal", "black metal")),
-    ("Punk", "Punk", ("post-punk", "hardcore")),
-    ("Soundtrack", "Soundtrack / Score", ("score", "ost", "film score", "game score")),
-    ("World", "World / International", ("international", "global")),
-    ("Spoken Word", "Spoken Word / Comedy", ("comedy", "stand-up", "spoken word")),
-    ("Children's", "Children's", ("children", "kids", "childrens", "children's")),
-    ("Unknown", UNKNOWN_GENRE_FAMILY, ("unknown", "review needed")),
+    ("Hip-Hop", "Hip-Hop / Rap / Mixtape", ("hip hop", "hip-hop", "hiphop", "rap", "rap/hip hop", "rap hip hop", "trap", "southern hip-hop", "southern hip hop", "east coast hip-hop", "east coast hip hop", "west coast hip-hop", "west coast hip hop", "alternative hip-hop", "alternative hip hop", "jazz rap", "conscious hip-hop", "conscious hip hop", "boom bap", "gangsta rap", "mixtape")),
+    ("Electronic", "Electronic / EDM / House / Techno / IDM / Ambient", ("electronic", "electronica", "edm", "dance", "house", "progressive house", "electro house", "tech house", "deep house", "disco house", "french house", "techno", "acid techno", "ambient techno", "idm", "intelligent dance music", "ambient", "ambient electronic", "experimental electronic", "downtempo", "trip hop", "synthpop", "synth pop", "electropop", "electro pop", "nu-disco", "nu disco")),
+    ("Classical", "Classical", ("classical", "baroque", "romantic", "renaissance", "modern classical", "contemporary classical", "orchestral", "symphony", "concerto", "sonata", "chamber music", "opera", "choral", "solo piano", "piano", "violin", "cello", "string quartet", "classical piano", "classical guitar")),
+    ("Reggae", "Reggae / Dancehall / Dub / Ska", ("reggae", "roots reggae", "roots", "dub", "dancehall", "ska", "rocksteady", "lovers rock", "ragga")),
+    ("Afrobeats", "Afrobeats / African", ("afrobeats", "afro beats", "afrobeat", "afro beat", "afropop", "afro pop", "afro-fusion", "afro fusion", "afro-house", "afro house", "amapiano", "highlife", "soukos", "soukous", "kwaito", "azonto", "bongo flava", "makossa", "juju", "fuji", "afrosoul", "afro soul")),
+    ("Folk", "Folk / Singer-Songwriter / Americana", ("folk", "traditional folk", "indie folk", "folk rock", "singer-songwriter", "singer songwriter", "acoustic", "americana", "bluegrass", "roots", "roots music", "contemporary folk")),
+    ("Jazz", "Jazz", ("jazz", "bebop", "hard bop", "post-bop", "post bop", "modal jazz", "cool jazz", "free jazz", "fusion", "jazz fusion", "smooth jazz", "vocal jazz", "latin jazz", "big band", "swing")),
+    ("R&B", "R&B / Soul / Funk", ("r&b", "rnb", "r and b", "rhythm and blues", "soul", "neo soul", "neosoul", "funk", "motown", "quiet storm", "contemporary r&b", "contemporary rnb")),
+    ("Rock", "Rock / Alternative / Indie", ("rock", "classic rock", "progressive rock", "prog rock", "psychedelic rock", "alternative", "alternative rock", "alt rock", "indie", "indie rock", "post-rock", "post rock", "garage rock", "soft rock", "hard rock")),
+    ("Pop", "Pop", ("pop", "dance pop", "synth pop", "synthpop", "electropop", "electro pop", "indie pop", "art pop", "adult contemporary")),
+    ("Country", "Country", ("country", "country music", "alt-country", "alt country", "country rock", "outlaw country")),
+    ("Blues", "Blues", ("blues", "delta blues", "chicago blues", "electric blues", "acoustic blues")),
+    ("Gospel", "Gospel", ("gospel", "christian gospel", "black gospel", "southern gospel", "worship", "praise and worship", "christian", "ccm")),
+    ("Latin", "Latin / Caribbean", ("latin", "latin pop", "salsa", "bachata", "merengue", "cumbia", "reggaeton", "latin trap", "latin hip hop", "bossa nova", "samba", "mambo", "calypso", "soca", "kompa", "zouk")),
+    ("Metal", "Metal", ("metal", "heavy metal", "black metal", "death metal", "thrash metal", "doom metal", "progressive metal", "prog metal", "metalcore", "nu metal")),
+    ("Punk", "Punk", ("punk", "punk rock", "hardcore punk", "post-punk", "post punk", "pop punk", "emo", "ska punk")),
+    ("Soundtrack", "Soundtrack / Score", ("soundtrack", "score", "film score", "movie score", "tv score", "television score", "original score", "ost", "game soundtrack", "video game music", "anime soundtrack", "musical", "show tunes")),
+    ("World", "World / International", ("world", "world music", "international", "global", "traditional", "ethnic")),
+    ("Spoken Word", "Spoken Word / Comedy", ("spoken word", "comedy", "stand-up", "stand up", "audio drama", "speech", "lecture", "interview")),
+    ("Children's", "Children's", ("children", "children's", "kids", "kids music", "nursery rhyme", "lullaby")),
+    ("Unknown", UNKNOWN_GENRE_FAMILY, ("unknown", "misc", "miscellaneous", "other", "uncategorized", "review needed")),
 )
 
 
+def normalize_genre_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip().casefold()
+    if not text:
+        return None
+    for old, new in {"_": " ", "-": " ", "/": " ", "\\": " ", ":": " ", "&": " and "}.items():
+        text = text.replace(old, new)
+    return " ".join(text.split()) or None
+
+
 def _key(value: str | None) -> str:
-    return " ".join(str(value or "").strip().casefold().replace("_", "-").split())
+    return normalize_genre_text(value) or ""
 
 
 def _clean(value: Any) -> str | None:
@@ -97,10 +127,7 @@ def _metadata_value(metadata: dict[str, Any], *keys: str) -> str | None:
 
 def _technical(metadata: dict[str, Any]) -> dict[str, Any]:
     embedded = metadata.get("embedded_metadata") or {}
-    return {
-        **dict(embedded.get("technical") or {}),
-        **dict(metadata.get("embedded_technical") or {}),
-    }
+    return {**dict(embedded.get("technical") or {}), **dict(metadata.get("embedded_technical") or {})}
 
 
 def _artwork(metadata: dict[str, Any]) -> list[dict[str, Any]]:
@@ -143,57 +170,163 @@ def _source_relative(path: Path, batch: IngestBatch | None) -> str | None:
     return path.name
 
 
-def seed_genre_taxonomy(db: Session) -> None:
-    existing = {
-        row.canonical_genre: row
-        for row in db.query(GenreTaxonomy).all()
-    }
+def _taxonomy_entries() -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
     for canonical, family, aliases in GENRE_SEEDS:
+        values = (canonical, family, *aliases)
+        entries.append({
+            "canonical_genre": canonical,
+            "display_genre": canonical,
+            "genre_family": family,
+            "display_family": family,
+            "aliases": tuple(dict.fromkeys(values)),
+            "keys": {_key(value) for value in values if _key(value)},
+        })
+    return entries
+
+
+TAXONOMY_ENTRIES = _taxonomy_entries()
+FALLBACK_GENRE_MAP = {key: entry["display_family"] for entry in TAXONOMY_ENTRIES for key in entry["keys"]}
+
+
+def seed_genre_taxonomy(db: Session) -> None:
+    existing = {row.canonical_genre: row for row in db.query(GenreTaxonomy).all()}
+    for entry in TAXONOMY_ENTRIES:
+        canonical = entry["canonical_genre"]
         row = existing.get(canonical)
         if row is None:
             db.add(GenreTaxonomy(
                 canonical_genre=canonical,
-                display_genre=canonical,
-                genre_family=family,
-                display_family=family,
-                aliases_json=list(aliases),
+                display_genre=entry["display_genre"],
+                genre_family=entry["genre_family"],
+                display_family=entry["display_family"],
+                aliases_json=list(entry["aliases"]),
                 is_active=True,
             ))
             continue
-        row.display_genre = row.display_genre or canonical
-        row.genre_family = row.genre_family or family
-        row.display_family = row.display_family or family
-        row.aliases_json = row.aliases_json or list(aliases)
+        row.display_genre = entry["display_genre"]
+        row.genre_family = entry["genre_family"]
+        row.display_family = entry["display_family"]
+        row.aliases_json = list(entry["aliases"])
         row.is_active = True
         row.updated_at = now_utc()
 
 
-def _fallback_genre_map() -> dict[str, str]:
-    mapping: dict[str, str] = {}
-    for canonical, family, aliases in GENRE_SEEDS:
-        mapping[_key(canonical)] = family
-        for alias in aliases:
-            mapping[_key(alias)] = family
-    return mapping
+def _db_taxonomy_entries(db: Session | None) -> list[dict[str, Any]]:
+    if db is None:
+        return TAXONOMY_ENTRIES
+    rows = db.query(GenreTaxonomy).filter(GenreTaxonomy.is_active.is_(True)).all()
+    if not rows:
+        return TAXONOMY_ENTRIES
+    entries: list[dict[str, Any]] = []
+    for row in rows:
+        aliases = tuple(dict.fromkeys((
+            row.canonical_genre,
+            row.display_genre,
+            row.genre_family,
+            row.display_family,
+            *(row.aliases_json or []),
+        )))
+        entries.append({
+            "canonical_genre": row.canonical_genre,
+            "display_genre": row.display_genre,
+            "genre_family": row.genre_family,
+            "display_family": row.display_family,
+            "aliases": aliases,
+            "keys": {_key(value) for value in aliases if _key(value)},
+        })
+    return entries
 
 
-FALLBACK_GENRE_MAP = _fallback_genre_map()
+def _match_from_entries(value: str | None, entries: list[dict[str, Any]]) -> dict[str, Any] | None:
+    normalized = normalize_genre_text(value)
+    if not normalized:
+        return None
+    for entry in entries:
+        if normalized == _key(entry["canonical_genre"]) or normalized == _key(entry["display_genre"]):
+            return {**entry, "match_source": "exact"}
+    for entry in entries:
+        if normalized in entry["keys"]:
+            return {**entry, "match_source": "alias"}
+    return None
 
 
-def genre_family_for(raw_genre: str | None, db: Session | None = None) -> str:
-    cleaned = _clean(raw_genre)
-    if not cleaned:
-        return UNKNOWN_GENRE_FAMILY
-    genre_key = _key(cleaned)
-    if db is not None:
-        rows = db.query(GenreTaxonomy).filter(GenreTaxonomy.is_active.is_(True)).all()
-        for row in rows:
-            if genre_key == _key(row.canonical_genre) or genre_key == _key(row.display_genre):
-                return row.display_family or row.genre_family or UNKNOWN_GENRE_FAMILY
-            for alias in row.aliases_json or []:
-                if genre_key == _key(alias):
-                    return row.display_family or row.genre_family or UNKNOWN_GENRE_FAMILY
-    return FALLBACK_GENRE_MAP.get(genre_key, UNKNOWN_GENRE_FAMILY)
+def _hint_match(hint: str | None, entries: list[dict[str, Any]]) -> dict[str, Any] | None:
+    normalized = normalize_genre_text(hint)
+    if not normalized:
+        return None
+    tokens = f" {normalized} "
+    matches: list[tuple[int, dict[str, Any]]] = []
+    for entry in entries:
+        for key in entry["keys"]:
+            if key and f" {key} " in tokens:
+                matches.append((len(key), entry))
+    if not matches:
+        return None
+    return max(matches, key=lambda item: item[0])[1]
+
+
+def genre_taxonomy_match(
+    value: str | None,
+    *,
+    path_hint: str | None = None,
+    folder_hint: str | None = None,
+    db: Session | None = None,
+) -> dict[str, Any]:
+    entries = _db_taxonomy_entries(db)
+    raw_genre = _clean(value)
+    normalized = normalize_genre_text(raw_genre)
+    flags: list[str] = []
+    direct = _match_from_entries(raw_genre, entries)
+    folder = _hint_match(folder_hint, entries)
+    path = _hint_match(path_hint, entries)
+    hint = folder or path
+    hint_source = "folder_hint" if folder else "path_hint" if path else None
+
+    if direct is None:
+        flags.append("unknown_genre" if not normalized or normalized in UNKNOWN_VALUES else "unmapped_genre")
+        return {
+            "raw_genre": raw_genre,
+            "normalized_genre": normalized or "unknown",
+            "primary_genre": "Unknown",
+            "genre_family": UNKNOWN_GENRE_FAMILY,
+            "confidence": "low",
+            "match_source": "unknown",
+            "review_flags": flags,
+        }
+
+    chosen = direct
+    match_source = direct["match_source"]
+    confidence = "high"
+    if direct["display_family"] in BROAD_GENRE_FAMILIES:
+        flags.append("possible_broad_genre")
+        confidence = "low"
+        if hint is not None and hint["display_family"] not in BROAD_GENRE_FAMILIES:
+            chosen = hint
+            match_source = hint_source or "path_hint"
+            confidence = "medium"
+    if chosen["display_family"] == UNKNOWN_GENRE_FAMILY:
+        flags.append("unknown_genre")
+        confidence = "low"
+    return {
+        "raw_genre": raw_genre,
+        "normalized_genre": normalized or "unknown",
+        "primary_genre": chosen["display_genre"],
+        "genre_family": chosen["display_family"],
+        "confidence": confidence,
+        "match_source": match_source,
+        "review_flags": list(dict.fromkeys(flags)),
+    }
+
+
+def genre_family_for(
+    value: str | None,
+    db: Session | None = None,
+    *,
+    path_hint: str | None = None,
+    folder_hint: str | None = None,
+) -> str:
+    return genre_taxonomy_match(value, path_hint=path_hint, folder_hint=folder_hint, db=db)["genre_family"]
 
 
 def _find_media_file(db: Session, ingest_file: IngestFile) -> MediaFile | None:
@@ -202,33 +335,18 @@ def _find_media_file(db: Session, ingest_file: IngestFile) -> MediaFile | None:
         if row is not None:
             return row
     if ingest_file.checksum:
-        row = (
-            db.query(MediaFile)
-            .filter(
-                MediaFile.checksum == ingest_file.checksum,
-                MediaFile.absolute_path == ingest_file.file_path,
-            )
-            .one_or_none()
-        )
+        row = db.query(MediaFile).filter(MediaFile.checksum == ingest_file.checksum, MediaFile.absolute_path == ingest_file.file_path).one_or_none()
         if row is not None:
             return row
     return db.query(MediaFile).filter(MediaFile.absolute_path == ingest_file.file_path).one_or_none()
 
 
 def _raw_tag_for(db: Session, media_file: MediaFile) -> RawMediaTag | None:
-    return (
-        db.query(RawMediaTag)
-        .filter(RawMediaTag.media_file_id == media_file.id, RawMediaTag.tag_source == "mutagen")
-        .one_or_none()
-    )
+    return db.query(RawMediaTag).filter(RawMediaTag.media_file_id == media_file.id, RawMediaTag.tag_source == "mutagen").one_or_none()
 
 
 def _profile_for(db: Session, media_file: MediaFile) -> NormalizedMusicProfile | None:
-    return (
-        db.query(NormalizedMusicProfile)
-        .filter(NormalizedMusicProfile.media_file_id == media_file.id)
-        .one_or_none()
-    )
+    return db.query(NormalizedMusicProfile).filter(NormalizedMusicProfile.media_file_id == media_file.id).one_or_none()
 
 
 def _detect_mojibake(value: str | None) -> bool:
@@ -236,19 +354,12 @@ def _detect_mojibake(value: str | None) -> bool:
     return any(pattern in text for pattern in MOJIBAKE_PATTERNS)
 
 
-def _flag_exists(
-    db: Session,
-    *,
-    media_file: MediaFile,
-    batch: IngestBatch | None,
-    flag_type: str,
-    field_name: str | None,
-) -> bool:
+def _flag_exists(db: Session, *, media_file: MediaFile, batch: IngestBatch | None, flag_type: str, message: str) -> bool:
     return db.query(MetadataReviewFlag).filter(
         MetadataReviewFlag.media_file_id == media_file.id,
         MetadataReviewFlag.ingest_batch_id == (batch.id if batch else None),
         MetadataReviewFlag.flag_type == flag_type,
-        MetadataReviewFlag.field_name == field_name,
+        MetadataReviewFlag.message == message,
         MetadataReviewFlag.status == "open",
     ).first() is not None
 
@@ -259,25 +370,18 @@ def _add_flag(
     media_file: MediaFile,
     batch: IngestBatch | None,
     flag_type: str,
-    severity: str,
     field_name: str | None,
     raw_value: str | None,
     normalized_value: str | None,
     message: str,
 ) -> int:
-    if _flag_exists(
-        db,
-        media_file=media_file,
-        batch=batch,
-        flag_type=flag_type,
-        field_name=field_name,
-    ):
+    if _flag_exists(db, media_file=media_file, batch=batch, flag_type=flag_type, message=message):
         return 0
     db.add(MetadataReviewFlag(
         media_file_id=media_file.id,
         ingest_batch_id=batch.id if batch else None,
         flag_type=flag_type,
-        severity=severity,
+        severity=FLAG_SEVERITY.get(flag_type, "warning"),
         field_name=field_name,
         raw_value=raw_value,
         normalized_value=normalized_value,
@@ -287,12 +391,18 @@ def _add_flag(
     return 1
 
 
-def _profile_values(metadata: dict[str, Any], db: Session) -> dict[str, Any]:
+def _profile_values(metadata: dict[str, Any], db: Session, *, ingest_file: IngestFile | None = None, batch: IngestBatch | None = None) -> dict[str, Any]:
     artist = _metadata_value(metadata, "artist", "trackartist")
     album_artist = _metadata_value(metadata, "album_artist", "albumartist", "album artist")
     album = _metadata_value(metadata, "album")
     title = _metadata_value(metadata, "title")
-    primary_genre = _metadata_value(metadata, "genre", "primary_genre")
+    raw_genre = _metadata_value(metadata, "genre", "primary_genre")
+    genre_match = genre_taxonomy_match(
+        raw_genre,
+        path_hint=ingest_file.file_path if ingest_file else None,
+        folder_hint=batch.source_path if batch else None,
+        db=db,
+    )
     return {
         "artist": artist,
         "album_artist": album_artist,
@@ -302,8 +412,9 @@ def _profile_values(metadata: dict[str, Any], db: Session) -> dict[str, Any]:
         "disc_number": _metadata_value(metadata, "discnumber", "disc_number"),
         "year": _metadata_value(metadata, "date", "year", "original_date"),
         "release_type": _metadata_value(metadata, "release_type"),
-        "primary_genre": primary_genre,
-        "genre_family": genre_family_for(primary_genre, db),
+        "primary_genre": genre_match["primary_genre"],
+        "genre_family": genre_match["genre_family"],
+        "genre_match": genre_match,
         "subgenres_json": metadata.get("subgenres") or metadata.get("subgenres_json"),
         "moods_json": metadata.get("moods") or metadata.get("moods_json"),
         "energy": _metadata_value(metadata, "energy"),
@@ -318,27 +429,27 @@ def _profile_values(metadata: dict[str, Any], db: Session) -> dict[str, Any]:
         "movement": _metadata_value(metadata, "movement"),
         "metadata_status": _metadata_value(metadata, "metadata_quality", "metadata_status") or "snapshot",
         "metadata_confidence": _metadata_confidence(metadata),
-        "metadata_source": _metadata_value(metadata, "metadata_source") or "archive_assistant_snapshot",
+        "metadata_source": _metadata_value(metadata, "metadata_source") or f"genre:{genre_match['match_source']}",
         "approved": bool(metadata.get("approved") or metadata.get("review_confirmed")),
     }
 
 
-def _detect_flags(
-    db: Session,
-    *,
-    media_file: MediaFile,
-    batch: IngestBatch | None,
-    values: dict[str, Any],
-) -> int:
+def _detect_flags(db: Session, *, media_file: MediaFile, batch: IngestBatch | None, values: dict[str, Any]) -> int:
     created = 0
-    for field in ("artist", "album_artist", "album", "title", "track_number"):
+    missing_fields = {
+        "artist": "missing_artist",
+        "album_artist": "missing_album_artist",
+        "album": "missing_album",
+        "title": "missing_title",
+        "track_number": "missing_track_number",
+    }
+    for field, flag_type in missing_fields.items():
         if _is_unknown(values.get(field)):
             created += _add_flag(
                 db,
                 media_file=media_file,
                 batch=batch,
-                flag_type=f"missing_{field}",
-                severity="warning",
+                flag_type=flag_type,
                 field_name=field,
                 raw_value=_clean(values.get(field)),
                 normalized_value=None,
@@ -352,59 +463,39 @@ def _detect_flags(
                 media_file=media_file,
                 batch=batch,
                 flag_type="mojibake_detected",
-                severity="warning",
                 field_name=field,
                 raw_value=raw,
                 normalized_value=raw,
                 message="Possible mojibake detected. Detection only; value was not changed.",
             )
-    genre = _clean(values.get("primary_genre"))
-    if not genre:
+    genre_match = values.get("genre_match") or {}
+    for flag_type in genre_match.get("review_flags") or []:
         created += _add_flag(
             db,
             media_file=media_file,
             batch=batch,
-            flag_type="unknown_genre",
-            severity="warning",
+            flag_type=flag_type,
             field_name="primary_genre",
-            raw_value=genre,
-            normalized_value=UNKNOWN_GENRE_FAMILY,
-            message="Missing genre maps to Unknown / Review Needed.",
+            raw_value=genre_match.get("raw_genre"),
+            normalized_value=genre_match.get("genre_family"),
+            message=f"Genre review flag: {flag_type}.",
         )
-    elif values.get("genre_family") == UNKNOWN_GENRE_FAMILY:
-        created += _add_flag(
-            db,
-            media_file=media_file,
-            batch=batch,
-            flag_type="unmapped_genre",
-            severity="warning",
-            field_name="primary_genre",
-            raw_value=genre,
-            normalized_value=UNKNOWN_GENRE_FAMILY,
-            message="Genre is not mapped in the local taxonomy.",
-        )
-    if values.get("genre_family") == "Classical" and _is_unknown(values.get("composer")) and (
-        _is_unknown(values.get("artist")) and _is_unknown(values.get("album_artist"))
-    ):
-        created += _add_flag(
-            db,
-            media_file=media_file,
-            batch=batch,
-            flag_type="classical_metadata_incomplete",
-            severity="warning",
-            field_name="composer",
-            raw_value=_clean(values.get("composer")),
-            normalized_value=None,
-            message="Classical item is missing composer and performer/album artist metadata.",
-        )
+    if values.get("genre_family") == "Classical":
+        composer_missing = _is_unknown(values.get("composer"))
+        performer_missing = all(_is_unknown(values.get(field)) for field in ("artist", "album_artist", "conductor", "orchestra", "ensemble", "soloist"))
+        work_missing = _is_unknown(values.get("work")) and _is_unknown(values.get("movement"))
+        if composer_missing:
+            created += _add_flag(db, media_file=media_file, batch=batch, flag_type="missing_composer", field_name="composer", raw_value=_clean(values.get("composer")), normalized_value=None, message="Classical item is missing composer metadata.")
+        if performer_missing:
+            created += _add_flag(db, media_file=media_file, batch=batch, flag_type="missing_performer_or_ensemble", field_name="artist", raw_value=_clean(values.get("artist")), normalized_value=None, message="Classical item is missing performer, ensemble, or orchestra metadata.")
+        if work_missing:
+            created += _add_flag(db, media_file=media_file, batch=batch, flag_type="missing_work_or_movement", field_name="work", raw_value=_clean(values.get("work")), normalized_value=None, message="Classical item is missing work or movement metadata.")
+        if composer_missing and performer_missing:
+            created += _add_flag(db, media_file=media_file, batch=batch, flag_type="classical_metadata_incomplete", field_name="composer", raw_value=_clean(values.get("composer")), normalized_value=None, message="Classical item is missing composer and performer/album artist metadata.")
     return created
 
 
-def snapshot_ingest_file_metadata(
-    db: Session,
-    ingest_file: IngestFile,
-    batch: IngestBatch | None = None,
-) -> MediaFile | None:
+def snapshot_ingest_file_metadata(db: Session, ingest_file: IngestFile, batch: IngestBatch | None = None) -> MediaFile | None:
     if ingest_file.detected_role not in MUSIC_AUDIO_ROLES:
         return None
     metadata = dict(ingest_file.metadata_json or {})
@@ -458,13 +549,14 @@ def snapshot_ingest_file_metadata(
     raw_tag.warnings_json = list(metadata.get("extraction_warnings") or raw_payload.get("warnings") or [])
     raw_tag.extracted_at = now
 
-    values = _profile_values(metadata, db)
+    values = _profile_values(metadata, db, ingest_file=ingest_file, batch=batch)
     profile = _profile_for(db, media_file)
     if profile is None:
         profile = NormalizedMusicProfile(media_file_id=media_file.id)
         db.add(profile)
     for key, value in values.items():
-        setattr(profile, key, value)
+        if key != "genre_match":
+            setattr(profile, key, value)
     profile.updated_at = now
 
     db.flush()
@@ -477,9 +569,7 @@ def snapshot_batch_metadata(db: Session, batch: IngestBatch) -> dict:
     media_files = 0
     raw_tags = 0
     profiles = 0
-    flags_before = db.query(MetadataReviewFlag).filter(
-        or_(MetadataReviewFlag.ingest_batch_id == batch.id, MetadataReviewFlag.ingest_batch_id.is_(None))
-    ).count()
+    flags_before = db.query(MetadataReviewFlag).filter(or_(MetadataReviewFlag.ingest_batch_id == batch.id, MetadataReviewFlag.ingest_batch_id.is_(None))).count()
     for ingest_file in files:
         row = snapshot_ingest_file_metadata(db, ingest_file, batch)
         if row is None:
@@ -490,12 +580,39 @@ def snapshot_batch_metadata(db: Session, batch: IngestBatch) -> dict:
         if _profile_for(db, row) is not None:
             profiles += 1
     db.flush()
-    flags_after = db.query(MetadataReviewFlag).filter(
-        or_(MetadataReviewFlag.ingest_batch_id == batch.id, MetadataReviewFlag.ingest_batch_id.is_(None))
-    ).count()
+    flags_after = db.query(MetadataReviewFlag).filter(or_(MetadataReviewFlag.ingest_batch_id == batch.id, MetadataReviewFlag.ingest_batch_id.is_(None))).count()
     return {
         "media_files": media_files,
         "raw_tags": raw_tags,
         "normalized_profiles": profiles,
         "flags": max(flags_after - flags_before, 0),
     }
+
+
+def unmapped_genre_rows(db: Session) -> list[dict[str, Any]]:
+    rows = db.query(NormalizedMusicProfile).filter(NormalizedMusicProfile.primary_genre.isnot(None)).all()
+    grouped: dict[str, dict[str, Any]] = {}
+    for profile in rows:
+        raw = profile.primary_genre or "Unknown"
+        match = genre_taxonomy_match(raw, db=db)
+        flags = set(match.get("review_flags") or [])
+        if profile.genre_family == UNKNOWN_GENRE_FAMILY:
+            flags.add("unmapped_genre" if raw and _key(raw) not in UNKNOWN_VALUES else "unknown_genre")
+        if profile.genre_family in BROAD_GENRE_FAMILIES:
+            flags.add("possible_broad_genre")
+        if not flags.intersection({"unknown_genre", "unmapped_genre", "possible_broad_genre"}):
+            continue
+        key = normalize_genre_text(raw) or "unknown"
+        item = grouped.setdefault(key, {
+            "raw_genre": raw,
+            "normalized_genre": key,
+            "count": 0,
+            "genre_family": profile.genre_family or match["genre_family"],
+            "review_flags": sorted(flags),
+            "examples": [],
+        })
+        item["count"] += 1
+        item["review_flags"] = sorted(set(item["review_flags"]) | flags)
+        if len(item["examples"]) < 3:
+            item["examples"].append({"artist": profile.artist, "album": profile.album, "title": profile.title})
+    return sorted(grouped.values(), key=lambda item: (-item["count"], item["normalized_genre"]))
