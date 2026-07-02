@@ -281,3 +281,114 @@ def snapshot_batch_quality_decisions(db: Session, batch_id: int) -> dict:
             counts["flag_counts"][flag.flag_type] = counts["flag_counts"].get(flag.flag_type, 0) + 1
     db.flush()
     return counts
+
+
+def _profile_dict(profile: NormalizedMusicProfile | None) -> dict | None:
+    if profile is None:
+        return None
+    return {
+        "artist": profile.artist,
+        "album_artist": profile.album_artist,
+        "album": profile.album,
+        "title": profile.title,
+        "track_number": profile.track_number,
+        "disc_number": profile.disc_number,
+        "year": profile.year,
+        "primary_genre": profile.primary_genre,
+        "genre_family": profile.genre_family,
+        "composer": profile.composer,
+        "conductor": profile.conductor,
+        "orchestra": profile.orchestra,
+        "ensemble": profile.ensemble,
+        "soloist": profile.soloist,
+        "work": profile.work,
+        "movement": profile.movement,
+        "metadata_status": profile.metadata_status,
+        "metadata_confidence": profile.metadata_confidence,
+        "metadata_source": profile.metadata_source,
+    }
+
+
+def _flag_dict(flag: MetadataReviewFlag) -> dict:
+    return {
+        "id": flag.id,
+        "flag_type": flag.flag_type,
+        "severity": flag.severity,
+        "field_name": flag.field_name,
+        "raw_value": flag.raw_value,
+        "normalized_value": flag.normalized_value,
+        "message": flag.message,
+        "status": flag.status,
+    }
+
+
+def _decision_item(db: Session, media_file: MediaFile) -> dict:
+    decision = snapshot_or_update_quality_decision(db, media_file.id)
+    profile = (
+        db.query(NormalizedMusicProfile)
+        .filter(NormalizedMusicProfile.media_file_id == media_file.id)
+        .one_or_none()
+    )
+    flags = (
+        db.query(MetadataReviewFlag)
+        .filter(MetadataReviewFlag.media_file_id == media_file.id, MetadataReviewFlag.status == "open")
+        .all()
+    )
+    return {
+        "media_file_id": media_file.id,
+        "ingest_file_id": media_file.ingest_file_id,
+        "file_name": media_file.file_name,
+        "relative_path": media_file.relative_path,
+        "decision": decision.decision,
+        "severity": decision.severity,
+        "score": decision.score,
+        "reasons": list(decision.reasons_json or []),
+        "blocking_flags": list(decision.blocking_flags_json or []),
+        "warning_flags": list(decision.warning_flags_json or []),
+        "profile": _profile_dict(profile),
+        "review_flags": [_flag_dict(flag) for flag in flags],
+    }
+
+
+def get_batch_metadata_quality(db: Session, batch_id: int) -> dict:
+    media_files = (
+        db.query(MediaFile)
+        .filter(MediaFile.ingest_batch_id == batch_id)
+        .order_by(MediaFile.relative_path, MediaFile.file_name, MediaFile.id)
+        .all()
+    )
+    counts = {
+        "batch_id": batch_id,
+        "total_files": 0,
+        "approved_ready_count": 0,
+        "review_recommended_count": 0,
+        "review_required_count": 0,
+        "blocked_count": 0,
+        "worst_decision": "approved_ready",
+        "flag_counts": {},
+        "items": [],
+    }
+    for media_file in media_files:
+        item = _decision_item(db, media_file)
+        decision = item["decision"]
+        counts["total_files"] += 1
+        counts[f"{decision}_count"] += 1
+        if DECISION_ORDER[decision] > DECISION_ORDER[counts["worst_decision"]]:
+            counts["worst_decision"] = decision
+        for flag in item["review_flags"]:
+            flag_type = str(flag.get("flag_type") or "unknown")
+            counts["flag_counts"][flag_type] = counts["flag_counts"].get(flag_type, 0) + 1
+        counts["items"].append(item)
+    db.flush()
+    return counts
+
+
+def get_metadata_quality_summary_for_batches(db: Session, batch_ids: list[int]) -> dict[int, dict]:
+    return {
+        batch_id: {
+            key: value
+            for key, value in get_batch_metadata_quality(db, batch_id).items()
+            if key != "items"
+        }
+        for batch_id in batch_ids
+    }

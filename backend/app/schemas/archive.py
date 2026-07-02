@@ -16,6 +16,33 @@ class IngestFileOut(BaseModel):
     class Config:
         from_attributes = True
 
+
+class MetadataQualityDecisionOut(BaseModel):
+    media_file_id: int
+    ingest_file_id: int | None = None
+    file_name: str
+    relative_path: str | None = None
+    decision: str
+    severity: str
+    score: float | None = None
+    reasons: list[str] = Field(default_factory=list)
+    blocking_flags: list[str] = Field(default_factory=list)
+    warning_flags: list[str] = Field(default_factory=list)
+    profile: dict | None = None
+    review_flags: list[dict] = Field(default_factory=list)
+
+
+class BatchMetadataQualityOut(BaseModel):
+    batch_id: int
+    total_files: int = 0
+    approved_ready_count: int = 0
+    review_recommended_count: int = 0
+    review_required_count: int = 0
+    blocked_count: int = 0
+    worst_decision: str = "approved_ready"
+    flag_counts: dict[str, int] = Field(default_factory=dict)
+    items: list[MetadataQualityDecisionOut] = Field(default_factory=list)
+
 class BatchSummary(BaseModel):
     id: int
     detected_type: str

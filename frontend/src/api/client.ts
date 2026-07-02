@@ -3,6 +3,7 @@ import type {
   BatchActionResult,
   BatchMetadataUpdate,
   BatchMoveSummary,
+  BatchMetadataQuality,
   BatchReview,
   AudiobookMetadataUpdate,
   BookCollectionReviewUpdate,
@@ -87,6 +88,8 @@ export const api = {
   listPending: () => request<PaginatedResponse<BatchSummary>>("/batches/pending?page_size=100"),
   getBatch: (id: number) => request<IngestBatch>(`/batches/${id}`),
   getBatchReview: (id: number) => request<BatchReview>(`/batches/${id}/review`),
+  getBatchMetadataQuality: (id: number) =>
+    request<BatchMetadataQuality>(`/batches/${id}/metadata-quality`),
   getBatchMoves: (id: number) => request<BatchMoveSummary>(`/batches/${id}/moves`),
   updateBatchMetadata: (id: number, update: BatchMetadataUpdate) =>
     request<BatchSummary>(`/batches/${id}/metadata`, "PATCH", update),

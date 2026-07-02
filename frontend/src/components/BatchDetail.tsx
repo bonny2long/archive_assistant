@@ -1,5 +1,6 @@
-import { Fragment, useState } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import type { BatchMoveSummary, BatchReview, IngestBatch } from "../types/archive";
+import MetadataQualityPanel from "./MetadataQualityPanel";
 import { formatArchiveTime } from "../utils/archiveTime";
 import { getBatchDisplayTitle, getReleaseCount, tvCountSummary } from "../utils/batchDisplay";
 
@@ -8,6 +9,20 @@ type Props = {
   moveSummary?: BatchMoveSummary;
   review?: BatchReview;
 };
+
+function isMusicQualityBatch(batch: IngestBatch): boolean {
+  return batch.detected_type === "music_album" || batch.detected_type === "music_discography";
+}
+
+function MusicQualityShell({ batch, children }: { batch: IngestBatch; children: ReactNode }) {
+  if (!isMusicQualityBatch(batch)) return <>{children}</>;
+  return (
+    <>
+      <MetadataQualityPanel batchId={batch.id} />
+      {children}
+    </>
+  );
+}
 
 function metadataValue(batch: IngestBatch, key: string): string {
   const value = batch.metadata_json?.[key];
@@ -1261,7 +1276,11 @@ export default function BatchDetail({ batch, moveSummary, review }: Props) {
     return <QuarantineReviewDetail batch={batch} moveSummary={moveSummary} />;
   }
   if (batch.detected_type === "music_discography") {
-    return <DiscographyBatchDetail batch={batch} moveSummary={moveSummary} />;
+    return (
+      <MusicQualityShell batch={batch}>
+        <DiscographyBatchDetail batch={batch} moveSummary={moveSummary} />
+      </MusicQualityShell>
+    );
   }
   if (batch.detected_type === "video_movie") {
     return <MovieBatchDetail batch={batch} moveSummary={moveSummary} />;
@@ -1280,7 +1299,11 @@ export default function BatchDetail({ batch, moveSummary, review }: Props) {
   }
 
   if (batch.status === "pending_review" || batch.status === "needs_metadata_review" || batch.status === "approved") {
-    return <ReviewBatchDetail batch={batch} moveSummary={moveSummary} review={review} />;
+    return (
+      <MusicQualityShell batch={batch}>
+        <ReviewBatchDetail batch={batch} moveSummary={moveSummary} review={review} />
+      </MusicQualityShell>
+    );
   }
 
   const warnings = metadataWarnings(batch);

@@ -10,6 +10,7 @@ from app.schemas.archive import (
     BulkApproveRequest,
     BulkApproveResponse,
     BatchMoveSummary,
+    BatchMetadataQualityOut,
     BatchMetadataUpdate,
     BatchReview,
     BatchReviewTrack,
@@ -68,6 +69,7 @@ from app.services.book_metadata import (
     build_book_item_destination,
 )
 from app.services.title_display import clean_display_title, destination_title
+from app.services.metadata_quality_gate import get_batch_metadata_quality
 from app.services.metadata_candidates import (
     METADATA_ASSIST_VERSION,
     normalize_metadata_text,
@@ -419,6 +421,14 @@ def library_summary(db: Session = Depends(get_db)):
         needs_metadata=needs_metadata,
     )
 
+
+
+@router.get("/batches/{batch_id}/metadata-quality", response_model=BatchMetadataQualityOut)
+def batch_metadata_quality(batch_id: int, db: Session = Depends(get_db)):
+    batch = db.get(IngestBatch, batch_id)
+    if batch is None:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    return get_batch_metadata_quality(db, batch_id)
 
 @router.patch("/batches/{batch_id}/metadata", response_model=BatchSummary)
 def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Session = Depends(get_db)):

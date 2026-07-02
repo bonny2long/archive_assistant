@@ -76,6 +76,38 @@ export type MusicReviewSummary = {
   track_profiles?: MusicTrackProfileSummary[];
 };
 
+export type MetadataQualityDecisionName =
+  | "approved_ready"
+  | "review_recommended"
+  | "review_required"
+  | "blocked";
+
+export type MetadataQualityDecision = {
+  media_file_id: number;
+  ingest_file_id?: number | null;
+  file_name: string;
+  relative_path?: string | null;
+  decision: MetadataQualityDecisionName;
+  severity: string;
+  score?: number | null;
+  reasons: string[];
+  blocking_flags: string[];
+  warning_flags: string[];
+  profile?: Record<string, unknown> | null;
+  review_flags: Array<Record<string, unknown>>;
+};
+
+export type BatchMetadataQuality = {
+  batch_id: number;
+  total_files: number;
+  approved_ready_count: number;
+  review_recommended_count: number;
+  review_required_count: number;
+  blocked_count: number;
+  worst_decision: MetadataQualityDecisionName;
+  flag_counts: Record<string, number>;
+  items: MetadataQualityDecision[];
+};
 export type BatchSummary = {
   id: number;
   detected_type: string;
