@@ -932,3 +932,31 @@ export type TvEpisodeReviewUpdate = {
 };
 
 export type TabKey = "all" | "pending" | "needs_metadata" | "quarantine" | "approved" | "moved";
+
+export interface RoutingDecision {
+  batch_id: number;
+  decision: "music_editor_allowed" | "universal_review_required" | "universal_review_recommended" | "blocked_conflict" | "not_analyzed";
+  allowed_editors: string[];
+  blocked_editors: string[];
+  reasons: string[];
+  universal_ingestion_available: boolean;
+  requires_snapshot: boolean;
+  summary: {
+    candidate_count: number;
+    media_types: string[];
+    media_class_counts: Record<string, number>;
+    mixed_media_flag_count: number;
+    source_fragment_group_count?: number;
+    reconstruction_decision_count?: number;
+    blocked_conflict_count: number;
+    review_required_count?: number;
+    chunk_identity_candidate_count: number;
+  };
+  candidate_route_summaries?: Array<{
+    candidate_id: number;
+    candidate_title?: string | null;
+    candidate_media_type?: string | null;
+    candidate_key?: string | null;
+    chunk_identity_risk: boolean;
+  }>;
+}

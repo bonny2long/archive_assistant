@@ -26,6 +26,7 @@ import type {
   TvMetadataUpdate,
   TvEpisodeReviewUpdate,
   ReviewConfirmationUpdate,
+  RoutingDecision,
   UniversalReviewAction,
   UniversalReviewActionUpdate,
 } from "../types/archive";
@@ -99,6 +100,8 @@ export const api = {
     request<UniversalReviewAction>(`/batches/${id}/universal-ingestion/actions`, "POST", update),
   clearUniversalIngestionAction: (id: number, actionId: number) =>
     request<UniversalReviewAction>(`/batches/${id}/universal-ingestion/actions/${actionId}/clear`, "POST"),
+  getReviewRouting: (id: number, targetEditor?: string) =>
+    request<RoutingDecision>(`/batches/${id}/review-routing${targetEditor ? `?target_editor=${targetEditor}` : ""}`),
   getBatchMoves: (id: number) => request<BatchMoveSummary>(`/batches/${id}/moves`),
   updateBatchMetadata: (id: number, update: BatchMetadataUpdate) =>
     request<BatchSummary>(`/batches/${id}/metadata`, "PATCH", update),

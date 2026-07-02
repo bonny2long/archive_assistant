@@ -1,5 +1,6 @@
-import { Fragment, useState, type ReactNode } from "react";
-import type { BatchMoveSummary, BatchReview, IngestBatch } from "../types/archive";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
+import type { BatchMoveSummary, BatchReview, IngestBatch, RoutingDecision } from "../types/archive";
+import { api } from "../api/client";
 import MetadataQualityPanel from "./MetadataQualityPanel";
 import UniversalIngestionPanel from "./UniversalIngestionPanel";
 import { formatArchiveTime } from "../utils/archiveTime";
@@ -1272,6 +1273,91 @@ function MovedBatchDetail({ batch, moveSummary }: Props) {
   );
 }
 
+
+function DiscographyEditorGate({ batch, moveSummary }: Props) {
+  const [routing, setRouting] = useState<RoutingDecision | null>(null);
+  const [routingError, setRoutingError] = useState<string | null>(null);
+  const [routingLoading, setRoutingLoading] = useState(true);
+
+  useEffect(() => {
+    setRoutingLoading(true);
+    api.getReviewRouting(batch.id, "music_discography")
+      .then(setRouting)
+      .catch((err: unknown) => setRoutingError(err instanceof Error ? err.message : "Could not load routing decision"))
+      .finally(() => setRoutingLoading(false));
+  }, [batch.id]);
+
+  if (routingLoading) {
+    return <div className="routing-gate routing-gate--loading">Checking media candidates...</div>;
+  }
+
+  if (routingError) {
+    return (
+      <>
+        <div className="routing-gate routing-gate--warning">
+          <i className="ti ti-alert-triangle" />
+          Could not verify media candidates. Editor shown but review the Universal Ingestion panel above.
+        </div>
+        <DiscographyBatchDetail batch={batch} moveSummary={moveSummary} />
+      </>
+    );
+  }
+
+  if (!routing || routing.decision === "not_analyzed") {
+    return (
+      <>
+        <div className="routing-gate routing-gate--info">
+          <i className="ti ti-info-circle" />
+          Universal ingestion analysis not yet run for this batch.
+        </div>
+        <DiscographyBatchDetail batch={batch} moveSummary={moveSummary} />
+      </>
+    );
+  }
+
+  if (routing.decision === "blocked_conflict") {
+    return (
+      <div className="routing-gate routing-gate--blocked">
+        <i className="ti ti-shield-x" />
+        <strong>Editor blocked - conflict requires resolution</strong>
+        <p>This batch has a conflict that prevents safe discography correction. Review the Universal Ingestion panel above and resolve the conflict before editing.</p>
+      </div>
+    );
+  }
+
+  if (routing.decision === "universal_review_required") {
+    const hasNonMusic = Object.keys(routing.summary.media_class_counts ?? {}).some((type) => type !== "music");
+    return (
+      <div className="routing-gate routing-gate--required">
+        <i className="ti ti-folders" />
+        <strong>Universal review needed before music correction</strong>
+        <p>
+          {hasNonMusic
+            ? "This batch contains mixed media types. Review and separate candidate groups before using the discography editor."
+            : "Source fragments or reconstruction decisions require review before discography correction."
+          }
+        </p>
+        <p className="routing-gate__reason">
+          Reasons: {routing.reasons.map((reason) => reason.replace(/_/g, " ")).join(" | ")}
+        </p>
+      </div>
+    );
+  }
+
+  if (routing.decision === "universal_review_recommended") {
+    return (
+      <>
+        <div className="routing-gate routing-gate--recommended">
+          <i className="ti ti-alert-circle" />
+          <span>Source fragments were detected. Review the Universal Ingestion panel above before saving discography corrections.</span>
+        </div>
+        <DiscographyBatchDetail batch={batch} moveSummary={moveSummary} />
+      </>
+    );
+  }
+
+  return <DiscographyBatchDetail batch={batch} moveSummary={moveSummary} />;
+}
 export default function BatchDetail({ batch, moveSummary, review }: Props) {
   if (batch.status === "needs_quarantine_review" || batch.status === "quarantined") {
     return <QuarantineReviewDetail batch={batch} moveSummary={moveSummary} />;
@@ -1279,7 +1365,7 @@ export default function BatchDetail({ batch, moveSummary, review }: Props) {
   if (batch.detected_type === "music_discography") {
     return (
       <BatchReviewShell batch={batch}>
-        <DiscographyBatchDetail batch={batch} moveSummary={moveSummary} />
+        <DiscographyEditorGate batch={batch} moveSummary={moveSummary} />
       </BatchReviewShell>
     );
   }

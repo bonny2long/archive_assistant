@@ -3316,3 +3316,52 @@ button:focus-visible, input:focus-visible {
     grid-template-columns: 1fr;
   }
 }
+.routing-gate {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem 1.1rem;
+  border-left: 3px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-bottom: 1rem;
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.routing-gate i {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.routing-gate strong {
+  font-size: 14px;
+}
+.routing-gate p {
+  margin: 0;
+  color: var(--text-secondary);
+}
+.routing-gate__reason {
+  color: var(--text-muted);
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+}
+.routing-gate--loading {
+  border-left-color: var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.routing-gate--info {
+  border-left-color: var(--border);
+}
+.routing-gate--warning,
+.routing-gate--required {
+  border-left-color: var(--accent-amber);
+  background: rgba(245, 158, 11, 0.08);
+}
+.routing-gate--recommended {
+  border-left-color: var(--accent-blue);
+  background: rgba(59, 130, 246, 0.08);
+}
+.routing-gate--blocked {
+  border-left-color: var(--accent-red);
+  background: rgba(239, 68, 68, 0.08);
+}

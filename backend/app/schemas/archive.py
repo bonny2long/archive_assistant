@@ -214,6 +214,38 @@ class BatchUniversalIngestionOut(BaseModel):
     mixed_media_flags: list[MixedMediaFlagOut] = Field(default_factory=list)
     review_actions: list[UniversalIngestionReviewActionOut] = Field(default_factory=list)
 
+
+class RoutingCandidateSummaryOut(BaseModel):
+    candidate_id: int
+    candidate_title: str | None = None
+    candidate_media_type: str | None = None
+    candidate_key: str | None = None
+    chunk_identity_risk: bool = False
+
+
+class RoutingDecisionSummaryOut(BaseModel):
+    candidate_count: int = 0
+    media_types: list[str] = Field(default_factory=list)
+    media_class_counts: dict[str, int] = Field(default_factory=dict)
+    mixed_media_flag_count: int = 0
+    source_fragment_group_count: int = 0
+    reconstruction_decision_count: int = 0
+    blocked_conflict_count: int = 0
+    review_required_count: int = 0
+    chunk_identity_candidate_count: int = 0
+
+
+class RoutingDecisionOut(BaseModel):
+    batch_id: int
+    decision: str
+    allowed_editors: list[str] = Field(default_factory=list)
+    blocked_editors: list[str] = Field(default_factory=list)
+    reasons: list[str] = Field(default_factory=list)
+    universal_ingestion_available: bool = False
+    requires_snapshot: bool = False
+    summary: RoutingDecisionSummaryOut
+    candidate_route_summaries: list[RoutingCandidateSummaryOut] = Field(default_factory=list)
+
 class BatchSummary(BaseModel):
     id: int
     detected_type: str

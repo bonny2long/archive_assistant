@@ -34,6 +34,7 @@ from app.schemas.archive import (
     TvMetadataUpdate,
     TvEpisodeReviewUpdate,
     ReviewConfirmationUpdate,
+    RoutingDecisionOut,
 )
 from app.services.dev_reset import (
     DevResetBlockedError,
@@ -73,6 +74,7 @@ from app.services.book_metadata import (
 )
 from app.services.title_display import clean_display_title, destination_title
 from app.services.metadata_quality_gate import get_batch_metadata_quality
+from app.services.universal_review_routing import get_batch_routing_decision
 from app.services.universal_ingestion_review import (
     clear_review_action,
     create_or_update_review_action,
@@ -478,6 +480,22 @@ def clear_universal_ingestion_action(batch_id: int, action_id: int, db: Session 
         return clear_review_action(db, batch_id, action_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/batches/{batch_id}/review-routing", response_model=RoutingDecisionOut)
+def get_batch_review_routing(
+    batch_id: int,
+    target_editor: str | None = Query(default=None),
+    snapshot: bool = Query(default=False),
+    db: Session = Depends(get_db),
+):
+    batch = db.get(IngestBatch, batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    try:
+        return get_batch_routing_decision(db, batch_id, target_editor=target_editor, snapshot=snapshot)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 @router.patch("/batches/{batch_id}/metadata", response_model=BatchSummary)
 def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Session = Depends(get_db)):
