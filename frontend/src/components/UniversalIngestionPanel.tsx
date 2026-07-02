@@ -4,6 +4,8 @@ import type {
   BatchUniversalIngestion,
   MediaIdentityCandidate,
   UniversalDecisionName,
+  UniversalReviewAction,
+  UniversalReviewActionUpdate,
 } from "../types/archive";
 
 const DECISION_LABELS: Record<UniversalDecisionName, string> = {
@@ -22,6 +24,33 @@ const DECISION_HELP: Record<UniversalDecisionName, string> = {
   blocked_conflict: "AA found a conflict that should not move automatically.",
 };
 
+const MEDIA_CLASSES = [
+  "music_audio",
+  "audiobook_audio",
+  "ebook",
+  "comic",
+  "movie",
+  "tv_episode",
+  "video_extra",
+  "subtitle",
+  "artwork",
+  "sidecar_metadata",
+  "playlist",
+  "archive_file",
+  "unknown",
+];
+
+function actionLabel(action: UniversalReviewAction): string {
+  if (action.action_type === "approve_candidate") return "Approved by user";
+  if (action.action_type === "mark_review_later") return "Review later";
+  if (action.action_type === "override_media_class") return `Media class override: ${formatToken(action.target_media_class || "unknown")}`;
+  if (action.action_type === "override_identity") return "Identity override";
+  if (action.action_type === "exclude_from_move_plan") return "Excluded from move plan";
+  if (action.action_type === "block_candidate") return "Blocked by user";
+  if (action.action_type === "split_candidate") return "Split required";
+  if (action.action_type === "merge_candidates") return "Merge requested";
+  return formatToken(action.action_type);
+}
 function formatToken(value: string): string {
   return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
@@ -50,6 +79,10 @@ export default function UniversalIngestionPanel({ batchId }: { batchId: number }
   const [review, setReview] = useState<BatchUniversalIngestion | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [savingAction, setSavingAction] = useState<number | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [mediaClassOverrides, setMediaClassOverrides] = useState<Record<number, string>>({});
+  const [identityOverrides, setIdentityOverrides] = useState<Record<number, { title: string; creator: string; year: string }>>({});
 
   useEffect(() => {
     let active = true;
@@ -77,6 +110,31 @@ export default function UniversalIngestionPanel({ batchId }: { batchId: number }
     }
     return map;
   }, [review]);
+
+  function refreshReview() {
+    return api.getBatchUniversalIngestion(batchId, false).then(setReview);
+  }
+
+  function submitAction(candidate: MediaIdentityCandidate, update: UniversalReviewActionUpdate) {
+    setSavingAction(candidate.id);
+    setActionError(null);
+    api.createUniversalIngestionAction(batchId, {
+      candidate_id: candidate.id,
+      ...update,
+    })
+      .then(() => refreshReview())
+      .catch((err: unknown) => setActionError(err instanceof Error ? err.message : "Could not save review action"))
+      .finally(() => setSavingAction(null));
+  }
+
+  function clearAction(action: UniversalReviewAction) {
+    setSavingAction(action.candidate_id ?? -1);
+    setActionError(null);
+    api.clearUniversalIngestionAction(batchId, action.id)
+      .then(() => refreshReview())
+      .catch((err: unknown) => setActionError(err instanceof Error ? err.message : "Could not clear review action"))
+      .finally(() => setSavingAction(null));
+  }
 
   if (loading) {
     return (
@@ -131,6 +189,8 @@ export default function UniversalIngestionPanel({ batchId }: { batchId: number }
         </strong>
       </div>
 
+      {actionError && <div className="universal-action-error">{actionError}</div>}
+
       <div className="universal-ingestion-counts">
         <div>
           <span>Media classes</span>
@@ -169,6 +229,139 @@ export default function UniversalIngestionPanel({ batchId }: { batchId: number }
                 {candidate.recommended_action && (
                   <p className="universal-candidate__action"><strong>Recommended action:</strong> {candidate.recommended_action}</p>
                 )}
+                {(candidate.active_actions ?? []).length > 0 && (
+                  <div className="universal-active-actions" aria-label="Active user actions">
+                    {(candidate.active_actions ?? []).map((action) => (
+                      <span key={action.id}>
+                        {actionLabel(action)}
+                        <button
+                          type="button"
+                          onClick={() => clearAction(action)}
+                          disabled={savingAction === candidate.id}
+                          title="Clear this review action"
+                        >
+                          Clear
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="universal-action-bar" aria-label="Universal ingestion review actions">
+                  <button
+                    type="button"
+                    onClick={() => submitAction(candidate, { action_type: "approve_candidate", reason: "User confirmed candidate grouping." })}
+                    disabled={savingAction === candidate.id}
+                  >
+                    Approve
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => submitAction(candidate, { action_type: "mark_review_later", reason: "User marked candidate for later lookup." })}
+                    disabled={savingAction === candidate.id}
+                  >
+                    Review later
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => submitAction(candidate, { action_type: "exclude_from_move_plan", reason: "User excluded candidate from current move plan without deleting files." })}
+                    disabled={savingAction === candidate.id}
+                  >
+                    Exclude
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => submitAction(candidate, { action_type: "split_candidate", reason: "User marked candidate as requiring split before final organization." })}
+                    disabled={savingAction === candidate.id}
+                  >
+                    Split required
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => submitAction(candidate, { action_type: "block_candidate", reason: "User blocked candidate because the conflict is unsafe." })}
+                    disabled={savingAction === candidate.id}
+                  >
+                    Block
+                  </button>
+                </div>
+                <details className="universal-action-drawer">
+                  <summary>Overrides</summary>
+                  <div className="universal-override-row">
+                    <label>
+                      <span>Media class</span>
+                      <select
+                        value={mediaClassOverrides[candidate.id] ?? candidate.candidate_media_type}
+                        onChange={(event) => setMediaClassOverrides((current) => ({ ...current, [candidate.id]: event.target.value }))}
+                      >
+                        {MEDIA_CLASSES.map((mediaClass) => (
+                          <option key={mediaClass} value={mediaClass}>{formatToken(mediaClass)}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => submitAction(candidate, {
+                        action_type: "override_media_class",
+                        target_media_class: mediaClassOverrides[candidate.id] ?? candidate.candidate_media_type,
+                        reason: "User corrected the candidate media class.",
+                      })}
+                      disabled={savingAction === candidate.id}
+                    >
+                      Save class
+                    </button>
+                  </div>
+                  <div className="universal-override-grid">
+                    <label>
+                      <span>Title</span>
+                      <input
+                        value={identityOverrides[candidate.id]?.title ?? candidate.candidate_title ?? ""}
+                        onChange={(event) => setIdentityOverrides((current) => ({
+                          ...current,
+                          [candidate.id]: { ...(current[candidate.id] ?? { title: candidate.candidate_title ?? "", creator: candidate.candidate_primary_creator ?? "", year: candidate.candidate_year ?? "" }), title: event.target.value },
+                        }))}
+                      />
+                    </label>
+                    <label>
+                      <span>Creator</span>
+                      <input
+                        value={identityOverrides[candidate.id]?.creator ?? candidate.candidate_primary_creator ?? ""}
+                        onChange={(event) => setIdentityOverrides((current) => ({
+                          ...current,
+                          [candidate.id]: { ...(current[candidate.id] ?? { title: candidate.candidate_title ?? "", creator: candidate.candidate_primary_creator ?? "", year: candidate.candidate_year ?? "" }), creator: event.target.value },
+                        }))}
+                      />
+                    </label>
+                    <label>
+                      <span>Year</span>
+                      <input
+                        value={identityOverrides[candidate.id]?.year ?? candidate.candidate_year ?? ""}
+                        onChange={(event) => setIdentityOverrides((current) => ({
+                          ...current,
+                          [candidate.id]: { ...(current[candidate.id] ?? { title: candidate.candidate_title ?? "", creator: candidate.candidate_primary_creator ?? "", year: candidate.candidate_year ?? "" }), year: event.target.value },
+                        }))}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const override = identityOverrides[candidate.id] ?? {
+                          title: candidate.candidate_title ?? "",
+                          creator: candidate.candidate_primary_creator ?? "",
+                          year: candidate.candidate_year ?? "",
+                        };
+                        submitAction(candidate, {
+                          action_type: "override_identity",
+                          override_title: override.title || null,
+                          override_primary_creator: override.creator || null,
+                          override_year: override.year || null,
+                          reason: "User corrected candidate identity fields.",
+                        });
+                      }}
+                      disabled={savingAction === candidate.id}
+                    >
+                      Save identity
+                    </button>
+                  </div>
+                </details>
                 <details className="universal-member-drawer">
                   <summary>Members</summary>
                   <div className="universal-member-list">

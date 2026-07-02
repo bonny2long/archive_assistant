@@ -44,6 +44,56 @@ class BatchMetadataQualityOut(BaseModel):
     items: list[MetadataQualityDecisionOut] = Field(default_factory=list)
 
 
+
+class UniversalIngestionReviewActionOut(BaseModel):
+    id: int
+    batch_id: int
+    candidate_id: int | None = None
+    source_fragment_id: int | None = None
+    media_file_id: int | None = None
+    action_type: str
+    target_media_class: str | None = None
+    target_candidate_id: int | None = None
+    override_title: str | None = None
+    override_primary_creator: str | None = None
+    override_year: str | None = None
+    override_series: str | None = None
+    override_series_index: str | None = None
+    override_release_type: str | None = None
+    override_genre_family: str | None = None
+    override_destination_root: str | None = None
+    decision_status: str = "active"
+    reason: str | None = None
+    note: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    applied_at: datetime | None = None
+    created_by: str | None = "local_user"
+
+    @field_serializer("created_at", "updated_at", "applied_at")
+    def serialize_action_time(self, value: datetime | None) -> str | None:
+        return serialize_utc(value) if value else None
+
+
+class UniversalIngestionReviewActionUpdate(BaseModel):
+    action_type: str
+    candidate_id: int | None = None
+    source_fragment_id: int | None = None
+    media_file_id: int | None = None
+    target_media_class: str | None = None
+    target_candidate_id: int | None = None
+    override_title: str | None = None
+    override_primary_creator: str | None = None
+    override_year: str | None = None
+    override_series: str | None = None
+    override_series_index: str | None = None
+    override_release_type: str | None = None
+    override_genre_family: str | None = None
+    override_destination_root: str | None = None
+    reason: str | None = None
+    note: str | None = None
+    created_by: str | None = "local_user"
+
 class UniversalIngestionSummaryOut(BaseModel):
     source_fragment_count: int = 0
     candidate_count: int = 0
@@ -52,6 +102,7 @@ class UniversalIngestionSummaryOut(BaseModel):
     decision_counts: dict[str, int] = Field(default_factory=dict)
     media_class_counts: dict[str, int] = Field(default_factory=dict)
     worst_decision: str = "safe_group"
+    action_summary: dict = Field(default_factory=dict)
 
 
 class SourceFragmentOut(BaseModel):
@@ -65,6 +116,7 @@ class SourceFragmentOut(BaseModel):
     media_class_counts: dict[str, int] = Field(default_factory=dict)
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    active_actions: list[UniversalIngestionReviewActionOut] = Field(default_factory=list)
 
     @field_serializer("created_at", "updated_at")
     def serialize_fragment_time(self, value: datetime | None) -> str | None:
@@ -92,6 +144,7 @@ class CandidateMemberOut(BaseModel):
     member_role: str
     confidence: float | None = None
     reason: str | None = None
+    active_actions: list[UniversalIngestionReviewActionOut] = Field(default_factory=list)
 
 
 class MediaIdentityCandidateOut(BaseModel):
@@ -112,6 +165,7 @@ class MediaIdentityCandidateOut(BaseModel):
     recommended_action: str | None = None
     summary_reason: str | None = None
     members: list[CandidateMemberOut] = Field(default_factory=list)
+    active_actions: list[UniversalIngestionReviewActionOut] = Field(default_factory=list)
 
 
 class FragmentReconstructionDecisionOut(BaseModel):
@@ -158,6 +212,7 @@ class BatchUniversalIngestionOut(BaseModel):
     candidates: list[MediaIdentityCandidateOut] = Field(default_factory=list)
     reconstruction_decisions: list[FragmentReconstructionDecisionOut] = Field(default_factory=list)
     mixed_media_flags: list[MixedMediaFlagOut] = Field(default_factory=list)
+    review_actions: list[UniversalIngestionReviewActionOut] = Field(default_factory=list)
 
 class BatchSummary(BaseModel):
     id: int

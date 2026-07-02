@@ -3213,3 +3213,106 @@ button:focus-visible, input:focus-visible {
     grid-template-columns: 1fr;
   }
 }
+.universal-action-error {
+  padding: 0.65rem 0.75rem;
+  border: 1px solid rgba(239, 68, 68, 0.28);
+  border-radius: var(--radius-sm);
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--accent-red);
+  font-size: 12px;
+}
+.universal-active-actions,
+.universal-action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.65rem;
+}
+.universal-active-actions span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--accent-green);
+  font-size: 10px;
+  font-weight: 700;
+}
+.universal-action-bar button,
+.universal-active-actions button,
+.universal-override-row button,
+.universal-override-grid button {
+  min-height: 26px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.universal-action-bar button:hover,
+.universal-active-actions button:hover,
+.universal-override-row button:hover,
+.universal-override-grid button:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+}
+.universal-action-bar button:disabled,
+.universal-active-actions button:disabled,
+.universal-override-row button:disabled,
+.universal-override-grid button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.universal-action-drawer {
+  margin-top: 0.65rem;
+}
+.universal-override-row,
+.universal-override-grid {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.55rem;
+}
+.universal-override-row {
+  grid-template-columns: minmax(180px, 1fr) auto;
+  align-items: end;
+}
+.universal-override-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  align-items: end;
+}
+.universal-override-row label,
+.universal-override-grid label {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+.universal-override-row label span,
+.universal-override-grid label span {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.universal-override-row select,
+.universal-override-grid input {
+  width: 100%;
+  min-width: 0;
+  min-height: 30px;
+  padding: 5px 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .universal-override-row,
+  .universal-override-grid {
+    grid-template-columns: 1fr;
+  }
+}

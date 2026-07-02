@@ -16,6 +16,8 @@ from app.schemas.archive import (
     BatchReviewTrack,
     BatchSummary,
     BatchUniversalIngestionOut,
+    UniversalIngestionReviewActionOut,
+    UniversalIngestionReviewActionUpdate,
     AudiobookMetadataUpdate,
     BookCollectionReviewUpdate,
     BookMetadataUpdate,
@@ -71,7 +73,13 @@ from app.services.book_metadata import (
 )
 from app.services.title_display import clean_display_title, destination_title
 from app.services.metadata_quality_gate import get_batch_metadata_quality
-from app.services.universal_ingestion_review import get_batch_universal_ingestion_review
+from app.services.universal_ingestion_review import (
+    clear_review_action,
+    create_or_update_review_action,
+    get_batch_universal_ingestion_review,
+    list_review_actions_for_batch,
+    action_to_dict,
+)
 from app.services.metadata_candidates import (
     METADATA_ASSIST_VERSION,
     normalize_metadata_text,
@@ -443,6 +451,33 @@ def batch_universal_ingestion(
         return get_batch_universal_ingestion_review(db, batch_id, snapshot=snapshot)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail="Batch not found") from exc
+
+
+@router.get("/batches/{batch_id}/universal-ingestion/actions", response_model=list[UniversalIngestionReviewActionOut])
+def list_universal_ingestion_actions(batch_id: int, db: Session = Depends(get_db)):
+    if db.get(IngestBatch, batch_id) is None:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    return [action_to_dict(action) for action in list_review_actions_for_batch(db, batch_id)]
+
+
+@router.post("/batches/{batch_id}/universal-ingestion/actions", response_model=UniversalIngestionReviewActionOut)
+def create_universal_ingestion_action(
+    batch_id: int,
+    update: UniversalIngestionReviewActionUpdate,
+    db: Session = Depends(get_db),
+):
+    try:
+        return create_or_update_review_action(db, batch_id, update.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/batches/{batch_id}/universal-ingestion/actions/{action_id}/clear", response_model=UniversalIngestionReviewActionOut)
+def clear_universal_ingestion_action(batch_id: int, action_id: int, db: Session = Depends(get_db)):
+    try:
+        return clear_review_action(db, batch_id, action_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 @router.patch("/batches/{batch_id}/metadata", response_model=BatchSummary)
 def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Session = Depends(get_db)):

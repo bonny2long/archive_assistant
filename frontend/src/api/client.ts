@@ -26,6 +26,8 @@ import type {
   TvMetadataUpdate,
   TvEpisodeReviewUpdate,
   ReviewConfirmationUpdate,
+  UniversalReviewAction,
+  UniversalReviewActionUpdate,
 } from "../types/archive";
 
 const BASE = "/api";
@@ -93,6 +95,10 @@ export const api = {
     request<BatchMetadataQuality>(`/batches/${id}/metadata-quality`),
   getBatchUniversalIngestion: (id: number, snapshot = false) =>
     request<BatchUniversalIngestion>(`/batches/${id}/universal-ingestion${snapshot ? "?snapshot=true" : ""}`),
+  createUniversalIngestionAction: (id: number, update: UniversalReviewActionUpdate) =>
+    request<UniversalReviewAction>(`/batches/${id}/universal-ingestion/actions`, "POST", update),
+  clearUniversalIngestionAction: (id: number, actionId: number) =>
+    request<UniversalReviewAction>(`/batches/${id}/universal-ingestion/actions/${actionId}/clear`, "POST"),
   getBatchMoves: (id: number) => request<BatchMoveSummary>(`/batches/${id}/moves`),
   updateBatchMetadata: (id: number, update: BatchMetadataUpdate) =>
     request<BatchSummary>(`/batches/${id}/metadata`, "PATCH", update),

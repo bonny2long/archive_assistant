@@ -109,6 +109,61 @@ export type BatchMetadataQuality = {
   items: MetadataQualityDecision[];
 };
 
+
+export type UniversalReviewActionType =
+  | "approve_candidate"
+  | "mark_review_later"
+  | "override_media_class"
+  | "override_identity"
+  | "merge_candidates"
+  | "split_candidate"
+  | "exclude_from_move_plan"
+  | "block_candidate";
+
+export type UniversalReviewAction = {
+  id: number;
+  batch_id: number;
+  candidate_id?: number | null;
+  source_fragment_id?: number | null;
+  media_file_id?: number | null;
+  action_type: UniversalReviewActionType | string;
+  target_media_class?: string | null;
+  target_candidate_id?: number | null;
+  override_title?: string | null;
+  override_primary_creator?: string | null;
+  override_year?: string | null;
+  override_series?: string | null;
+  override_series_index?: string | null;
+  override_release_type?: string | null;
+  override_genre_family?: string | null;
+  override_destination_root?: string | null;
+  decision_status: string;
+  reason?: string | null;
+  note?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  applied_at?: string | null;
+  created_by?: string | null;
+};
+
+export type UniversalReviewActionUpdate = {
+  action_type: UniversalReviewActionType;
+  candidate_id?: number | null;
+  source_fragment_id?: number | null;
+  media_file_id?: number | null;
+  target_media_class?: string | null;
+  target_candidate_id?: number | null;
+  override_title?: string | null;
+  override_primary_creator?: string | null;
+  override_year?: string | null;
+  override_series?: string | null;
+  override_series_index?: string | null;
+  override_release_type?: string | null;
+  override_genre_family?: string | null;
+  override_destination_root?: string | null;
+  reason?: string | null;
+  note?: string | null;
+};
 export type UniversalDecisionName =
   | "safe_group"
   | "split_recommended"
@@ -124,6 +179,7 @@ export type UniversalIngestionSummary = {
   decision_counts: Record<string, number>;
   media_class_counts: Record<string, number>;
   worst_decision: UniversalDecisionName;
+  action_summary?: Record<string, unknown>;
 };
 
 export type SourceFragment = {
@@ -137,6 +193,7 @@ export type SourceFragment = {
   media_class_counts: Record<string, number>;
   created_at?: string | null;
   updated_at?: string | null;
+  active_actions?: UniversalReviewAction[];
 };
 
 export type CandidateMember = {
@@ -160,6 +217,7 @@ export type CandidateMember = {
   member_role: string;
   confidence?: number | null;
   reason?: string | null;
+  active_actions?: UniversalReviewAction[];
 };
 
 export type MediaIdentityCandidate = {
@@ -180,6 +238,7 @@ export type MediaIdentityCandidate = {
   recommended_action?: string | null;
   summary_reason?: string | null;
   members: CandidateMember[];
+  active_actions?: UniversalReviewAction[];
 };
 
 export type FragmentReconstructionDecision = {
@@ -218,6 +277,7 @@ export type BatchUniversalIngestion = {
   candidates: MediaIdentityCandidate[];
   reconstruction_decisions: FragmentReconstructionDecision[];
   mixed_media_flags: MixedMediaFlag[];
+  review_actions?: UniversalReviewAction[];
 };
 
 export type BatchSummary = {
