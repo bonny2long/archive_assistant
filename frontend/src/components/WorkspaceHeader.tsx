@@ -13,7 +13,7 @@ function decisionLabel(decision: string | undefined): string {
   return (decision ?? "loading").replace(/_/g, " ");
 }
 
-function hasActiveAction(actions: Array<{ action_type: string; decision_status: string }>, actionType: string): boolean {
+function hasActiveAction(actions: Array<{ action_type: string; decision_status?: string | null }>, actionType: string): boolean {
   return actions.some((action) => action.action_type === actionType && action.decision_status !== "cleared");
 }
 
@@ -63,8 +63,13 @@ export default function WorkspaceHeader({ batch, ingestion, routing, onClose, on
         )}
       </div>
       <div className="review-workspace__header-actions">
-        <button className="btn btn--green" disabled={!canApprove} onClick={() => void onApprove(batch.id)}>
-          <i className="ti ti-check" /> Approve safe groups
+        <button
+          className="btn btn--green"
+          disabled={!canApprove}
+          title="Approves groups the backend currently considers safe. Individual candidate decisions remain visible in the workspace."
+          onClick={() => void onApprove(batch.id)}
+        >
+          <i className="ti ti-check" /> Approve backend-safe groups
         </button>
         <button className="btn-sm" title="Close Review Workspace" onClick={onClose}>
           <i className="ti ti-x" />

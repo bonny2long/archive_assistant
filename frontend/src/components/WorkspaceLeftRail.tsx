@@ -13,7 +13,7 @@ type Props = {
 const FILTERS: Array<{ key: WorkspaceFilter; label: string }> = [
   { key: "all", label: "All" },
   { key: "blocked", label: "Blocked" },
-  { key: "review", label: "Review" },
+  { key: "review", label: "Needs review" },
   { key: "safe", label: "Safe" },
   { key: "music", label: "Music" },
   { key: "audiobook", label: "Audiobook" },
@@ -27,7 +27,10 @@ const FILTERS: Array<{ key: WorkspaceFilter; label: string }> = [
 
 function countFor(filter: WorkspaceFilter, candidates: CandidateViewModel[]): number {
   if (filter === "all") return candidates.length;
-  if (["blocked", "review", "safe"].includes(filter)) {
+  if (filter === "safe") {
+    return candidates.filter((candidate) => candidate.displayState === "safe" || candidate.displayState === "approved").length;
+  }
+  if (["blocked", "review"].includes(filter)) {
     return candidates.filter((candidate) => candidate.displayState === filter).length;
   }
   return candidates.filter((candidate) => candidate.mediaType === filter).length;

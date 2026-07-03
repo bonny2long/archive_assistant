@@ -3974,3 +3974,35 @@ button:focus-visible, input:focus-visible {
   font-weight: 500;
 }
 /* End AA-UX5 */
+
+/* AA-UX5.1 - Review Workspace Stabilization */
+.workspace-inspector__decision-actions-section > p {
+  margin: 0 0 0.65rem;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.workspace-inspector__decisions-section .workspace-inspector__actions-list span {
+  color: var(--text-primary);
+}
+
+.workspace-candidate__risk {
+  color: var(--accent-amber);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.workspace-candidate__meta span {
+  white-space: nowrap;
+}
+
+.review-workspace__filters button.is-active span {
+  color: var(--text-primary);
+}
+
+.review-workspace__filters button small {
+  min-width: 1.4rem;
+  text-align: right;
+}
+/* End AA-UX5.1 */

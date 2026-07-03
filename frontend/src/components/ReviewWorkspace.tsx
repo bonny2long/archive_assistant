@@ -19,14 +19,34 @@ import WorkspaceInspector from "./WorkspaceInspector";
 import WorkspaceLeftRail from "./WorkspaceLeftRail";
 
 export const SOURCE_CHUNK_PATTERNS = [
-  /\bpart\s*\d+\b/i,
-  /\bdisc\s*\d+\b/i,
-  /\bcd\s*\d+\b/i,
-  /\bchapter\s*\d+\b/i,
-  /\bvolume\s*\d+\b/i,
-  /\bfragment\b/i,
-  /\bchunk\b/i,
+  /^drive-download-/i,
+  /^googledrive[-_\s]*\d+/i,
+  /^google-drive[-_\s]*\d+/i,
+  /^part[-_\s]*\d{2,}$/i,
+  /^chunk[-_\s]*\d+$/i,
+  /^source[-_\s]*fragment[-_\s]*\d*$/i,
+  /^fragment[-_\s]*\d+$/i,
 ];
+
+function lastPathSegment(value: string): string {
+  return value.replace(/\\/g, "/").split("/").filter(Boolean).pop() ?? value;
+}
+
+function isSourceChunkIdentity(value: string | null | undefined): boolean {
+  if (!value) return false;
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  const segment = lastPathSegment(trimmed);
+  return SOURCE_CHUNK_PATTERNS.some((pattern) => pattern.test(segment));
+}
+
+function isActionActive(action: UniversalReviewAction): boolean {
+  return action.decision_status !== "cleared";
+}
+
+function activeOnly(actions: UniversalReviewAction[] | null | undefined): UniversalReviewAction[] {
+  return (actions ?? []).filter(isActionActive);
+}
 
 export type CandidateViewModel = {
   id: number;
@@ -64,6 +84,7 @@ function mediaTypeFilter(value: string | null | undefined): WorkspaceFilter {
   if (normalized.includes("art")) return "artwork";
   return "unknown";
 }
+
 function mediaTypeFromClass(mediaClass: string | null | undefined): string | null {
   if (!mediaClass) return null;
   const mapping: Record<string, string> = {
@@ -81,7 +102,7 @@ function mediaTypeFromClass(mediaClass: string | null | undefined): string | nul
 }
 
 function latestActiveAction(actions: UniversalReviewAction[], actionType: string): UniversalReviewAction | undefined {
-  return actions.find((action) => action.action_type === actionType && action.decision_status !== "cleared");
+  return actions.find((action) => action.action_type === actionType && isActionActive(action));
 }
 
 function applyCandidateOverrides(
@@ -99,11 +120,12 @@ function applyCandidateOverrides(
     candidate_series: identityOverride?.override_series || candidate.candidate_series,
     candidate_series_index: identityOverride?.override_series_index || candidate.candidate_series_index,
     candidate_media_type: mediaType,
+    active_actions: actions,
   };
 }
 
 function hasActiveAction(actions: UniversalReviewAction[], actionType: UniversalReviewActionType): boolean {
-  return actions.some((action) => action.action_type === actionType && action.decision_status !== "cleared");
+  return actions.some((action) => action.action_type === actionType && isActionActive(action));
 }
 
 function candidateDecisions(
@@ -118,18 +140,24 @@ function candidateHasChunkIdentityRisk(candidate: MediaIdentityCandidate, routin
     (summary) => summary.candidate_id === candidate.id && summary.chunk_identity_risk,
   );
   if (routeRisk) return true;
-  return candidate.members.some((member) => SOURCE_CHUNK_PATTERNS.some(
-    (pattern) => pattern.test(member.relative_path) || pattern.test(member.filename),
-  ));
+
+  return [
+    candidate.candidate_title,
+    candidate.candidate_primary_creator,
+    candidate.candidate_secondary_creator,
+    candidate.candidate_key,
+  ].some(isSourceChunkIdentity);
 }
 
 function deriveDisplayState(
   candidate: MediaIdentityCandidate,
   decisions: FragmentReconstructionDecision[],
+  hasChunkIdentityRisk: boolean,
 ): WorkspaceCandidateState {
-  const actions = candidate.active_actions ?? [];
+  const actions = activeOnly(candidate.active_actions);
   if (hasActiveAction(actions, "block_candidate")) return "blocked";
   if (hasActiveAction(actions, "approve_candidate")) return "approved";
+  if (hasChunkIdentityRisk) return "review";
   if (hasActiveAction(actions, "mark_review_later")) return "review";
   if (decisions.some((decision) => decision.decision === "blocked_conflict")) return "blocked";
   if (decisions.some((decision) => ["review_required", "split_recommended", "merge_recommended"].includes(decision.decision))) {
@@ -143,11 +171,12 @@ export function buildCandidateViewModels(
   routing: RoutingDecision | null,
 ): CandidateViewModel[] {
   return ingestion.candidates.map((candidate) => {
-    const actions = candidate.active_actions ?? [];
+    const actions = activeOnly(candidate.active_actions);
     const effectiveCandidate = applyCandidateOverrides(candidate, actions);
     const decisions = candidateDecisions(candidate.id, ingestion.reconstruction_decisions);
     const relatedFlags = ingestion.mixed_media_flags.filter((flag) => flag.candidate_id === candidate.id);
-    const displayState = deriveDisplayState(candidate, decisions);
+    const hasChunkIdentityRisk = candidateHasChunkIdentityRisk(effectiveCandidate, routing);
+    const displayState = deriveDisplayState({ ...candidate, active_actions: actions }, decisions, hasChunkIdentityRisk);
     return {
       id: candidate.id,
       title: effectiveCandidate.candidate_title || effectiveCandidate.candidate_key || "Untitled candidate",
@@ -160,19 +189,42 @@ export function buildCandidateViewModels(
       sourceFragmentCount: effectiveCandidate.source_fragment_count,
       warningCount: decisions.length + relatedFlags.length,
       recommendedAction: effectiveCandidate.recommended_action || decisions[0]?.recommended_action || "Review candidate",
-      hasChunkIdentityRisk: candidateHasChunkIdentityRisk(effectiveCandidate, routing),
+      hasChunkIdentityRisk,
       activeActions: actions,
       rawCandidate: effectiveCandidate,
     };
   });
 }
 
+const CANDIDATE_STATE_ORDER: Record<WorkspaceCandidateState, number> = {
+  blocked: 0,
+  review: 1,
+  safe: 2,
+  approved: 3,
+};
+
+function sortCandidates(candidates: CandidateViewModel[]): CandidateViewModel[] {
+  return [...candidates].sort((a, b) => {
+    const stateDiff = CANDIDATE_STATE_ORDER[a.displayState] - CANDIDATE_STATE_ORDER[b.displayState];
+    if (stateDiff !== 0) return stateDiff;
+    const warningDiff = b.warningCount - a.warningCount;
+    if (warningDiff !== 0) return warningDiff;
+    const fileDiff = b.fileCount - a.fileCount;
+    if (fileDiff !== 0) return fileDiff;
+    return a.title.localeCompare(b.title);
+  });
+}
+
 function filterCandidates(candidates: CandidateViewModel[], filter: WorkspaceFilter): CandidateViewModel[] {
-  if (filter === "all") return candidates;
-  if (["blocked", "review", "safe"].includes(filter)) {
-    return candidates.filter((candidate) => candidate.displayState === filter);
+  const sorted = sortCandidates(candidates);
+  if (filter === "all") return sorted;
+  if (filter === "safe") {
+    return sorted.filter((candidate) => candidate.displayState === "safe" || candidate.displayState === "approved");
   }
-  return candidates.filter((candidate) => candidate.mediaType === filter);
+  if (["blocked", "review"].includes(filter)) {
+    return sorted.filter((candidate) => candidate.displayState === filter);
+  }
+  return sorted.filter((candidate) => candidate.mediaType === filter);
 }
 
 export default function ReviewWorkspace({
@@ -192,6 +244,7 @@ export default function ReviewWorkspace({
   const [savingActionId, setSavingActionId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [showTech, setShowTech] = useState(false);
+  const [workspaceRefreshKey, setWorkspaceRefreshKey] = useState(0);
 
   const loadWorkspace = useCallback(async () => {
     setLoading(true);
@@ -222,10 +275,20 @@ export default function ReviewWorkspace({
     [ingestion, routing],
   );
   const filteredCandidates = useMemo(() => filterCandidates(candidates, filter), [candidates, filter]);
-  const selectedCandidate = candidates.find((candidate) => candidate.id === selectedCandidateId)
+  const selectedCandidate = filteredCandidates.find((candidate) => candidate.id === selectedCandidateId)
     ?? filteredCandidates[0]
     ?? null;
   const qualityIssueCount = (quality?.blocked_count ?? 0) + (quality?.review_required_count ?? 0);
+
+  useEffect(() => {
+    if (!filteredCandidates.length) {
+      if (selectedCandidateId !== null) setSelectedCandidateId(null);
+      return;
+    }
+    if (!filteredCandidates.some((candidate) => candidate.id === selectedCandidateId)) {
+      setSelectedCandidateId(filteredCandidates[0].id);
+    }
+  }, [filteredCandidates, selectedCandidateId]);
 
   const handleAction = async (
     candidateId: number,
@@ -237,6 +300,7 @@ export default function ReviewWorkspace({
     try {
       await onSaveAction(batch.id, { action_type: actionType, candidate_id: candidateId, ...overrides });
       await loadWorkspace();
+      setWorkspaceRefreshKey((key) => key + 1);
     } catch (saveError: unknown) {
       setActionError(saveError instanceof Error ? saveError.message : "Unable to save review action");
     } finally {
@@ -250,6 +314,7 @@ export default function ReviewWorkspace({
     try {
       await onClearAction(batch.id, actionId);
       await loadWorkspace();
+      setWorkspaceRefreshKey((key) => key + 1);
     } catch (clearError: unknown) {
       setActionError(clearError instanceof Error ? clearError.message : "Unable to clear review action");
     } finally {
@@ -295,6 +360,7 @@ export default function ReviewWorkspace({
             vm={selectedCandidate}
             ingestion={ingestion}
             batchId={batch.id}
+            workspaceRefreshKey={workspaceRefreshKey}
             savingActionId={savingActionId}
             actionError={actionError}
             onAction={handleAction}

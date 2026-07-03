@@ -14,6 +14,7 @@ type Props = {
   vm: CandidateViewModel | null;
   ingestion: BatchUniversalIngestion;
   batchId: number;
+  workspaceRefreshKey: number;
   savingActionId: number | null;
   actionError: string | null;
   onAction: (
@@ -54,8 +55,25 @@ const MEDIA_CLASS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "unknown", label: "Unknown" },
 ];
 
-function formatActionLabel(actionType: string): string {
-  return actionType.replace(/_/g, " ");
+function mediaClassLabel(value: string | null | undefined): string {
+  const match = MEDIA_CLASS_OPTIONS.find((option) => option.value === value);
+  return match?.label ?? value ?? "Unknown";
+}
+
+function formatActionLabel(action: { action_type: string; target_media_class?: string | null }): string {
+  const labels: Record<string, string> = {
+    approve_candidate: "Approved for move plan",
+    mark_review_later: "Marked for later review",
+    override_identity: "Identity override saved",
+    exclude_from_move_plan: "Excluded from move plan",
+    block_candidate: "Blocked by user",
+    split_candidate: "Split required",
+    merge_candidates: "Merge requested",
+  };
+  if (action.action_type === "override_media_class") {
+    return `Media type changed to ${mediaClassLabel(action.target_media_class)}`;
+  }
+  return labels[action.action_type] ?? action.action_type.replace(/_/g, " ");
 }
 
 function memberLabel(member: CandidateMember): string {
@@ -296,6 +314,7 @@ export default function WorkspaceInspector({
   vm,
   ingestion,
   batchId,
+  workspaceRefreshKey,
   savingActionId,
   actionError,
   onAction,
@@ -353,6 +372,7 @@ export default function WorkspaceInspector({
     setPendingExclude(false);
     if (actionError) return;
     setExcludeSavedFlash(true);
+    setPreviewRefreshKey((key) => key + 1);
   }, [savingActionId, actionError, pendingExclude, vm?.id]);
 
   useEffect(() => {
@@ -394,7 +414,7 @@ export default function WorkspaceInspector({
 
       {vm.hasChunkIdentityRisk && (
         <div className="workspace-inspector__warning">
-          <i className="ti ti-alert-triangle" /> Chunked source folders need manual identity review before approval.
+          <i className="ti ti-alert-triangle" /> A source folder name appears to be used as this candidate identity. Review identity before approval.
         </div>
       )}
       {actionError && <div className="workspace-inspector__warning workspace-inspector__warning--error">{actionError}</div>}
@@ -456,52 +476,56 @@ export default function WorkspaceInspector({
         />
       )}
 
-      <div className="workspace-inspector__actions">
-        <button
-          className="btn btn--green"
-          disabled={approveDisabled}
-          onClick={() => void onAction(vm.id, "approve_candidate", { reason: "workspace_approved" })}
-        >
-          <i className={`ti ti-${saving ? "loader-2 spinner" : "check"}`} /> Approve candidate
-        </button>
-        <button
-          className="btn btn--compact"
-          disabled={saving}
-          onClick={() => void onAction(vm.id, "mark_review_later", { reason: "workspace_review_later" })}
-        >
-          <i className="ti ti-clock" /> Review later
-        </button>
-        <button
-          className="btn btn--compact workspace-inspector__exclude-btn"
-          disabled={saving || pendingExclude}
-          onClick={() => {
-            setPendingExclude(true);
-            void onAction(vm.id, "exclude_from_move_plan", { reason: "workspace_excluded" });
-          }}
-        >
-          <i className={`ti ti-${pendingExclude ? "loader-2 spinner" : "eye-off"}`} /> Exclude
-        </button>
-        <button
-          className="btn btn--compact"
-          disabled={saving}
-          onClick={() => void onAction(vm.id, "block_candidate", { reason: "workspace_blocked" })}
-        >
-          <i className="ti ti-ban" /> Block
-        </button>
-      </div>
-      {excludeSavedFlash && (
-        <div className="workspace-inspector__exclude-flash">
-          <i className="ti ti-check" /> Excluded from move plan - files are untouched
+      <section className="workspace-inspector__section workspace-inspector__decision-actions-section">
+        <h3>Decision</h3>
+        <p>Choose what should happen to this candidate in the current review. These actions do not delete files.</p>
+        <div className="workspace-inspector__actions">
+          <button
+            className="btn btn--green"
+            disabled={approveDisabled}
+            onClick={() => void onAction(vm.id, "approve_candidate", { reason: "workspace_approved" })}
+          >
+            <i className={`ti ti-${saving ? "loader-2 spinner" : "check"}`} /> {vm.hasChunkIdentityRisk ? "Review identity first" : "Approve candidate"}
+          </button>
+          <button
+            className="btn btn--compact"
+            disabled={saving}
+            onClick={() => void onAction(vm.id, "mark_review_later", { reason: "workspace_review_later" })}
+          >
+            <i className="ti ti-clock" /> Review later
+          </button>
+          <button
+            className="btn btn--compact workspace-inspector__exclude-btn"
+            disabled={saving || pendingExclude}
+            onClick={() => {
+              setPendingExclude(true);
+              void onAction(vm.id, "exclude_from_move_plan", { reason: "workspace_excluded" });
+            }}
+          >
+            <i className={`ti ti-${pendingExclude ? "loader-2 spinner" : "eye-off"}`} /> Exclude
+          </button>
+          <button
+            className="btn btn--compact"
+            disabled={saving}
+            onClick={() => void onAction(vm.id, "block_candidate", { reason: "workspace_blocked" })}
+          >
+            <i className="ti ti-ban" /> Block
+          </button>
         </div>
-      )}
+        {excludeSavedFlash && (
+          <div className="workspace-inspector__exclude-flash">
+            <i className="ti ti-check" /> Excluded from move plan - files are untouched
+          </div>
+        )}
+      </section>
 
       {vm.activeActions.length > 0 && (
-        <section className="workspace-inspector__section">
-          <h3>Active Actions</h3>
+        <section className="workspace-inspector__section workspace-inspector__decisions-section">
+          <h3>Decisions</h3>
           <div className="workspace-inspector__actions-list">
             {vm.activeActions.map((action) => (
               <div key={action.id}>
-                <span>{formatActionLabel(action.action_type)}</span>
+                <span>{formatActionLabel(action)}</span>
                 <button className="btn-sm" disabled={saving} onClick={() => void onClear(action.id, vm.id)}>
                   <i className="ti ti-eraser" /> Clear
                 </button>
@@ -512,7 +536,7 @@ export default function WorkspaceInspector({
       )}
 
       <EvidenceRows candidate={candidate} />
-      <DestinationPreview batchId={batchId} candidateId={vm.id} refreshKey={previewRefreshKey} />
+      <DestinationPreview batchId={batchId} candidateId={vm.id} refreshKey={previewRefreshKey + workspaceRefreshKey} />
       <MemberList members={candidate.members} />
 
       {showTech && (
