@@ -3787,3 +3787,60 @@ button:focus-visible, input:focus-visible {
   .review-workspace__candidates,
   .workspace-inspector { max-height: none; border-right: 0; border-bottom: 1px solid var(--border); }
 }
+
+/* AA-UX3 - Universal Identity Edit Panel */
+.workspace-inspector__identity-edit-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.75rem;
+}
+
+.workspace-inspector__identity-saved {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--accent-green);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.workspace-inspector__identity-edit {
+  background: rgba(59, 130, 246, 0.04);
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+.workspace-inspector__field {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 12px;
+}
+
+.workspace-inspector__field span {
+  color: var(--text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.workspace-inspector__field input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-page);
+  color: var(--text-primary);
+  font-family: var(--font);
+  font-size: 12px;
+}
+
+.workspace-inspector__field input:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+}
+
+.workspace-inspector__field input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

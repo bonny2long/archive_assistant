@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type {
   BatchUniversalIngestion,
   CandidateMember,
@@ -26,6 +27,8 @@ type Props = {
 type EvidenceCandidate = MediaIdentityCandidate & {
   identity_evidence_json?: Record<string, unknown> | null;
 };
+
+const BOOK_LIKE_TYPES = new Set(["audiobook", "ebook", "comic"]);
 
 function formatActionLabel(actionType: string): string {
   return actionType.replace(/_/g, " ");
@@ -89,6 +92,81 @@ function MemberList({ members }: { members: CandidateMember[] }) {
   );
 }
 
+function IdentityEditForm({
+  vm,
+  saving,
+  onCancel,
+  onSave,
+}: {
+  vm: CandidateViewModel;
+  saving: boolean;
+  onCancel: () => void;
+  onSave: (fields: {
+    override_title: string;
+    override_primary_creator: string;
+    override_year: string;
+    override_series?: string;
+    override_series_index?: string;
+  }) => void;
+}) {
+  const candidate = vm.rawCandidate;
+  const isBookLike = BOOK_LIKE_TYPES.has(vm.mediaType);
+  const [title, setTitle] = useState(candidate.candidate_title ?? "");
+  const [creator, setCreator] = useState(candidate.candidate_primary_creator ?? "");
+  const [year, setYear] = useState(candidate.candidate_year ?? "");
+  const [series, setSeries] = useState(candidate.candidate_series ?? "");
+  const [seriesIndex, setSeriesIndex] = useState(candidate.candidate_series_index ?? "");
+
+  return (
+    <section className="workspace-inspector__section workspace-inspector__identity-edit">
+      <h3>Edit identity</h3>
+      <label className="workspace-inspector__field">
+        <span>Title</span>
+        <input value={title} disabled={saving} onChange={(event) => setTitle(event.target.value)} />
+      </label>
+      <label className="workspace-inspector__field">
+        <span>{isBookLike ? "Author" : "Creator"}</span>
+        <input value={creator} disabled={saving} onChange={(event) => setCreator(event.target.value)} />
+      </label>
+      <label className="workspace-inspector__field">
+        <span>Year</span>
+        <input value={year} disabled={saving} onChange={(event) => setYear(event.target.value)} />
+      </label>
+      {isBookLike && (
+        <>
+          <label className="workspace-inspector__field">
+            <span>Series</span>
+            <input value={series} disabled={saving} onChange={(event) => setSeries(event.target.value)} />
+          </label>
+          <label className="workspace-inspector__field">
+            <span>Series index</span>
+            <input value={seriesIndex} disabled={saving} onChange={(event) => setSeriesIndex(event.target.value)} />
+          </label>
+        </>
+      )}
+      <div className="workspace-inspector__actions">
+        <button
+          className="btn btn--green"
+          disabled={saving || !title.trim()}
+          onClick={() => onSave({
+            override_title: title.trim(),
+            override_primary_creator: creator.trim(),
+            override_year: year.trim(),
+            ...(isBookLike
+              ? { override_series: series.trim(), override_series_index: seriesIndex.trim() }
+              : {}),
+          })}
+        >
+          <i className={`ti ti-${saving ? "loader-2 spinner" : "check"}`} /> Save identity
+        </button>
+        <button className="btn btn--compact" disabled={saving} onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </section>
+  );
+}
+
 export default function WorkspaceInspector({
   vm,
   ingestion,
@@ -100,6 +178,31 @@ export default function WorkspaceInspector({
   showTech,
   onCloseTech,
 }: Props) {
+  const [editingIdentity, setEditingIdentity] = useState(false);
+  const [pendingIdentitySave, setPendingIdentitySave] = useState(false);
+  const [identitySavedFlash, setIdentitySavedFlash] = useState(false);
+
+  useEffect(() => {
+    setEditingIdentity(false);
+    setPendingIdentitySave(false);
+    setIdentitySavedFlash(false);
+  }, [vm?.id]);
+
+  useEffect(() => {
+    if (!pendingIdentitySave) return;
+    if (savingActionId === vm?.id) return;
+    setPendingIdentitySave(false);
+    if (actionError) return;
+    setEditingIdentity(false);
+    setIdentitySavedFlash(true);
+  }, [savingActionId, actionError, pendingIdentitySave, vm?.id]);
+
+  useEffect(() => {
+    if (!identitySavedFlash) return;
+    const timer = window.setTimeout(() => setIdentitySavedFlash(false), 2400);
+    return () => window.clearTimeout(timer);
+  }, [identitySavedFlash]);
+
   if (!vm) {
     return <aside className="workspace-inspector workspace-inspector--empty">Select a candidate to review.</aside>;
   }
@@ -125,6 +228,33 @@ export default function WorkspaceInspector({
         </div>
       )}
       {actionError && <div className="workspace-inspector__warning workspace-inspector__warning--error">{actionError}</div>}
+
+      <div className="workspace-inspector__identity-edit-toggle">
+        <button
+          className="btn-sm"
+          disabled={pendingIdentitySave}
+          onClick={() => setEditingIdentity((current) => !current)}
+        >
+          <i className={`ti ti-${editingIdentity ? "x" : "pencil"}`} /> {editingIdentity ? "Cancel edit" : "Edit identity"}
+        </button>
+        {identitySavedFlash && (
+          <span className="workspace-inspector__identity-saved">
+            <i className="ti ti-check" /> Identity updated
+          </span>
+        )}
+      </div>
+
+      {editingIdentity && (
+        <IdentityEditForm
+          vm={vm}
+          saving={saving}
+          onCancel={() => setEditingIdentity(false)}
+          onSave={(fields) => {
+            setPendingIdentitySave(true);
+            void onAction(vm.id, "override_identity", { ...fields, reason: "workspace_identity_edit" });
+          }}
+        />
+      )}
 
       <div className="workspace-inspector__actions">
         <button
