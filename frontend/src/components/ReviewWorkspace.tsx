@@ -64,6 +64,43 @@ function mediaTypeFilter(value: string | null | undefined): WorkspaceFilter {
   if (normalized.includes("art")) return "artwork";
   return "unknown";
 }
+function mediaTypeFromClass(mediaClass: string | null | undefined): string | null {
+  if (!mediaClass) return null;
+  const mapping: Record<string, string> = {
+    music_audio: "music",
+    audiobook_audio: "audiobook",
+    ebook: "ebook",
+    comic: "comic",
+    movie: "movie",
+    tv_episode: "tv",
+    artwork: "artwork",
+    sidecar_metadata: "unknown",
+    unknown: "unknown",
+  };
+  return mapping[mediaClass] ?? mediaClass;
+}
+
+function latestActiveAction(actions: UniversalReviewAction[], actionType: string): UniversalReviewAction | undefined {
+  return actions.find((action) => action.action_type === actionType && action.decision_status !== "cleared");
+}
+
+function applyCandidateOverrides(
+  candidate: MediaIdentityCandidate,
+  actions: UniversalReviewAction[],
+): MediaIdentityCandidate {
+  const identityOverride = latestActiveAction(actions, "override_identity");
+  const mediaClassOverride = latestActiveAction(actions, "override_media_class");
+  const mediaType = mediaTypeFromClass(mediaClassOverride?.target_media_class) ?? candidate.candidate_media_type;
+  return {
+    ...candidate,
+    candidate_title: identityOverride?.override_title || candidate.candidate_title,
+    candidate_primary_creator: identityOverride?.override_primary_creator || candidate.candidate_primary_creator,
+    candidate_year: identityOverride?.override_year || candidate.candidate_year,
+    candidate_series: identityOverride?.override_series || candidate.candidate_series,
+    candidate_series_index: identityOverride?.override_series_index || candidate.candidate_series_index,
+    candidate_media_type: mediaType,
+  };
+}
 
 function hasActiveAction(actions: UniversalReviewAction[], actionType: UniversalReviewActionType): boolean {
   return actions.some((action) => action.action_type === actionType && action.decision_status !== "cleared");
@@ -106,24 +143,26 @@ export function buildCandidateViewModels(
   routing: RoutingDecision | null,
 ): CandidateViewModel[] {
   return ingestion.candidates.map((candidate) => {
+    const actions = candidate.active_actions ?? [];
+    const effectiveCandidate = applyCandidateOverrides(candidate, actions);
     const decisions = candidateDecisions(candidate.id, ingestion.reconstruction_decisions);
     const relatedFlags = ingestion.mixed_media_flags.filter((flag) => flag.candidate_id === candidate.id);
     const displayState = deriveDisplayState(candidate, decisions);
     return {
       id: candidate.id,
-      title: candidate.candidate_title || candidate.candidate_key || "Untitled candidate",
-      creator: candidate.candidate_primary_creator || candidate.candidate_secondary_creator || "Unknown creator",
-      year: candidate.candidate_year || "Unknown year",
-      mediaType: mediaTypeFilter(candidate.candidate_media_type),
+      title: effectiveCandidate.candidate_title || effectiveCandidate.candidate_key || "Untitled candidate",
+      creator: effectiveCandidate.candidate_primary_creator || effectiveCandidate.candidate_secondary_creator || "Unknown creator",
+      year: effectiveCandidate.candidate_year || "Unknown year",
+      mediaType: mediaTypeFilter(effectiveCandidate.candidate_media_type),
       displayState,
-      confidenceLabel: candidate.candidate_confidence_label || `${Math.round(candidate.candidate_confidence * 100)}%`,
-      fileCount: candidate.member_count || candidate.members.length,
-      sourceFragmentCount: candidate.source_fragment_count,
+      confidenceLabel: effectiveCandidate.candidate_confidence_label || `${Math.round(effectiveCandidate.candidate_confidence * 100)}%`,
+      fileCount: effectiveCandidate.member_count || effectiveCandidate.members.length,
+      sourceFragmentCount: effectiveCandidate.source_fragment_count,
       warningCount: decisions.length + relatedFlags.length,
-      recommendedAction: candidate.recommended_action || decisions[0]?.recommended_action || "Review candidate",
-      hasChunkIdentityRisk: candidateHasChunkIdentityRisk(candidate, routing),
-      activeActions: candidate.active_actions ?? [],
-      rawCandidate: candidate,
+      recommendedAction: effectiveCandidate.recommended_action || decisions[0]?.recommended_action || "Review candidate",
+      hasChunkIdentityRisk: candidateHasChunkIdentityRisk(effectiveCandidate, routing),
+      activeActions: actions,
+      rawCandidate: effectiveCandidate,
     };
   });
 }

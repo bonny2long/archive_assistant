@@ -3915,3 +3915,62 @@ button:focus-visible, input:focus-visible {
   color: var(--accent-amber);
 }
 /* End AA-UX4 */
+
+/* AA-UX5 - Exclude from Move Plan + Header Progress Summary */
+.workspace-inspector__exclude-btn {
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+.workspace-inspector__exclude-btn:hover:not(:disabled) {
+  color: var(--text-secondary);
+  border-color: var(--border-strong);
+  background: var(--bg-raised);
+}
+
+.workspace-inspector__exclude-flash {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--bg-raised);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  margin: 0 0.75rem 0.5rem;
+}
+.workspace-inspector__exclude-flash i {
+  color: var(--accent-green);
+}
+
+.review-workspace__badge--approved {
+  color: var(--accent-green);
+  background: rgba(16, 185, 129, 0.1);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.review-workspace__badge--excluded {
+  color: var(--text-muted);
+  background: var(--bg-raised);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.review-workspace__badge--remaining {
+  color: var(--accent-amber);
+  background: rgba(245, 158, 11, 0.08);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 500;
+}
+/* End AA-UX5 */

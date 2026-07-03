@@ -309,12 +309,16 @@ export default function WorkspaceInspector({
   const [editingMediaClass, setEditingMediaClass] = useState(false);
   const [pendingMediaClassSave, setPendingMediaClassSave] = useState(false);
   const [mediaClassSavedFlash, setMediaClassSavedFlash] = useState(false);
+  const [pendingExclude, setPendingExclude] = useState(false);
+  const [excludeSavedFlash, setExcludeSavedFlash] = useState(false);
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
 
   useEffect(() => {
     setEditingIdentity(false);
     setPendingIdentitySave(false);
     setIdentitySavedFlash(false);
+    setPendingExclude(false);
+    setExcludeSavedFlash(false);
   }, [vm?.id]);
 
   useEffect(() => {
@@ -344,6 +348,14 @@ export default function WorkspaceInspector({
   }, [savingActionId, actionError, pendingMediaClassSave, vm?.id]);
 
   useEffect(() => {
+    if (!pendingExclude) return;
+    if (savingActionId === vm?.id) return;
+    setPendingExclude(false);
+    if (actionError) return;
+    setExcludeSavedFlash(true);
+  }, [savingActionId, actionError, pendingExclude, vm?.id]);
+
+  useEffect(() => {
     if (!identitySavedFlash) return;
     const timer = window.setTimeout(() => setIdentitySavedFlash(false), 2400);
     return () => window.clearTimeout(timer);
@@ -354,6 +366,12 @@ export default function WorkspaceInspector({
     const timer = window.setTimeout(() => setMediaClassSavedFlash(false), 2400);
     return () => window.clearTimeout(timer);
   }, [mediaClassSavedFlash]);
+
+  useEffect(() => {
+    if (!excludeSavedFlash) return;
+    const timer = window.setTimeout(() => setExcludeSavedFlash(false), 2400);
+    return () => window.clearTimeout(timer);
+  }, [excludeSavedFlash]);
 
   if (!vm) {
     return <aside className="workspace-inspector workspace-inspector--empty">Select a candidate to review.</aside>;
@@ -454,6 +472,16 @@ export default function WorkspaceInspector({
           <i className="ti ti-clock" /> Review later
         </button>
         <button
+          className="btn btn--compact workspace-inspector__exclude-btn"
+          disabled={saving || pendingExclude}
+          onClick={() => {
+            setPendingExclude(true);
+            void onAction(vm.id, "exclude_from_move_plan", { reason: "workspace_excluded" });
+          }}
+        >
+          <i className={`ti ti-${pendingExclude ? "loader-2 spinner" : "eye-off"}`} /> Exclude
+        </button>
+        <button
           className="btn btn--compact"
           disabled={saving}
           onClick={() => void onAction(vm.id, "block_candidate", { reason: "workspace_blocked" })}
@@ -461,6 +489,11 @@ export default function WorkspaceInspector({
           <i className="ti ti-ban" /> Block
         </button>
       </div>
+      {excludeSavedFlash && (
+        <div className="workspace-inspector__exclude-flash">
+          <i className="ti ti-check" /> Excluded from move plan - files are untouched
+        </div>
+      )}
 
       {vm.activeActions.length > 0 && (
         <section className="workspace-inspector__section">
