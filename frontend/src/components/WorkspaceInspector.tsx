@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import { api } from "../api/client";
 import type {
   BatchUniversalIngestion,
   CandidateMember,
+  CandidateMovePreview,
   MediaIdentityCandidate,
   UniversalReviewActionType,
   UniversalReviewActionUpdate,
@@ -28,7 +30,29 @@ type EvidenceCandidate = MediaIdentityCandidate & {
   identity_evidence_json?: Record<string, unknown> | null;
 };
 
+type PreviewEntry = CandidateMovePreview["preview_groups"][number] & {
+  suggested_destination?: string;
+  destination?: string;
+};
+
+type CandidateMovePreviewWithFallbacks = CandidateMovePreview & {
+  candidates?: PreviewEntry[];
+  items?: PreviewEntry[];
+};
+
 const BOOK_LIKE_TYPES = new Set(["audiobook", "ebook", "comic"]);
+
+const MEDIA_CLASS_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "music_audio", label: "Music" },
+  { value: "audiobook_audio", label: "Audiobook" },
+  { value: "ebook", label: "Ebook" },
+  { value: "comic", label: "Comic" },
+  { value: "movie", label: "Movie" },
+  { value: "tv_episode", label: "TV Episode" },
+  { value: "artwork", label: "Artwork" },
+  { value: "sidecar_metadata", label: "Sidecar / Metadata" },
+  { value: "unknown", label: "Unknown" },
+];
 
 function formatActionLabel(actionType: string): string {
   return actionType.replace(/_/g, " ");
@@ -39,20 +63,64 @@ function memberLabel(member: CandidateMember): string {
   return parts.length ? parts.join(" | ") : member.filename;
 }
 
-function pathSegment(value: string): string {
-  return value.trim().replace(/[\\/:*?"<>|]+/g, "-") || "Unknown";
-}
+function DestinationPreview({
+  batchId,
+  candidateId,
+  refreshKey,
+}: {
+  batchId: number;
+  candidateId: number;
+  refreshKey: number;
+}) {
+  const [preview, setPreview] = useState<CandidateMovePreview | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-function DestinationPreview({ vm }: { vm: CandidateViewModel }) {
-  const root = vm.mediaType === "music" ? "Music" : vm.mediaType === "audiobook" ? "Audiobooks" : "Media";
-  const creator = pathSegment(vm.creator === "Unknown creator" ? "Unknown" : vm.creator);
-  const title = pathSegment(vm.title);
-  const year = vm.year === "Unknown year" ? "" : ` (${pathSegment(vm.year)})`;
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    api.getCandidateMovePreview(batchId)
+      .then((data) => {
+        if (!cancelled) setPreview(data);
+      })
+      .catch((previewError: unknown) => {
+        if (!cancelled) {
+          setError(previewError instanceof Error ? previewError.message : "Could not load destination preview");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [batchId, refreshKey]);
+
+  const previewWithFallbacks = preview as CandidateMovePreviewWithFallbacks | null;
+  const entry = (
+    previewWithFallbacks?.preview_groups.find((group) => group.candidate_id === candidateId)
+    ?? previewWithFallbacks?.candidates?.find((candidate) => candidate.candidate_id === candidateId)
+    ?? previewWithFallbacks?.items?.find((item) => item.candidate_id === candidateId)
+    ?? null
+  ) as PreviewEntry | null;
+  const destination = entry?.destination_preview
+    ?? entry?.suggested_destination
+    ?? entry?.destination
+    ?? "Destination pending";
+
   return (
     <section className="workspace-inspector__section">
       <h3>Destination Preview</h3>
-      <code>{root}\{creator}\{title}{year}</code>
-      <small>Frontend preview only. Backend move planning remains authoritative.</small>
+      {loading && <small className="workspace-inspector__preview-loading"><i className="ti ti-loader-2 spinner" /> Loading...</small>}
+      {!loading && error && <small className="workspace-inspector__preview-error">{error}</small>}
+      {!loading && !error && entry && (
+        <code className="workspace-inspector__dest-path">{destination}</code>
+      )}
+      {!loading && !error && !entry && (
+        <small className="workspace-inspector__preview-empty">No destination preview available for this candidate.</small>
+      )}
+      <small>Backend move planning is authoritative. This preview updates after identity changes.</small>
     </section>
   );
 }
@@ -167,6 +235,63 @@ function IdentityEditForm({
   );
 }
 
+function MediaClassOverrideForm({
+  vm,
+  saving,
+  onCancel,
+  onSave,
+}: {
+  vm: CandidateViewModel;
+  saving: boolean;
+  onCancel: () => void;
+  onSave: (targetMediaClass: string) => void;
+}) {
+  const mediaTypeToClass: Record<string, string> = {
+    music: "music_audio",
+    audiobook: "audiobook_audio",
+    ebook: "ebook",
+    comic: "comic",
+    movie: "movie",
+    tv: "tv_episode",
+    artwork: "artwork",
+    unknown: "unknown",
+  };
+  const [selected, setSelected] = useState(mediaTypeToClass[vm.mediaType] ?? "unknown");
+
+  return (
+    <section className="workspace-inspector__section workspace-inspector__class-override">
+      <h3>Change media type</h3>
+      <p className="workspace-inspector__class-override-hint">
+        AA classified this as <strong>{vm.mediaType}</strong>. If that is wrong, select the correct type below and save. This does not move any files.
+      </p>
+      <label className="workspace-inspector__field">
+        <span>Media type</span>
+        <select
+          value={selected}
+          disabled={saving}
+          onChange={(event) => setSelected(event.target.value)}
+        >
+          {MEDIA_CLASS_OPTIONS.map(({ value, label }) => (
+            <option key={value} value={value}>{label}</option>
+          ))}
+        </select>
+      </label>
+      <div className="workspace-inspector__actions">
+        <button
+          className="btn btn--green"
+          disabled={saving}
+          onClick={() => onSave(selected)}
+        >
+          <i className={`ti ti-${saving ? "loader-2 spinner" : "check"}`} /> Save media type
+        </button>
+        <button className="btn btn--compact" disabled={saving} onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </section>
+  );
+}
+
 export default function WorkspaceInspector({
   vm,
   ingestion,
@@ -181,11 +306,21 @@ export default function WorkspaceInspector({
   const [editingIdentity, setEditingIdentity] = useState(false);
   const [pendingIdentitySave, setPendingIdentitySave] = useState(false);
   const [identitySavedFlash, setIdentitySavedFlash] = useState(false);
+  const [editingMediaClass, setEditingMediaClass] = useState(false);
+  const [pendingMediaClassSave, setPendingMediaClassSave] = useState(false);
+  const [mediaClassSavedFlash, setMediaClassSavedFlash] = useState(false);
+  const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
 
   useEffect(() => {
     setEditingIdentity(false);
     setPendingIdentitySave(false);
     setIdentitySavedFlash(false);
+  }, [vm?.id]);
+
+  useEffect(() => {
+    setEditingMediaClass(false);
+    setPendingMediaClassSave(false);
+    setMediaClassSavedFlash(false);
   }, [vm?.id]);
 
   useEffect(() => {
@@ -195,13 +330,30 @@ export default function WorkspaceInspector({
     if (actionError) return;
     setEditingIdentity(false);
     setIdentitySavedFlash(true);
+    setPreviewRefreshKey((key) => key + 1);
   }, [savingActionId, actionError, pendingIdentitySave, vm?.id]);
+
+  useEffect(() => {
+    if (!pendingMediaClassSave) return;
+    if (savingActionId === vm?.id) return;
+    setPendingMediaClassSave(false);
+    if (actionError) return;
+    setEditingMediaClass(false);
+    setMediaClassSavedFlash(true);
+    setPreviewRefreshKey((key) => key + 1);
+  }, [savingActionId, actionError, pendingMediaClassSave, vm?.id]);
 
   useEffect(() => {
     if (!identitySavedFlash) return;
     const timer = window.setTimeout(() => setIdentitySavedFlash(false), 2400);
     return () => window.clearTimeout(timer);
   }, [identitySavedFlash]);
+
+  useEffect(() => {
+    if (!mediaClassSavedFlash) return;
+    const timer = window.setTimeout(() => setMediaClassSavedFlash(false), 2400);
+    return () => window.clearTimeout(timer);
+  }, [mediaClassSavedFlash]);
 
   if (!vm) {
     return <aside className="workspace-inspector workspace-inspector--empty">Select a candidate to review.</aside>;
@@ -256,6 +408,36 @@ export default function WorkspaceInspector({
         />
       )}
 
+      <div className="workspace-inspector__identity-edit-toggle workspace-inspector__class-override-toggle">
+        <button
+          className="btn-sm"
+          disabled={pendingMediaClassSave}
+          onClick={() => setEditingMediaClass((current) => !current)}
+        >
+          <i className={`ti ti-${editingMediaClass ? "x" : "tag"}`} /> {editingMediaClass ? "Cancel type change" : "Change media type"}
+        </button>
+        {mediaClassSavedFlash && (
+          <span className="workspace-inspector__identity-saved">
+            <i className="ti ti-check" /> Media type updated
+          </span>
+        )}
+      </div>
+
+      {editingMediaClass && (
+        <MediaClassOverrideForm
+          vm={vm}
+          saving={saving}
+          onCancel={() => setEditingMediaClass(false)}
+          onSave={(targetMediaClass) => {
+            setPendingMediaClassSave(true);
+            void onAction(vm.id, "override_media_class", {
+              target_media_class: targetMediaClass,
+              reason: "workspace_media_class_override",
+            });
+          }}
+        />
+      )}
+
       <div className="workspace-inspector__actions">
         <button
           className="btn btn--green"
@@ -297,7 +479,7 @@ export default function WorkspaceInspector({
       )}
 
       <EvidenceRows candidate={candidate} />
-      <DestinationPreview vm={vm} />
+      <DestinationPreview batchId={batchId} candidateId={vm.id} refreshKey={previewRefreshKey} />
       <MemberList members={candidate.members} />
 
       {showTech && (
