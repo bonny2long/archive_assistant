@@ -7,6 +7,7 @@ import type {
   IngestBatch,
   MediaIdentityCandidate,
   RoutingDecision,
+  SplitCandidateResult,
   UniversalReviewAction,
   UniversalReviewActionType,
   UniversalReviewActionUpdate,
@@ -71,6 +72,7 @@ type ReviewWorkspaceProps = {
   onSaveAction: (batchId: number, update: UniversalReviewActionUpdate) => Promise<void>;
   onClearAction: (batchId: number, actionId: number) => Promise<void>;
   onApprove: (batchId: number) => Promise<void>;
+  onSplitCandidate?: (batchId: number, candidateId: number) => Promise<SplitCandidateResult>;
   onOpenFullEditor?: (batch: IngestBatch) => void;
 };
 
@@ -234,6 +236,7 @@ export default function ReviewWorkspace({
   onSaveAction,
   onClearAction,
   onApprove,
+  onSplitCandidate,
   onOpenFullEditor,
 }: ReviewWorkspaceProps) {
   const [ingestion, setIngestion] = useState<BatchUniversalIngestion | null>(null);
@@ -324,6 +327,24 @@ export default function ReviewWorkspace({
     }
   };
 
+  const handleSplitCandidate = onSplitCandidate
+    ? async (candidateId: number) => {
+      setSavingActionId(candidateId);
+      setActionError(null);
+      try {
+        const result = await onSplitCandidate(batch.id, candidateId);
+        await loadWorkspace();
+        setWorkspaceRefreshKey((key) => key + 1);
+        return result;
+      } catch (splitError: unknown) {
+        setActionError(splitError instanceof Error ? splitError.message : "Unable to split candidate");
+        throw splitError;
+      } finally {
+        setSavingActionId(null);
+      }
+    }
+    : undefined;
+
   return (
     <div className="review-workspace" role="dialog" aria-modal="true" aria-label="Review Workspace">
       <WorkspaceHeader
@@ -367,6 +388,7 @@ export default function ReviewWorkspace({
             actionError={actionError}
             onAction={handleAction}
             onClear={handleClear}
+            onSplitCandidate={handleSplitCandidate}
             showTech={showTech}
             onCloseTech={() => setShowTech(false)}
             onOpenFullEditor={onOpenFullEditor ? () => onOpenFullEditor(batch) : undefined}

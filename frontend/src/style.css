@@ -4138,3 +4138,28 @@ button:focus-visible, input:focus-visible {
   opacity: 0.7;
 }
 /* End AA-UX6 */
+
+/* AA-M4D.5 - Multi-Artist Discography Split */
+.workspace-inspector__split-section > p {
+  margin: 0 0 0.65rem;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.workspace-inspector__split-section .btn {
+  width: 100%;
+  justify-content: center;
+}
+
+.workspace-inspector__split-result {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.65rem;
+  color: var(--accent-green);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* End AA-M4D.5 */

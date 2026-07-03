@@ -36,6 +36,8 @@ from app.schemas.archive import (
     TvEpisodeReviewUpdate,
     ReviewConfirmationUpdate,
     RoutingDecisionOut,
+    SplitCandidateRequest,
+    SplitCandidateResponse,
 )
 from app.services.dev_reset import (
     DevResetBlockedError,
@@ -76,6 +78,7 @@ from app.services.book_metadata import (
 from app.services.title_display import clean_display_title, destination_title
 from app.services.metadata_quality_gate import get_batch_metadata_quality
 from app.services.candidate_move_plan_preview import build_candidate_move_plan_preview
+from app.services.batch_split import execute_split_candidate
 from app.services.universal_review_routing import get_batch_routing_decision
 from app.services.universal_ingestion_review import (
     clear_review_action,
@@ -513,6 +516,19 @@ def get_batch_review_routing(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+
+@router.post("/batches/{batch_id}/split-candidate", response_model=SplitCandidateResponse)
+def split_batch_candidate(
+    batch_id: int,
+    request: SplitCandidateRequest,
+    db: Session = Depends(get_db),
+):
+    if db.get(IngestBatch, batch_id) is None:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    try:
+        return execute_split_candidate(db, batch_id, request.candidate_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 @router.patch("/batches/{batch_id}/metadata", response_model=BatchSummary)
 def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Session = Depends(get_db)):
     batch = db.get(IngestBatch, batch_id)

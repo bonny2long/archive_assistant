@@ -5,6 +5,7 @@ import type {
   CandidateMember,
   CandidateMovePreview,
   MediaIdentityCandidate,
+  SplitCandidateResult,
   UniversalReviewActionType,
   UniversalReviewActionUpdate,
 } from "../types/archive";
@@ -23,6 +24,7 @@ type Props = {
     overrides?: Partial<UniversalReviewActionUpdate>,
   ) => Promise<void>;
   onClear: (actionId: number, candidateId: number) => Promise<void>;
+  onSplitCandidate?: (candidateId: number) => Promise<SplitCandidateResult>;
   showTech: boolean;
   onCloseTech: () => void;
   onOpenFullEditor?: () => void;
@@ -428,6 +430,7 @@ export default function WorkspaceInspector({
   actionError,
   onAction,
   onClear,
+  onSplitCandidate,
   showTech,
   onCloseTech,
   onOpenFullEditor,
@@ -440,6 +443,9 @@ export default function WorkspaceInspector({
   const [mediaClassSavedFlash, setMediaClassSavedFlash] = useState(false);
   const [pendingExclude, setPendingExclude] = useState(false);
   const [excludeSavedFlash, setExcludeSavedFlash] = useState(false);
+  const [pendingSplit, setPendingSplit] = useState(false);
+  const [splitResult, setSplitResult] = useState<SplitCandidateResult | null>(null);
+  const [splitError, setSplitError] = useState<string | null>(null);
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
 
   useEffect(() => {
@@ -448,6 +454,9 @@ export default function WorkspaceInspector({
     setIdentitySavedFlash(false);
     setPendingExclude(false);
     setExcludeSavedFlash(false);
+    setPendingSplit(false);
+    setSplitResult(null);
+    setSplitError(null);
   }, [vm?.id]);
 
   useEffect(() => {
@@ -586,6 +595,43 @@ export default function WorkspaceInspector({
         />
       )}
 
+      {onSplitCandidate && (
+        <section className="workspace-inspector__section workspace-inspector__split-section">
+          <h3>Extract as own batch</h3>
+          <p>
+            This creates a separate album batch for this release and removes its files from the parent discography batch. Files are not moved on disk.
+          </p>
+          <button
+            className="btn btn--compact"
+            disabled={saving || pendingSplit}
+            onClick={() => {
+              setPendingSplit(true);
+              setSplitError(null);
+              setSplitResult(null);
+              void onSplitCandidate(vm.id)
+                .then((result) => {
+                  setSplitResult(result);
+                  setPreviewRefreshKey((key) => key + 1);
+                })
+                .catch((splitFailure: unknown) => {
+                  setSplitError(splitFailure instanceof Error ? splitFailure.message : "Could not extract candidate");
+                })
+                .finally(() => setPendingSplit(false));
+            }}
+          >
+            <i className={`ti ti-${pendingSplit ? "loader-2 spinner" : "git-branch"}`} /> Extract as own batch
+          </button>
+          {splitResult && (
+            <div className="workspace-inspector__split-result">
+              <i className="ti ti-check" />
+              <span>
+                Created batch {splitResult.child_batch_id} with {splitResult.moved_file_count} file{splitResult.moved_file_count === 1 ? "" : "s"}.
+              </span>
+            </div>
+          )}
+          {splitError && <small className="workspace-inspector__preview-error">{splitError}</small>}
+        </section>
+      )}
       <section className="workspace-inspector__section workspace-inspector__decision-actions-section">
         <h3>Decision</h3>
         <p>Choose what should happen to this candidate in the current review. These actions do not delete files.</p>

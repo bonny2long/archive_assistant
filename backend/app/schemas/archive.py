@@ -288,6 +288,21 @@ class CandidateMovePreviewOut(BaseModel):
     global_warnings: list[str] = Field(default_factory=list)
     next_actions: list[str] = Field(default_factory=list)
 
+class SplitCandidateRequest(BaseModel):
+    candidate_id: int
+
+
+class SplitCandidateResponse(BaseModel):
+    parent_batch_id: int
+    child_batch_id: int
+    moved_file_count: int
+    remaining_parent_file_count: int
+    parent_status: str
+    child_detected_type: str
+    child_status: str
+    suggested_destination: str | None = None
+    artist: str | None = None
+    album: str | None = None
 class BatchSummary(BaseModel):
     id: int
     detected_type: str

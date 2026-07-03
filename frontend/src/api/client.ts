@@ -22,6 +22,7 @@ import type {
   PaginatedResponse,
   ScanMusicResponse,
   ScanJobStatus,
+  SplitCandidateResult,
   SystemPathsResponse,
   SystemTimeResponse,
   TvMetadataUpdate,
@@ -105,6 +106,8 @@ export const api = {
     request<RoutingDecision>(`/batches/${id}/review-routing${targetEditor ? `?target_editor=${targetEditor}` : ""}`),
   getCandidateMovePreview: (id: number, snapshot = false) =>
     request<CandidateMovePreview>(`/batches/${id}/candidate-move-preview${snapshot ? "?snapshot=true" : ""}`),
+  splitCandidate: (id: number, candidateId: number) =>
+    request<SplitCandidateResult>(`/batches/${id}/split-candidate`, "POST", { candidate_id: candidateId }),
   getBatchMoves: (id: number) => request<BatchMoveSummary>(`/batches/${id}/moves`),
   updateBatchMetadata: (id: number, update: BatchMetadataUpdate) =>
     request<BatchSummary>(`/batches/${id}/metadata`, "PATCH", update),

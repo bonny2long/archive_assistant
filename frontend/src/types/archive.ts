@@ -1017,3 +1017,15 @@ export interface CandidateMovePreview {
   global_warnings: string[];
   next_actions: string[];
 }
+export interface SplitCandidateResult {
+  parent_batch_id: number;
+  child_batch_id: number;
+  moved_file_count: number;
+  remaining_parent_file_count: number;
+  parent_status: string;
+  child_detected_type: string;
+  child_status: string;
+  suggested_destination?: string | null;
+  artist?: string | null;
+  album?: string | null;
+}

@@ -278,6 +278,20 @@ export default function App() {
     await api.clearUniversalIngestionAction(batchId, actionId);
   };
 
+  const handleWorkspaceSplitCandidate = async (batchId: number, candidateId: number) => {
+    const result = await api.splitCandidate(batchId, candidateId);
+    showToast(`Extracted ${result.artist ?? "artist"} - ${result.album ?? "album"}`);
+    try {
+      const response = await api.listBatches();
+      setBatches(response.items.filter((batch) => batch.status !== "merged"));
+    } catch {
+      const fallback = await api.listPending();
+      setBatches(fallback.items.filter((batch) => batch.status !== "merged"));
+    }
+    await loadLibrarySummary();
+    return result;
+  };
+
   const handleApprove = async (id: number) => {
     try {
       const result = await api.approveBatch(id);
@@ -802,6 +816,7 @@ export default function App() {
           onClose={() => setWorkspaceBatch(null)}
           onSaveAction={handleWorkspaceAction}
           onClearAction={handleWorkspaceClearAction}
+          onSplitCandidate={workspaceDetail.detected_type === "music_discography" ? handleWorkspaceSplitCandidate : undefined}
           onApprove={async (batchId) => {
             await handleApprove(batchId);
             setWorkspaceBatch(null);
