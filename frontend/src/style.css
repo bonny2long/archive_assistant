@@ -4006,3 +4006,135 @@ button:focus-visible, input:focus-visible {
   text-align: right;
 }
 /* End AA-UX5.1 */
+
+/* AA-UX6 - Workspace Collection Members Panel */
+.workspace-inspector__collection-panel {
+  padding-bottom: 0.5rem;
+}
+
+.workspace-inspector__collection-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+}
+
+.workspace-inspector__collection-header h3 {
+  margin: 0;
+}
+
+.workspace-inspector__collection-bulk {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.workspace-inspector__collection-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.workspace-inspector__collection-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-page);
+  transition: background 0.1s, opacity 0.1s;
+}
+
+.workspace-inspector__collection-item--excluded {
+  opacity: 0.5;
+  background: var(--bg-raised);
+}
+
+.workspace-inspector__collection-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.workspace-inspector__collection-item-info strong {
+  font-size: 12px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-inspector__collection-item-info small {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.workspace-inspector__collection-note {
+  display: block;
+  margin-top: 0.5rem;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.workspace-inspector__files-more {
+  display: block;
+  padding-top: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.workspace-inspector__file-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.workspace-inspector__file-row:last-child {
+  border-bottom: none;
+}
+
+.workspace-inspector__file-row strong {
+  font-size: 12px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-inspector__file-row small {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-inspector__full-editor-section {
+  background: var(--bg-raised);
+  border-top: 1px solid var(--border) !important;
+  margin-top: auto;
+}
+
+.workspace-inspector__full-editor-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+  line-height: 1.4;
+}
+
+.workspace-inspector__full-editor-hint i {
+  flex-shrink: 0;
+  margin-top: 1px;
+  opacity: 0.7;
+}
+/* End AA-UX6 */

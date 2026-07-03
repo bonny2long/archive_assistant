@@ -71,6 +71,7 @@ type ReviewWorkspaceProps = {
   onSaveAction: (batchId: number, update: UniversalReviewActionUpdate) => Promise<void>;
   onClearAction: (batchId: number, actionId: number) => Promise<void>;
   onApprove: (batchId: number) => Promise<void>;
+  onOpenFullEditor?: (batch: IngestBatch) => void;
 };
 
 function mediaTypeFilter(value: string | null | undefined): WorkspaceFilter {
@@ -233,6 +234,7 @@ export default function ReviewWorkspace({
   onSaveAction,
   onClearAction,
   onApprove,
+  onOpenFullEditor,
 }: ReviewWorkspaceProps) {
   const [ingestion, setIngestion] = useState<BatchUniversalIngestion | null>(null);
   const [routing, setRouting] = useState<RoutingDecision | null>(null);
@@ -367,6 +369,7 @@ export default function ReviewWorkspace({
             onClear={handleClear}
             showTech={showTech}
             onCloseTech={() => setShowTech(false)}
+            onOpenFullEditor={onOpenFullEditor ? () => onOpenFullEditor(batch) : undefined}
           />
         </div>
       )}

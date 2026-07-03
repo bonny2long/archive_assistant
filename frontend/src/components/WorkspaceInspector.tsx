@@ -25,6 +25,7 @@ type Props = {
   onClear: (actionId: number, candidateId: number) => Promise<void>;
   showTech: boolean;
   onCloseTech: () => void;
+  onOpenFullEditor?: () => void;
 };
 
 type EvidenceCandidate = MediaIdentityCandidate & {
@@ -161,19 +162,127 @@ function EvidenceRows({ candidate }: { candidate: EvidenceCandidate }) {
   );
 }
 
-function MemberList({ members }: { members: CandidateMember[] }) {
+function isCollectionCandidate(vm: CandidateViewModel): boolean {
+  return vm.fileCount > 3 && vm.sourceFragmentCount >= 1;
+}
+
+function SimpleFileList({ members }: { members: CandidateMember[] }) {
   return (
     <section className="workspace-inspector__section">
       <h3>Files</h3>
       <div className="workspace-inspector__files">
         {members.slice(0, 12).map((member) => (
-          <div key={member.id}>
+          <div key={member.id} className="workspace-inspector__file-row">
             <strong>{memberLabel(member)}</strong>
             <small>{member.relative_path}</small>
           </div>
         ))}
-        {members.length > 12 && <small>{members.length - 12} more file(s)</small>}
+        {members.length > 12 && (
+          <small className="workspace-inspector__files-more">{members.length - 12} more file(s)</small>
+        )}
       </div>
+    </section>
+  );
+}
+
+function CollectionMembersPanel({
+  vm,
+  saving,
+  onAction,
+}: {
+  vm: CandidateViewModel;
+  saving: boolean;
+  onAction: (
+    candidateId: number,
+    actionType: UniversalReviewActionType,
+    overrides?: Partial<UniversalReviewActionUpdate>,
+  ) => Promise<void>;
+}) {
+  const members = vm.rawCandidate.members ?? [];
+  const grouped = members.reduce<Record<string, CandidateMember[]>>((acc, member) => {
+    const key = member.album_or_series || member.title || member.filename;
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(member);
+    return acc;
+  }, {});
+  const groups = Object.entries(grouped);
+  const [excluded, setExcluded] = useState<Set<string>>(new Set());
+
+  function toggleGroup(key: string) {
+    const memberIds = grouped[key].map((member) => member.id);
+    const include = excluded.has(key);
+    setExcluded((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+    void onAction(vm.id, "override_identity", {
+      note: JSON.stringify({ member_group_key: key, member_ids: memberIds, include }),
+      reason: "workspace_member_group_toggle",
+    });
+  }
+
+  function excludeAll() {
+    setExcluded(new Set(groups.map(([key]) => key)));
+    void onAction(vm.id, "override_identity", {
+      note: JSON.stringify({ member_group_key: "__all__", include: false }),
+      reason: "workspace_exclude_all_members",
+    });
+  }
+
+  function includeAll() {
+    setExcluded(new Set());
+    void onAction(vm.id, "override_identity", {
+      note: JSON.stringify({ member_group_key: "__all__", include: true }),
+      reason: "workspace_include_all_members",
+    });
+  }
+
+  if (groups.length <= 1) {
+    return <SimpleFileList members={members} />;
+  }
+
+  return (
+    <section className="workspace-inspector__section workspace-inspector__collection-panel">
+      <div className="workspace-inspector__collection-header">
+        <h3>Releases ({groups.length})</h3>
+        <div className="workspace-inspector__collection-bulk">
+          <button className="btn-sm" disabled={saving} onClick={includeAll}>Include all</button>
+          <button className="btn-sm" disabled={saving} onClick={excludeAll}>Exclude all</button>
+        </div>
+      </div>
+      <div className="workspace-inspector__collection-list">
+        {groups.map(([key, groupMembers]) => {
+          const isExcluded = excluded.has(key);
+          const title = groupMembers[0]?.album_or_series || groupMembers[0]?.title || key;
+          const creator = groupMembers[0]?.artist_or_author ?? "";
+          const fileCount = groupMembers.length;
+          return (
+            <div
+              key={key}
+              className={`workspace-inspector__collection-item${isExcluded ? " workspace-inspector__collection-item--excluded" : ""}`}
+            >
+              <div className="workspace-inspector__collection-item-info">
+                <strong>{title}</strong>
+                <small>{[creator, `${fileCount} file${fileCount !== 1 ? "s" : ""}`].filter(Boolean).join(" | ")}</small>
+              </div>
+              <button
+                className={`btn-sm${isExcluded ? "" : " btn-sm--active"}`}
+                disabled={saving}
+                onClick={() => toggleGroup(key)}
+                title={isExcluded ? "Click to include" : "Click to exclude"}
+              >
+                <i className={`ti ti-${isExcluded ? "eye-off" : "check"}`} />
+                {isExcluded ? "Excluded" : "Include"}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      <small className="workspace-inspector__collection-note">
+        These are logical groupings of files. Use the full editor for detailed per-release correction.
+      </small>
     </section>
   );
 }
@@ -321,6 +430,7 @@ export default function WorkspaceInspector({
   onClear,
   showTech,
   onCloseTech,
+  onOpenFullEditor,
 }: Props) {
   const [editingIdentity, setEditingIdentity] = useState(false);
   const [pendingIdentitySave, setPendingIdentitySave] = useState(false);
@@ -537,7 +647,10 @@ export default function WorkspaceInspector({
 
       <EvidenceRows candidate={candidate} />
       <DestinationPreview batchId={batchId} candidateId={vm.id} refreshKey={previewRefreshKey + workspaceRefreshKey} />
-      <MemberList members={candidate.members} />
+      {isCollectionCandidate(vm)
+        ? <CollectionMembersPanel vm={vm} saving={saving} onAction={onAction} />
+        : <SimpleFileList members={candidate.members} />
+      }
 
       {showTech && (
         <section className="workspace-inspector__tech">
@@ -546,6 +659,17 @@ export default function WorkspaceInspector({
             <button className="btn-sm" onClick={onCloseTech}><i className="ti ti-x" /></button>
           </div>
           <pre>{JSON.stringify({ batchId, candidate, summary: ingestion.summary }, null, 2)}</pre>
+        </section>
+      )}
+      {onOpenFullEditor && (
+        <section className="workspace-inspector__section workspace-inspector__full-editor-section">
+          <div className="workspace-inspector__full-editor-hint">
+            <i className="ti ti-external-link" />
+            <span>Need full editing power? Open the legacy editor for detailed corrections.</span>
+          </div>
+          <button className="btn btn--compact" onClick={onOpenFullEditor}>
+            <i className="ti ti-pencil" /> Open full editor
+          </button>
         </section>
       )}
     </aside>

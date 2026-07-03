@@ -806,6 +806,10 @@ export default function App() {
             await handleApprove(batchId);
             setWorkspaceBatch(null);
           }}
+          onOpenFullEditor={() => {
+            if (workspaceBatch) setEditingBatch(workspaceBatch);
+            setWorkspaceBatch(null);
+          }}
         />
       )}
       {editingBatch && (
