@@ -34,6 +34,9 @@ CHECKS = [
     "scripts/check_bulk_approve.py",
     "scripts/check_core_v1_freeze_contract.py",
     "scripts/check_system1_scoped_object_contract.py",
+    "scripts/check_qa1_all_media_acceptance_gate.py",
+    "scripts/check_split_child_metadata_scope_m4d5_2.py",
+    "scripts/check_multi_artist_split_m4d5.py",
 ]
 
 # These filesystem integration checks remain available for targeted/manual

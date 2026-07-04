@@ -12,6 +12,17 @@ AA-SYSTEM1 is the standing product architecture contract for Archive Assistant: 
 
 See `docs/Archive_Assistant_AA-SYSTEM1_Media-Wide_Scoped_Object_Contract_2026-07-03.md` before adding new review, split, reconstruction, move-readiness, duplicate-detection, or modal-retirement work.
 
+
+## AA-QA1 - All-Media Acceptance Gate
+
+AA-QA1 verifies that Archive Assistant is being tested as a media-wide NAS ingestion and review system, not as a music-only or BM Radio-only tool.
+
+The gate covers music, discographies, split child albums, audiobooks, books, comics, movies, TV, artwork, subtitles, sidecars, unknowns, mixed-media folders, quarantine review, destination preview, approval behavior, and move readiness.
+
+AA-QA1 does not remove old editors. Old modal editors remain available until each media type is fully workspace-native and retired type-by-type.
+
+See `docs/Archive_Assistant_AA-QA1_All-Media_Acceptance_Gate_2026-07-03.md` and `docs/AA-QA1_Manual_Test_Report_Template_2026-07-03.md`.
+
 ## Three-System Boundary
 
 ```text
