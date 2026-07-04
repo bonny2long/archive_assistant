@@ -27,6 +27,7 @@ from app.services.library_manifest import (
     write_library_manifest,
 )
 from app.services.move_manifest import write_move_manifest
+from app.services.parent_candidate_materialization import build_parent_candidate_summary
 
 
 def _safe_path_part(value: str) -> str:
@@ -387,7 +388,7 @@ def _move_movie_collection_batch(
     movie_items = metadata.get("movie_items") or []
 
     if not movie_items:
-        return [], ["Movie collection has no movie_items — cannot move"]
+        return [], ["Movie collection has no movie_items â€” cannot move"]
 
     moved_files: list[str] = []
     failed_files: list[str] = []
@@ -598,7 +599,7 @@ def _tv_episode_destination(
 
     suffix = Path(ingest_file.file_name).suffix.lower()
 
-    # Preserve original filename — just need a season/group folder
+    # Preserve original filename â€” just need a season/group folder
     if preserve:
         if season_number is not None:
             folder = _tv_season_destination(destination, int(season_number))
@@ -661,7 +662,7 @@ def _tv_subtitle_destination(
     suffix = Path(ingest_file.file_name).suffix.lower()
 
     if is_special and destination_group in {"oad", "ova", "extras", "specials"}:
-        # Subtitle for a special — place alongside the episode
+        # Subtitle for a special â€” place alongside the episode
         file_name = (
             f"{episode_code}{language_suffix}{suffix}"
             if episode_code
@@ -2022,6 +2023,13 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
     errors: list[str] = []
 
     for batch in approved:
+        parent_summary = build_parent_candidate_summary(db, batch)
+        if parent_summary["is_parent_review_container"]:
+            errors.append(
+                f"Batch {batch.id} is a parent review container and requires child batch creation before moving."
+            )
+            continue
+
         moved_files = []
         failed_files = []
         album_meta = batch.metadata_json or {}

@@ -45,6 +45,7 @@ from app.services.dev_reset import (
     reset_test_data,
 )
 from app.services.batch_display import build_batch_display_fields
+from app.services.parent_candidate_materialization import build_parent_candidate_summary
 from app.services.batch_merge import (
     find_archived_duplicate_candidate,
     find_merge_candidate_batches,
@@ -219,7 +220,7 @@ def list_batches(
         .all()
     )
 
-    items = [_batch_to_summary(b) for b in batches]
+    items = [_batch_to_summary(b, db=db) for b in batches]
     return PaginatedResponse(
         items=items,
         page=page,
@@ -246,7 +247,7 @@ def list_pending_batches(
         .all()
     )
 
-    items = [_batch_to_summary(b) for b in batches]
+    items = [_batch_to_summary(b, db=db) for b in batches]
     return PaginatedResponse(
         items=items,
         page=page,
@@ -1887,6 +1888,14 @@ def approve_batch(batch_id: int, db: Session = Depends(get_db)):
     if batch.detected_type in {"unknown_type", "unsupported_file"}:
         raise HTTPException(status_code=400, detail="Unknown items cannot be approved")
 
+    parent_summary = build_parent_candidate_summary(db, batch)
+    if parent_summary["is_parent_review_container"]:
+        return ApproveResponse(
+            batch_id=batch.id,
+            status=batch.status,
+            message="Parent review containers require child batch creation before move approval.",
+        )
+
     meta = build_review_state(batch.detected_type, batch.metadata_json)
     if meta["blocking_review_items"]:
         return ApproveResponse(
@@ -1942,6 +1951,8 @@ def approve_selected_batches(
         metadata = build_review_state(batch.detected_type, batch.metadata_json)
         if batch.detected_type in {"unknown_type", "unsupported_file"}:
             reason = "quarantine_review_required"
+        elif build_parent_candidate_summary(db, batch)["is_parent_review_container"]:
+            reason = "parent_review_container_needs_child_batches"
         elif metadata["blocking_review_items"]:
             reason = "blocking_review_items"
         elif batch.status in {"needs_metadata_review", "metadata_recovery"}:
@@ -2007,7 +2018,7 @@ def list_quarantine_review(db: Session = Depends(get_db)):
         .order_by(IngestBatch.created_at.desc())
         .all()
     )
-    return [_batch_to_summary(batch) for batch in batches]
+    return [_batch_to_summary(batch, db=db) for batch in batches]
 
 
 @router.post("/batches/{batch_id}/restore-quarantine", response_model=BatchSummary)
@@ -2126,10 +2137,12 @@ def library(db: Session = Depends(get_db)):
 def _batch_to_summary(
     batch: IngestBatch,
     *,
+    db: Session | None = None,
     action_message: str | None = None,
 ) -> BatchSummary:
     meta = build_review_state(batch.detected_type, batch.metadata_json)
-    display = build_batch_display_fields(batch)
+    parent_summary = build_parent_candidate_summary(db, batch)
+    display = build_batch_display_fields(batch, parent_summary)
     return BatchSummary(
         id=batch.id,
         detected_type=batch.detected_type,
@@ -2243,6 +2256,13 @@ def _batch_to_summary(
             else None
         ),
         action_message=action_message,
+        candidate_group_count=parent_summary["candidate_group_count"],
+        approved_candidate_count=parent_summary["approved_candidate_count"],
+        excluded_candidate_count=parent_summary["excluded_candidate_count"],
+        remaining_candidate_count=parent_summary["remaining_candidate_count"],
+        needs_materialization=parent_summary["needs_materialization"],
+        parent_review_state=parent_summary["parent_review_state"],
+        is_parent_review_container=parent_summary["is_parent_review_container"],
         **display,
         created_at=batch.created_at,
     )

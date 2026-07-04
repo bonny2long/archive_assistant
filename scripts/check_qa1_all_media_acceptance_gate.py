@@ -36,6 +36,7 @@ REQUIRED_SCRIPTS = [
     "check_bulk_approve.py",
     "check_system1_scoped_object_contract.py",
     "check_qa1_all_media_acceptance_gate.py",
+    "check_parent_candidate_materialization_state.py",
 ]
 
 OLD_MODAL_FALLBACKS = [

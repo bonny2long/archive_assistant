@@ -524,11 +524,11 @@ def _suggested_metadata(album: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _active_split_actions(db: Session, batch_id: int, candidate_id: int) -> list[UniversalIngestionReviewAction]:
+def _active_materialization_actions(db: Session, batch_id: int, candidate_id: int) -> list[UniversalIngestionReviewAction]:
     return db.query(UniversalIngestionReviewAction).filter(
         UniversalIngestionReviewAction.batch_id == batch_id,
         UniversalIngestionReviewAction.candidate_id == candidate_id,
-        UniversalIngestionReviewAction.action_type == "split_candidate",
+        UniversalIngestionReviewAction.action_type.in_({"split_candidate", "approve_candidate"}),
         UniversalIngestionReviewAction.decision_status != "cleared",
     ).all()
 
@@ -659,7 +659,7 @@ def execute_split_candidate(db: Session, batch_id: int, candidate_id: int) -> di
     if not remaining_albums:
         parent_batch.status = "split_complete"
 
-    for action in _active_split_actions(db, batch_id, candidate.id):
+    for action in _active_materialization_actions(db, batch_id, candidate.id):
         action.decision_status = "applied"
         action.updated_at = timestamp
         action.applied_at = timestamp

@@ -396,6 +396,13 @@ class BatchSummary(BaseModel):
     metadata_confirmed: bool = False
     music_review_summary: dict | None = None
     action_message: str | None = None
+    candidate_group_count: int = 0
+    approved_candidate_count: int = 0
+    excluded_candidate_count: int = 0
+    remaining_candidate_count: int = 0
+    needs_materialization: bool = False
+    parent_review_state: str | None = None
+    is_parent_review_container: bool = False
     media_category: str | None = None
     media_label: str | None = None
     primary_name: str | None = None

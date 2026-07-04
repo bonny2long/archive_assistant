@@ -376,6 +376,13 @@ export type BatchSummary = {
   metadata_confirmed: boolean;
   music_review_summary?: MusicReviewSummary | null;
   action_message?: string | null;
+  candidate_group_count?: number;
+  approved_candidate_count?: number;
+  excluded_candidate_count?: number;
+  remaining_candidate_count?: number;
+  needs_materialization?: boolean;
+  parent_review_state?: "review_in_progress" | "candidates_approved_waiting_materialization" | "split_complete" | string | null;
+  is_parent_review_container?: boolean;
   media_category?: string | null;
   media_label?: string | null;
   primary_name?: string | null;

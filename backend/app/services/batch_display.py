@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from app.models.archive import IngestBatch
 
 
@@ -9,10 +11,59 @@ AUDIOBOOK_TYPES = {"audiobook"}
 QUARANTINE_TYPES = {"unknown_type", "unsupported_file"}
 
 
-def build_batch_display_fields(batch: IngestBatch) -> dict:
+def _plural(count: int, singular: str, plural: str | None = None) -> str:
+    return f"{count} {singular if count == 1 else plural or singular + 's'}"
+
+
+def _parent_review_media_label(detected_type: str) -> str:
+    if detected_type == "music_discography":
+        return "Discography Source"
+    if detected_type in {"book", "audiobook", "video_movie", "video_tv_show", "video_tv_episode"}:
+        return "Collection Source"
+    return "Review Container"
+
+
+def _parent_review_primary_name(batch: IngestBatch, metadata: dict) -> str:
+    source_name = Path(batch.source_path or "").name
+    return str(
+        metadata.get("collection_title")
+        or metadata.get("show_title")
+        or metadata.get("artist")
+        or metadata.get("albumartist")
+        or metadata.get("author")
+        or metadata.get("name")
+        or source_name
+        or "Review container"
+    )
+
+
+def _parent_review_secondary_name(parent_summary: dict) -> str:
+    approved = int(parent_summary.get("approved_candidate_count") or 0)
+    remaining = int(parent_summary.get("remaining_candidate_count") or 0)
+    excluded = int(parent_summary.get("excluded_candidate_count") or 0)
+    parts = [
+        _plural(approved, "approved candidate"),
+        f"{remaining} remaining",
+    ]
+    if excluded:
+        parts.append(_plural(excluded, "excluded candidate"))
+    return ", ".join(parts)
+
+
+def build_batch_display_fields(batch: IngestBatch, parent_summary: dict | None = None) -> dict:
     metadata = batch.metadata_json or {}
     detected_type = batch.detected_type
-
+    if parent_summary and parent_summary.get("is_parent_review_container"):
+        candidate_group_count = int(parent_summary.get("candidate_group_count") or 0)
+        return {
+            "media_category": "review",
+            "media_label": _parent_review_media_label(detected_type),
+            "primary_name": _parent_review_primary_name(batch, metadata),
+            "secondary_name": _parent_review_secondary_name(parent_summary),
+            "item_label": "candidate groups",
+            "item_count": candidate_group_count,
+            "edit_kind": None,
+        }
     if detected_type == "music_discography":
         release_count = int(
             metadata.get("release_count")

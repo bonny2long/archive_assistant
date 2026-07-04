@@ -43,6 +43,23 @@ function statusLabel(status: string): string {
   return status.replace(/_/g, " ");
 }
 
+function isParentReviewContainer(batch: BatchSummary): boolean {
+  return Boolean(
+    batch.is_parent_review_container
+    || batch.needs_materialization
+    || batch.parent_review_state,
+  );
+}
+
+function batchStatusLabel(batch: BatchSummary): string {
+  if (!isParentReviewContainer(batch)) return statusLabel(batch.status);
+  if (batch.parent_review_state === "candidates_approved_waiting_materialization") {
+    return "Ready to create child batches";
+  }
+  if (batch.parent_review_state === "split_complete") return "Split complete";
+  return "Review in progress";
+}
+
 function MoveManifestProof({
   batch,
   moveSummary,
@@ -107,6 +124,11 @@ export default function BatchRow({
   const year = batch.year ?? "-";
   const percent = Math.round((batch.confidence ?? 0) * 100);
   const canOpenWorkspace = batch.status !== "moved" && !quarantineReview;
+  const parentReviewContainer = isParentReviewContainer(batch);
+  const approveDisabled = batch.status !== "pending_review" || parentReviewContainer;
+  const approveTitle = parentReviewContainer
+    ? "Parent review containers need child batch creation before move approval"
+    : "Approve";
 
   return (
     <>
@@ -143,7 +165,7 @@ export default function BatchRow({
         </td>
         <td>{year}</td>
         <td>{itemText}</td>
-        <td><span className={pillClass(batch.status)}>{statusLabel(batch.status)}</span></td>
+        <td><span className={pillClass(batch.status)}>{batchStatusLabel(batch)}</span></td>
         <td>
           <div className="conf-bar">
             <div className="conf-bar__track">
@@ -184,8 +206,8 @@ export default function BatchRow({
             </button>
           ) : <button
             className="btn-sm"
-            title="Approve"
-            disabled={batch.status !== "pending_review"}
+            title={approveTitle}
+            disabled={approveDisabled}
             style={{ color: "var(--accent-green)" }}
             onClick={(event) => { event.stopPropagation(); onApprove(batch.id); }}
           >

@@ -23,12 +23,21 @@ export default function WorkspaceHeader({ batch, ingestion, routing, onClose, on
   const candidateCount = ingestion?.summary.candidate_count ?? 0;
   const canApprove = !!ingestion && blocked === 0 && review === 0;
   const candidates = ingestion?.candidates ?? [];
+  const isParentReviewContainer = candidateCount > 1;
   const approvedCount = candidates.filter((candidate) => hasActiveAction(candidate.active_actions ?? [], "approve_candidate")).length;
   const excludedCount = candidates.filter((candidate) => hasActiveAction(candidate.active_actions ?? [], "exclude_from_move_plan")).length;
   const remainingCount = candidates.filter((candidate) => {
     const actions = candidate.active_actions ?? [];
     return !hasActiveAction(actions, "approve_candidate") && !hasActiveAction(actions, "exclude_from_move_plan");
   }).length || (ingestion ? 0 : candidateCount);
+  const allCandidatesResolved = isParentReviewContainer && approvedCount > 0 && remainingCount === 0;
+  const approveDisabled = isParentReviewContainer || !canApprove;
+  const approveTitle = isParentReviewContainer
+    ? "Approved candidate groups must be materialized into child batches before this parent can move."
+    : "Approves groups the backend currently considers safe. Individual candidate decisions remain visible in the workspace.";
+  const approveLabel = isParentReviewContainer
+    ? "Child batch creation required"
+    : "Approve backend-safe groups";
 
   return (
     <header className="review-workspace__header">
@@ -39,7 +48,7 @@ export default function WorkspaceHeader({ batch, ingestion, routing, onClose, on
         <div className="review-workspace__badges">
           {approvedCount > 0 && (
             <span className="review-workspace__badge--approved">
-              <i className="ti ti-circle-check" /> {approvedCount} approved
+              <i className="ti ti-circle-check" /> {approvedCount} {isParentReviewContainer ? "approved candidate groups" : "approved"}
             </span>
           )}
           {excludedCount > 0 && (
@@ -55,6 +64,9 @@ export default function WorkspaceHeader({ batch, ingestion, routing, onClose, on
           {routing?.summary.chunk_identity_candidate_count ? (
             <span className="review-workspace__badge--warn">chunk identity risk</span>
           ) : null}
+          {allCandidatesResolved && (
+            <span className="review-workspace__badge--warn">Next: create child batches</span>
+          )}
         </div>
         {routing && routing.decision !== "music_editor_allowed" && (
           <small className="review-workspace__routing">
@@ -65,11 +77,11 @@ export default function WorkspaceHeader({ batch, ingestion, routing, onClose, on
       <div className="review-workspace__header-actions">
         <button
           className="btn btn--green"
-          disabled={!canApprove}
-          title="Approves groups the backend currently considers safe. Individual candidate decisions remain visible in the workspace."
+          disabled={approveDisabled}
+          title={approveTitle}
           onClick={() => void onApprove(batch.id)}
         >
-          <i className="ti ti-check" /> Approve backend-safe groups
+          <i className="ti ti-check" /> {approveLabel}
         </button>
         <button className="btn-sm" title="Close Review Workspace" onClick={onClose}>
           <i className="ti ti-x" />
