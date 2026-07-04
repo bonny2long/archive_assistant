@@ -5,6 +5,13 @@
 Archive Assistant is the controlled media organizer in Bonny's NAS workflow.
 It scans stable ingest folders, creates review batches, supports metadata review, requires approval, moves approved media, and writes manifests/logs.
 
+
+## Media-Wide Scoped Object Contract
+
+AA-SYSTEM1 is the standing product architecture contract for Archive Assistant: every reconstructed or child media object must be built from scoped file evidence, not copied wholesale from a parent source folder or inherited metadata blob. This applies across music, audiobooks, books, comics, movies, TV, sidecars, subtitles, artwork, unknown files, and mixed-media folders.
+
+See `docs/Archive_Assistant_AA-SYSTEM1_Media-Wide_Scoped_Object_Contract_2026-07-03.md` before adding new review, split, reconstruction, move-readiness, duplicate-detection, or modal-retirement work.
+
 ## Three-System Boundary
 
 ```text

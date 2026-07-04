@@ -33,6 +33,7 @@ CHECKS = [
     "scripts/check_audiobook_detection_and_review_display.py",
     "scripts/check_bulk_approve.py",
     "scripts/check_core_v1_freeze_contract.py",
+    "scripts/check_system1_scoped_object_contract.py",
 ]
 
 # These filesystem integration checks remain available for targeted/manual
