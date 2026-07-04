@@ -43,9 +43,15 @@ function hasAction(candidate: CandidateViewModel, actionType: string): boolean {
   return candidate.activeActions.some((action) => action.action_type === actionType);
 }
 
+function hasAppliedAction(candidate: CandidateViewModel, actionType: string): boolean {
+  return candidate.activeActions.some((action) => action.action_type === actionType && action.decision_status === "applied");
+}
+
 function actionSummary(candidate: CandidateViewModel): string | null {
+  if (hasAppliedAction(candidate, "approve_candidate") || hasAppliedAction(candidate, "split_candidate")) return "Child batch created";
   if (hasAction(candidate, "exclude_from_move_plan")) return "Excluded from move plan";
-  if (hasAction(candidate, "approve_candidate")) return "Approved for move plan";
+  if (hasAction(candidate, "approve_candidate")) return "Will create child batch";
+  if (hasAction(candidate, "split_candidate")) return "Approve first";
   if (hasAction(candidate, "mark_review_later")) return "Review later";
   if (hasAction(candidate, "block_candidate")) return "Blocked by user";
   if (candidate.activeActions.length > 0) return plural(candidate.activeActions.length, "decision");

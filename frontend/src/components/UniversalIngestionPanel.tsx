@@ -47,10 +47,26 @@ function actionLabel(action: UniversalReviewAction): string {
   if (action.action_type === "override_identity") return "Identity override";
   if (action.action_type === "exclude_from_move_plan") return "Excluded from move plan";
   if (action.action_type === "block_candidate") return "Blocked by user";
-  if (action.action_type === "split_candidate") return "Split required";
+  if (action.action_type === "split_candidate") return action.decision_status === "applied" ? "Child batch created" : "Will create child batch";
   if (action.action_type === "merge_candidates") return "Merge requested";
   return formatToken(action.action_type);
 }
+function hasCandidateAction(candidate: { active_actions?: UniversalReviewAction[] | null }, actionType: string): boolean {
+  return (candidate.active_actions ?? []).some((action) => action.action_type === actionType && action.decision_status !== "cleared");
+}
+
+function hasAppliedCandidateAction(candidate: { active_actions?: UniversalReviewAction[] | null }, actionType: string): boolean {
+  return (candidate.active_actions ?? []).some((action) => action.action_type === actionType && action.decision_status === "applied");
+}
+
+function childBatchActionLabel(candidate: { active_actions?: UniversalReviewAction[] | null }): string {
+  if (hasAppliedCandidateAction(candidate, "approve_candidate") || hasAppliedCandidateAction(candidate, "split_candidate")) {
+    return "Child batch created";
+  }
+  if (hasCandidateAction(candidate, "approve_candidate")) return "Will create child batch";
+  return "Approve first";
+}
+
 function formatToken(value: string): string {
   return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
@@ -270,10 +286,10 @@ export default function UniversalIngestionPanel({ batchId }: { batchId: number }
                   </button>
                   <button
                     type="button"
-                    onClick={() => submitAction(candidate, { action_type: "split_candidate", reason: "User marked candidate as requiring split before final organization." })}
-                    disabled={savingAction === candidate.id}
+                    onClick={() => submitAction(candidate, { action_type: "split_candidate", reason: "Candidate will create a child batch during parent materialization." })}
+                    disabled={savingAction === candidate.id || !hasCandidateAction(candidate, "approve_candidate") || hasAppliedCandidateAction(candidate, "approve_candidate") || hasAppliedCandidateAction(candidate, "split_candidate")}
                   >
-                    Split required
+                    {childBatchActionLabel(candidate)}
                   </button>
                   <button
                     type="button"

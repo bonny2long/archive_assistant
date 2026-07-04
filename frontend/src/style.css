@@ -4163,3 +4163,28 @@ button:focus-visible, input:focus-visible {
 }
 
 /* End AA-M4D.5 */
+/* AA-QA1-FIX2 - parent materialization result */
+.review-workspace__materialize-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.review-workspace__materialize-result span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.review-workspace__materialize-result--error {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--accent-red);
+}
+
+/* End AA-QA1-FIX2 */

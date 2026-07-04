@@ -7,6 +7,8 @@ type Props = {
   routing: RoutingDecision | null;
   onClose: () => void;
   onApprove: (batchId: number) => Promise<void>;
+  onMaterializeApprovedCandidates?: () => Promise<void>;
+  materializing?: boolean;
 };
 
 function decisionLabel(decision: string | undefined): string {
@@ -17,7 +19,15 @@ function hasActiveAction(actions: Array<{ action_type: string; decision_status?:
   return actions.some((action) => action.action_type === actionType && action.decision_status !== "cleared");
 }
 
-export default function WorkspaceHeader({ batch, ingestion, routing, onClose, onApprove }: Props) {
+export default function WorkspaceHeader({
+  batch,
+  ingestion,
+  routing,
+  onClose,
+  onApprove,
+  onMaterializeApprovedCandidates,
+  materializing = false,
+}: Props) {
   const blocked = ingestion?.summary.decision_counts.blocked_conflict ?? 0;
   const review = ingestion?.summary.decision_counts.review_required ?? 0;
   const candidateCount = ingestion?.summary.candidate_count ?? 0;
@@ -31,6 +41,7 @@ export default function WorkspaceHeader({ batch, ingestion, routing, onClose, on
     return !hasActiveAction(actions, "approve_candidate") && !hasActiveAction(actions, "exclude_from_move_plan");
   }).length || (ingestion ? 0 : candidateCount);
   const allCandidatesResolved = isParentReviewContainer && approvedCount > 0 && remainingCount === 0;
+  const canMaterialize = allCandidatesResolved && !!onMaterializeApprovedCandidates;
   const approveDisabled = isParentReviewContainer || !canApprove;
   const approveTitle = isParentReviewContainer
     ? "Approved candidate groups must be materialized into child batches before this parent can move."
@@ -38,6 +49,7 @@ export default function WorkspaceHeader({ batch, ingestion, routing, onClose, on
   const approveLabel = isParentReviewContainer
     ? "Child batch creation required"
     : "Approve backend-safe groups";
+  const materializeLabel = `Create ${approvedCount} child batch${approvedCount === 1 ? "" : "es"}`;
 
   return (
     <header className="review-workspace__header">
@@ -75,14 +87,25 @@ export default function WorkspaceHeader({ batch, ingestion, routing, onClose, on
         )}
       </div>
       <div className="review-workspace__header-actions">
-        <button
-          className="btn btn--green"
-          disabled={approveDisabled}
-          title={approveTitle}
-          onClick={() => void onApprove(batch.id)}
-        >
-          <i className="ti ti-check" /> {approveLabel}
-        </button>
+        {canMaterialize ? (
+          <button
+            className="btn btn--green"
+            disabled={materializing}
+            title="Creates child review batches from approved candidate groups. Files are not moved to the final library."
+            onClick={() => void onMaterializeApprovedCandidates?.()}
+          >
+            <i className={`ti ti-${materializing ? "loader-2 spinner" : "git-branch"}`} /> {materializeLabel}
+          </button>
+        ) : (
+          <button
+            className="btn btn--green"
+            disabled={approveDisabled}
+            title={approveTitle}
+            onClick={() => void onApprove(batch.id)}
+          >
+            <i className="ti ti-check" /> {approveLabel}
+          </button>
+        )}
         <button className="btn-sm" title="Close Review Workspace" onClick={onClose}>
           <i className="ti ti-x" />
         </button>

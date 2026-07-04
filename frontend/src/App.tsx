@@ -292,6 +292,14 @@ export default function App() {
     return result;
   };
 
+  const handleWorkspaceMaterializeApprovedCandidates = async (batchId: number) => {
+    const result = await api.materializeApprovedCandidates(batchId);
+    showToast(result.message);
+    await loadBatches();
+    await handleLoadDetail(batchId);
+    await loadLibrarySummary();
+    return result;
+  };
   const handleApprove = async (id: number) => {
     try {
       const result = await api.approveBatch(id);
@@ -817,6 +825,7 @@ export default function App() {
           onSaveAction={handleWorkspaceAction}
           onClearAction={handleWorkspaceClearAction}
           onSplitCandidate={workspaceDetail.detected_type === "music_discography" ? handleWorkspaceSplitCandidate : undefined}
+          onMaterializeApprovedCandidates={handleWorkspaceMaterializeApprovedCandidates}
           onApprove={async (batchId) => {
             await handleApprove(batchId);
             setWorkspaceBatch(null);

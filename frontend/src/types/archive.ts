@@ -1036,3 +1036,12 @@ export interface SplitCandidateResult {
   artist?: string | null;
   album?: string | null;
 }
+
+export interface MaterializeApprovedCandidatesResult {
+  parent_batch_id: number;
+  created_child_batch_ids: number[];
+  created_count: number;
+  skipped_count: number;
+  parent_review_state: string;
+  message: string;
+}

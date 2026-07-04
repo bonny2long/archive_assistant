@@ -23,6 +23,7 @@ import type {
   ScanMusicResponse,
   ScanJobStatus,
   SplitCandidateResult,
+  MaterializeApprovedCandidatesResult,
   SystemPathsResponse,
   SystemTimeResponse,
   TvMetadataUpdate,
@@ -108,6 +109,8 @@ export const api = {
     request<CandidateMovePreview>(`/batches/${id}/candidate-move-preview${snapshot ? "?snapshot=true" : ""}`),
   splitCandidate: (id: number, candidateId: number) =>
     request<SplitCandidateResult>(`/batches/${id}/split-candidate`, "POST", { candidate_id: candidateId }),
+  materializeApprovedCandidates: (id: number) =>
+    request<MaterializeApprovedCandidatesResult>(`/batches/${id}/materialize-approved-candidates`, "POST"),
   getBatchMoves: (id: number) => request<BatchMoveSummary>(`/batches/${id}/moves`),
   updateBatchMetadata: (id: number, update: BatchMetadataUpdate) =>
     request<BatchSummary>(`/batches/${id}/metadata`, "PATCH", update),

@@ -8,6 +8,7 @@ import type {
   MediaIdentityCandidate,
   RoutingDecision,
   SplitCandidateResult,
+  MaterializeApprovedCandidatesResult,
   UniversalReviewAction,
   UniversalReviewActionType,
   UniversalReviewActionUpdate,
@@ -72,6 +73,7 @@ type ReviewWorkspaceProps = {
   onSaveAction: (batchId: number, update: UniversalReviewActionUpdate) => Promise<void>;
   onClearAction: (batchId: number, actionId: number) => Promise<void>;
   onApprove: (batchId: number) => Promise<void>;
+  onMaterializeApprovedCandidates?: (batchId: number) => Promise<MaterializeApprovedCandidatesResult>;
   onSplitCandidate?: (batchId: number, candidateId: number) => Promise<SplitCandidateResult>;
   onOpenFullEditor?: (batch: IngestBatch) => void;
 };
@@ -236,6 +238,7 @@ export default function ReviewWorkspace({
   onSaveAction,
   onClearAction,
   onApprove,
+  onMaterializeApprovedCandidates,
   onSplitCandidate,
   onOpenFullEditor,
 }: ReviewWorkspaceProps) {
@@ -250,6 +253,9 @@ export default function ReviewWorkspace({
   const [actionError, setActionError] = useState<string | null>(null);
   const [showTech, setShowTech] = useState(false);
   const [workspaceRefreshKey, setWorkspaceRefreshKey] = useState(0);
+  const [materializing, setMaterializing] = useState(false);
+  const [materializeMessage, setMaterializeMessage] = useState<string | null>(null);
+  const [materializeError, setMaterializeError] = useState<string | null>(null);
 
   const loadWorkspace = useCallback(async () => {
     setLoading(true);
@@ -345,6 +351,27 @@ export default function ReviewWorkspace({
     }
     : undefined;
 
+  const handleMaterializeApprovedCandidates = onMaterializeApprovedCandidates
+    ? async () => {
+      setMaterializing(true);
+      setMaterializeError(null);
+      setMaterializeMessage(null);
+      try {
+        const result = await onMaterializeApprovedCandidates(batch.id);
+        await loadWorkspace();
+        setWorkspaceRefreshKey((key) => key + 1);
+        setMaterializeMessage(result.message);
+      } catch (materializeFailure: unknown) {
+        setMaterializeError(
+          materializeFailure instanceof Error
+            ? materializeFailure.message
+            : "Unable to create child batches",
+        );
+      } finally {
+        setMaterializing(false);
+      }
+    }
+    : undefined;
   return (
     <div className="review-workspace" role="dialog" aria-modal="true" aria-label="Review Workspace">
       <WorkspaceHeader
@@ -353,7 +380,20 @@ export default function ReviewWorkspace({
         routing={routing}
         onClose={onClose}
         onApprove={onApprove}
+        onMaterializeApprovedCandidates={handleMaterializeApprovedCandidates}
+        materializing={materializing}
       />
+      {materializeMessage && (
+        <div className="review-workspace__materialize-result">
+          <span><i className="ti ti-check" /> {materializeMessage}</span>
+          <button className="btn btn--compact" onClick={onClose}>View child batches</button>
+        </div>
+      )}
+      {materializeError && (
+        <div className="review-workspace__materialize-result review-workspace__materialize-result--error">
+          <span><i className="ti ti-alert-triangle" /> {materializeError}</span>
+        </div>
+      )}
       {loading && <div className="review-workspace__state"><i className="ti ti-loader-2 spinner" /> Loading workspace...</div>}
       {!loading && error && <div className="review-workspace__state review-workspace__state--error"><i className="ti ti-alert-triangle" /> {error}</div>}
       {!loading && !error && ingestion && (

@@ -303,6 +303,17 @@ class SplitCandidateResponse(BaseModel):
     suggested_destination: str | None = None
     artist: str | None = None
     album: str | None = None
+
+
+class MaterializeApprovedCandidatesResponse(BaseModel):
+    parent_batch_id: int
+    created_child_batch_ids: list[int] = Field(default_factory=list)
+    created_count: int
+    skipped_count: int
+    parent_review_state: str
+    message: str
+
+
 class BatchSummary(BaseModel):
     id: int
     detected_type: str

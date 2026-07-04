@@ -27,6 +27,7 @@ from app.schemas.archive import (
     IngestBatchOut,
     IngestFileOut,
     LibrarySummary,
+    MaterializeApprovedCandidatesResponse,
     MovieCollectionReviewUpdate,
     MovieMetadataUpdate,
     MoveActionOut,
@@ -80,6 +81,7 @@ from app.services.title_display import clean_display_title, destination_title
 from app.services.metadata_quality_gate import get_batch_metadata_quality
 from app.services.candidate_move_plan_preview import build_candidate_move_plan_preview
 from app.services.batch_split import execute_split_candidate
+from app.services.approved_candidate_materialization import materialize_approved_candidates
 from app.services.universal_review_routing import get_batch_routing_decision
 from app.services.universal_ingestion_review import (
     clear_review_action,
@@ -530,6 +532,18 @@ def split_batch_candidate(
         return execute_split_candidate(db, batch_id, request.candidate_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/batches/{batch_id}/materialize-approved-candidates", response_model=MaterializeApprovedCandidatesResponse)
+def materialize_batch_approved_candidates(batch_id: int, db: Session = Depends(get_db)):
+    try:
+        return materialize_approved_candidates(db, batch_id)
+    except ValueError as exc:
+        detail = str(exc)
+        status_code = 404 if detail == "Batch not found" else 400
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+
+
 @router.patch("/batches/{batch_id}/metadata", response_model=BatchSummary)
 def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Session = Depends(get_db)):
     batch = db.get(IngestBatch, batch_id)

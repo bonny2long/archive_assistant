@@ -63,14 +63,28 @@ function mediaClassLabel(value: string | null | undefined): string {
   return match?.label ?? value ?? "Unknown";
 }
 
-function formatActionLabel(action: { action_type: string; target_media_class?: string | null }): string {
+function hasDecision(actions: Array<{ action_type: string; decision_status?: string | null }>, actionType: string): boolean {
+  return actions.some((action) => action.action_type === actionType && action.decision_status !== "cleared");
+}
+
+function formatActionLabel(
+  action: { action_type: string; target_media_class?: string | null; decision_status?: string | null },
+  candidateActions: Array<{ action_type: string; decision_status?: string | null }>,
+): string {
+  if (action.action_type === "split_candidate") {
+    if (action.decision_status === "applied") return "Child batch created";
+    if (hasDecision(candidateActions, "approve_candidate")) return "Will create child batch";
+    return "Approve first";
+  }
+  if (action.action_type === "approve_candidate" && action.decision_status === "applied") {
+    return "Child batch created";
+  }
   const labels: Record<string, string> = {
-    approve_candidate: "Approved for move plan",
+    approve_candidate: "Will create child batch",
     mark_review_later: "Marked for later review",
     override_identity: "Identity override saved",
     exclude_from_move_plan: "Excluded from move plan",
     block_candidate: "Blocked by user",
-    split_candidate: "Split required",
     merge_candidates: "Merge requested",
   };
   if (action.action_type === "override_media_class") {
@@ -681,7 +695,7 @@ export default function WorkspaceInspector({
           <div className="workspace-inspector__actions-list">
             {vm.activeActions.map((action) => (
               <div key={action.id}>
-                <span>{formatActionLabel(action)}</span>
+                <span>{formatActionLabel(action, vm.activeActions)}</span>
                 <button className="btn-sm" disabled={saving} onClick={() => void onClear(action.id, vm.id)}>
                   <i className="ti ti-eraser" /> Clear
                 </button>
