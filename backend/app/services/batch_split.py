@@ -14,6 +14,18 @@ from app.models.media_metadata import CandidateMember, MediaIdentityCandidate, U
 
 _SAFE_PART_PATTERN = re.compile(r'[<>:"/\\|?*]+')
 
+AUDIO_EXTENSIONS = {
+    ".mp3", ".flac", ".m4a", ".aac", ".wav", ".ogg", ".opus", ".wma", ".aiff", ".alac"
+}
+
+ARTWORK_EXTENSIONS = {
+    ".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tiff"
+}
+
+SIDECAR_EXTENSIONS = {
+    ".txt", ".log", ".cue", ".m3u", ".m3u8", ".nfo", ".sfv", ".md5", ".ffp"
+}
+
 
 def safe_path_part(value: object, fallback: str = "Unknown") -> str:
     text = str(value or "").strip()
@@ -51,6 +63,118 @@ def _same_or_missing(left: object, right: object) -> bool:
     return _norm_match(left) == _norm_match(right)
 
 
+def _first_non_empty(*values: object, fallback: str = "") -> str:
+    for value in values:
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text and not _is_unknownish(text):
+            return text
+    return fallback
+
+
+def _file_extension(ingest_file: IngestFile) -> str:
+    ext = getattr(ingest_file, "extension", None)
+    if ext:
+        return str(ext).lower().strip()
+    name = getattr(ingest_file, "file_name", "") or ""
+    return Path(name).suffix.lower().strip()
+
+
+def _is_audio_file(ingest_file: IngestFile) -> bool:
+    ext = _file_extension(ingest_file)
+    role = str(getattr(ingest_file, "detected_role", "") or "").lower()
+    return ext in AUDIO_EXTENSIONS or role in {"music_track", "discography_track", "audio", "music_audio"}
+
+
+def _is_artwork_file(ingest_file: IngestFile) -> bool:
+    ext = _file_extension(ingest_file)
+    role = str(getattr(ingest_file, "detected_role", "") or "").lower()
+    return ext in ARTWORK_EXTENSIONS or role in {"artwork", "cover_art", "album_artwork"}
+
+
+def _is_sidecar_file(ingest_file: IngestFile) -> bool:
+    ext = _file_extension(ingest_file)
+    role = str(getattr(ingest_file, "detected_role", "") or "").lower()
+    return ext in SIDECAR_EXTENSIONS or role in {"sidecar", "metadata_sidecar", "playlist", "log"}
+
+
+def _partition_child_files(files_to_move: list[IngestFile]) -> dict[str, list[IngestFile]]:
+    audio: list[IngestFile] = []
+    artwork: list[IngestFile] = []
+    sidecars: list[IngestFile] = []
+    other: list[IngestFile] = []
+
+    for ingest_file in files_to_move:
+        if _is_audio_file(ingest_file):
+            audio.append(ingest_file)
+        elif _is_artwork_file(ingest_file):
+            artwork.append(ingest_file)
+        elif _is_sidecar_file(ingest_file):
+            sidecars.append(ingest_file)
+        else:
+            other.append(ingest_file)
+
+    return {
+        "audio": audio,
+        "artwork": artwork,
+        "sidecars": sidecars,
+        "other": other,
+    }
+
+
+def _embedded_fields(ingest_file: IngestFile) -> dict[str, Any]:
+    meta = ingest_file.metadata_json or {}
+    embedded = meta.get("embedded_metadata_fields")
+    if isinstance(embedded, dict):
+        return embedded
+    embedded_metadata = meta.get("embedded_metadata")
+    if isinstance(embedded_metadata, dict) and isinstance(embedded_metadata.get("fields"), dict):
+        return embedded_metadata["fields"]
+    return {}
+
+
+def _track_number_value(value: object) -> int | str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    first = re.split(r"[/\-]", text)[0].strip()
+    return int(first) if first.isdigit() else text
+
+
+def _track_from_audio_file(ingest_file: IngestFile) -> dict[str, Any]:
+    meta = ingest_file.metadata_json or {}
+    embedded = _embedded_fields(ingest_file)
+    title = _first_non_empty(
+        embedded.get("title"),
+        meta.get("title"),
+        Path(getattr(ingest_file, "file_name", "") or "").stem,
+        fallback="Unknown Track",
+    )
+    track_number = _first_non_empty(
+        embedded.get("track_number"),
+        embedded.get("tracknumber"),
+        meta.get("tracknumber"),
+        meta.get("track_number"),
+        fallback="",
+    )
+    disc_number = _first_non_empty(
+        embedded.get("disc_number"),
+        embedded.get("discnumber"),
+        meta.get("discnumber"),
+        meta.get("disc_number"),
+        fallback="1",
+    )
+    return {
+        "title": title,
+        "track_number": _track_number_value(track_number),
+        "disc_number": _track_number_value(disc_number) or 1,
+        "file_name": getattr(ingest_file, "file_name", None),
+    }
+
+
 def _latest_identity_override(
     db: Session,
     batch_id: int,
@@ -67,12 +191,16 @@ def _latest_identity_override(
     ).first()
 
 
-def _candidate_title(candidate: MediaIdentityCandidate, override: UniversalIngestionReviewAction | None) -> str:
+def _candidate_title(candidate: MediaIdentityCandidate | None, override: UniversalIngestionReviewAction | None) -> str:
+    if candidate is None:
+        return ""
     value = override.override_title if override and override.override_title else candidate.candidate_title
     return "" if _is_unknownish(value) else str(value or "").strip()
 
 
-def _candidate_artist(candidate: MediaIdentityCandidate, override: UniversalIngestionReviewAction | None) -> str:
+def _candidate_artist(candidate: MediaIdentityCandidate | None, override: UniversalIngestionReviewAction | None) -> str:
+    if candidate is None:
+        return ""
     value = (
         override.override_primary_creator
         if override and override.override_primary_creator
@@ -81,7 +209,9 @@ def _candidate_artist(candidate: MediaIdentityCandidate, override: UniversalInge
     return "" if _is_unknownish(value) else str(value or "").strip()
 
 
-def _candidate_year(candidate: MediaIdentityCandidate, override: UniversalIngestionReviewAction | None) -> str:
+def _candidate_year(candidate: MediaIdentityCandidate | None, override: UniversalIngestionReviewAction | None) -> str:
+    if candidate is None:
+        return ""
     value = override.override_year if override and override.override_year else candidate.candidate_year
     return "" if _is_unknownish(value) else str(value or "").strip()
 
@@ -255,13 +385,133 @@ def _library_album_destination(album: dict[str, Any]) -> str:
     return str(Path(settings.music_mp3_dir) / artist / album_folder)
 
 
-def _build_album_batch_metadata(album: dict[str, Any], parent_batch: IngestBatch) -> dict[str, Any]:
-    metadata = deepcopy(album)
-    metadata["type"] = "music_album"
-    metadata["split_from_batch_id"] = parent_batch.id
-    metadata["split_from_source_path"] = parent_batch.source_path
-    metadata["split_source_folder"] = _album_source_folder(album)
-    metadata["review_origin"] = "multi_artist_discography_split"
+def _build_album_batch_metadata(
+    album: dict[str, Any],
+    parent_batch: IngestBatch,
+    files_to_move: list[IngestFile],
+    source_folder: str,
+    candidate: MediaIdentityCandidate | None = None,
+    identity_override: UniversalIngestionReviewAction | None = None,
+) -> dict[str, Any]:
+    parts = _partition_child_files(files_to_move)
+    audio_files = parts["audio"]
+    artwork_files = parts["artwork"]
+    sidecar_files = parts["sidecars"]
+    other_files = parts["other"]
+
+    first_audio = audio_files[0] if audio_files else (files_to_move[0] if files_to_move else None)
+    first_meta = first_audio.metadata_json or {} if first_audio else {}
+    embedded = _embedded_fields(first_audio) if first_audio else {}
+
+    artist = _first_non_empty(
+        _candidate_artist(candidate, identity_override) if candidate else None,
+        embedded.get("album_artist"),
+        embedded.get("albumartist"),
+        first_meta.get("albumartist"),
+        first_meta.get("album_artist"),
+        first_meta.get("artist"),
+        album.get("artist"),
+        album.get("album_artist"),
+        fallback="Unknown Artist",
+    )
+    title = _first_non_empty(
+        _candidate_title(candidate, identity_override) if candidate else None,
+        embedded.get("album"),
+        first_meta.get("album"),
+        album.get("album"),
+        album.get("title"),
+        fallback="Unknown Album",
+    )
+    year = _first_non_empty(
+        _candidate_year(candidate, identity_override) if candidate else None,
+        first_meta.get("year"),
+        embedded.get("date"),
+        first_meta.get("date"),
+        album.get("year"),
+        fallback="",
+    )
+    if len(year) >= 4 and year[:4].isdigit():
+        year = year[:4]
+
+    genre = _first_non_empty(
+        first_meta.get("genre"),
+        embedded.get("genre"),
+        album.get("genre"),
+        album.get("primary_genre"),
+        fallback="Unknown",
+    )
+    primary_genre = _first_non_empty(
+        first_meta.get("primary_genre"),
+        album.get("primary_genre"),
+        genre,
+        fallback=genre,
+    )
+    format_value = _first_non_empty(
+        first_meta.get("format"),
+        album.get("format"),
+        _file_extension(first_audio).lstrip(".").upper() if first_audio else None,
+        fallback="Unknown",
+    )
+    release_type = _first_non_empty(album.get("release_type"), first_meta.get("release_type"), fallback="album")
+
+    tracks = [_track_from_audio_file(file) for file in audio_files]
+    tracks.sort(key=lambda item: (item.get("disc_number") or 1, item.get("track_number") or 9999, item.get("file_name") or ""))
+
+    artwork_names = [getattr(file, "file_name", "") for file in artwork_files if getattr(file, "file_name", "")]
+    sidecar_names = [getattr(file, "file_name", "") for file in sidecar_files if getattr(file, "file_name", "")]
+    other_names = [getattr(file, "file_name", "") for file in other_files if getattr(file, "file_name", "")]
+
+    warnings: list[str] = []
+    if not audio_files:
+        warnings.append("split_child_has_no_audio_files")
+    if other_files:
+        warnings.append("split_child_has_unclassified_files")
+
+    metadata: dict[str, Any] = {
+        "source_folder": source_folder,
+        "artist": artist,
+        "albumartist": artist,
+        "album": title,
+        "title": title,
+        "year": year,
+        "date": year,
+        "genre": genre,
+        "primary_genre": primary_genre,
+        "format": format_value,
+        "release_type": release_type,
+        "include": True,
+        "type": "music_album",
+        "review_type": "music_album",
+        "review_mode": "single_item",
+        "review_origin": "multi_artist_discography_split",
+        "metadata_quality": "good" if audio_files else "needs_review",
+        "metadata_confirmed": False,
+        "track_count": len(audio_files),
+        "disc_count": len({track.get("disc_number") or 1 for track in tracks}) if tracks else 0,
+        "tracks": tracks,
+        "artwork_count": len(artwork_files),
+        "artwork_files": artwork_names,
+        "ignored_sidecar_count": len(sidecar_files),
+        "ignored_sidecar_files": sidecar_names,
+        "unclassified_file_count": len(other_files),
+        "unclassified_files": other_names,
+        "metadata_warnings": warnings,
+        "blocking_review_items": [],
+        "non_blocking_review_items": warnings,
+        "split_from_batch_id": parent_batch.id,
+        "split_from_source_path": parent_batch.source_path,
+        "split_source_folder": source_folder,
+    }
+
+    for optional_key in ("metadata_assist_version",):
+        if optional_key in album:
+            metadata[optional_key] = album[optional_key]
+        elif isinstance(parent_batch.metadata_json, dict) and optional_key in parent_batch.metadata_json:
+            metadata[optional_key] = parent_batch.metadata_json[optional_key]
+
+    if album.get("synthesized_for_split"):
+        metadata["synthesized_for_split"] = True
+
     return metadata
 
 
@@ -359,15 +609,22 @@ def execute_split_candidate(db: Session, batch_id: int, candidate_id: int) -> di
     )
 
     timestamp = now_utc()
-    album_metadata = _build_album_batch_metadata(album, parent_batch)
+    album_metadata = _build_album_batch_metadata(
+        album=album,
+        parent_batch=parent_batch,
+        files_to_move=files_to_move,
+        source_folder=source_folder,
+        candidate=candidate,
+        identity_override=identity_override,
+    )
     child_batch = IngestBatch(
         source_kind=parent_batch.source_kind,
         source_path=parent_batch.source_path,
         detected_type="music_album",
         status="pending_review",
         confidence=max(parent_batch.confidence or 0.0, 0.7),
-        suggested_destination=_library_album_destination(album),
-        suggested_metadata=_suggested_metadata(album),
+        suggested_destination=_library_album_destination(album_metadata),
+        suggested_metadata=_suggested_metadata(album_metadata),
         metadata_json=album_metadata,
         metadata_confirmed=False,
         created_at=timestamp,
@@ -391,8 +648,8 @@ def execute_split_candidate(db: Session, batch_id: int, candidate_id: int) -> di
         "candidate_id": candidate.id,
         "child_batch_id": child_batch.id,
         "source_folder": source_folder,
-        "album": album.get("album") or album.get("title"),
-        "artist": album.get("artist") or album.get("album_artist"),
+        "album": album_metadata.get("album") or album_metadata.get("title"),
+        "artist": album_metadata.get("artist") or album_metadata.get("album_artist"),
         "moved_file_count": moved_file_count,
         "split_at": timestamp.isoformat(),
     })
