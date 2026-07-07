@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """AA-QA1-FIX1/FIX2 parent candidate materialization state regression."""
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ def album_row(title: str, year: str) -> dict:
     }
 
 
-def add_album_file(batch: IngestBatch, release: dict, index: int) -> IngestFile:
+def add_album_file(batch: IngestBatch, release: dict, index: int, role: str = "music_audio") -> IngestFile:
     name = f"{index:02d} - Track {index}.flac"
     ingest_file = IngestFile(
         file_path=str(Path(batch.source_path) / release["source_folder"] / name),
@@ -45,7 +45,7 @@ def add_album_file(batch: IngestBatch, release: dict, index: int) -> IngestFile:
         extension=".flac",
         size_bytes=4096,
         checksum=f"sha-{release['source_folder']}-{index}",
-        detected_role="music_audio",
+        detected_role=role,
         metadata_json={
             "artist": release["artist"],
             "album_artist": release["artist"],
@@ -98,7 +98,7 @@ def approve_candidate(db, batch_id: int, candidate_id: int) -> None:
     ))
 
 
-def make_lil_wayne_parent(db) -> tuple[IngestBatch, list[MediaIdentityCandidate]]:
+def make_lil_wayne_parent(db, include_album_rows: bool = True, role: str = "music_audio") -> tuple[IngestBatch, list[MediaIdentityCandidate]]:
     releases = [
         album_row("FWA", "2015"),
         album_row("Funeral", "2020"),
@@ -115,7 +115,7 @@ def make_lil_wayne_parent(db) -> tuple[IngestBatch, list[MediaIdentityCandidate]
             "type": "music_discography",
             "artist": "Lil Wayne",
             "album": "I Am Music",
-            "albums": releases,
+            "albums": releases if include_album_rows else [{"album": "Unmatched Parent Row", "artist": "Wrong Artist", "source_folder": "not-a-candidate"}],
             "album_count": len(releases),
             "release_count": len(releases),
         },
@@ -125,7 +125,7 @@ def make_lil_wayne_parent(db) -> tuple[IngestBatch, list[MediaIdentityCandidate]
 
     candidates: list[MediaIdentityCandidate] = []
     for index, release in enumerate(releases, start=1):
-        files = [add_album_file(parent, release, index)]
+        files = [add_album_file(parent, release, index, role=role)]
         db.flush()
         candidate = add_candidate(db, parent.id, release, files)
         approve_candidate(db, parent.id, candidate.id)
@@ -156,7 +156,7 @@ def test_multi_candidate_parent_is_container(db) -> None:
 
 
 def test_materializes_approved_candidates_once(db) -> None:
-    parent, _candidates = make_lil_wayne_parent(db)
+    parent, _candidates = make_lil_wayne_parent(db, include_album_rows=False, role="discography_track")
 
     parent.status = "approved"
     db.commit()
@@ -180,6 +180,8 @@ def test_materializes_approved_candidates_once(db) -> None:
     assert all(child.status == "pending_review" for child in children)
     assert all(child.detected_type == "music_album" for child in children)
     assert all(child.metadata_json["track_count"] == 1 for child in children)
+    assert all(child.metadata_json["source_candidate_id"] for child in children)
+    assert all(db.query(IngestFile).filter(IngestFile.batch_id == child.id).count() == 1 for child in children)
 
     second = materialize_approved_candidates(db, parent.id)
     assert second["created_count"] == 0
@@ -187,6 +189,62 @@ def test_materializes_approved_candidates_once(db) -> None:
     assert set(second["created_child_batch_ids"]) == set(first["created_child_batch_ids"])
     assert db.query(IngestBatch).filter(IngestBatch.detected_type == "music_album").count() == 4
 
+
+def test_failed_materialization_does_not_complete_parent(db) -> None:
+    good_release = album_row("Good Candidate", "2024")
+    broken_release = album_row("Broken Candidate", "2024")
+    parent = IngestBatch(
+        source_kind="manual-drop",
+        source_path=str(PROJECT_ROOT / ".tmp" / "broken-parent"),
+        detected_type="music_discography",
+        status="pending_review",
+        confidence=0.72,
+        metadata_json={
+            "type": "music_discography",
+            "artist": "Broken Artist",
+            "albums": [],
+            "album_count": 2,
+            "release_count": 2,
+        },
+    )
+    db.add(parent)
+    db.flush()
+
+    good_file = add_album_file(parent, good_release, 1, role="discography_track")
+    db.flush()
+    good_candidate = add_candidate(db, parent.id, good_release, [good_file])
+    broken_candidate = MediaIdentityCandidate(
+        batch_id=parent.id,
+        candidate_key="music:broken:no-files",
+        candidate_media_type="music",
+        candidate_title=broken_release["album"],
+        candidate_primary_creator=broken_release["artist"],
+        candidate_year=broken_release["year"],
+        candidate_confidence=0.8,
+        identity_evidence_json={},
+    )
+    db.add(broken_candidate)
+    db.flush()
+    approve_candidate(db, parent.id, good_candidate.id)
+    approve_candidate(db, parent.id, broken_candidate.id)
+    db.commit()
+
+    try:
+        materialize_approved_candidates(db, parent.id)
+    except ValueError as exc:
+        assert "Candidate has no scoped files available" in str(exc)
+    else:
+        raise AssertionError("Expected materialization failure")
+
+    db.refresh(parent)
+    assert parent.status == "pending_review"
+    assert db.query(IngestFile).filter(IngestFile.batch_id == parent.id, IngestFile.id == good_file.id).count() == 1
+    child_batches = db.query(IngestBatch).all()
+    assert not any(
+        isinstance(batch.metadata_json, dict)
+        and batch.metadata_json.get("source_candidate_id") in {good_candidate.id, broken_candidate.id}
+        for batch in child_batches
+    )
 
 def test_single_item_batch_stays_normal(db) -> None:
     batch = IngestBatch(
@@ -223,8 +281,9 @@ def main() -> None:
     try:
         test_multi_candidate_parent_is_container(db)
         test_materializes_approved_candidates_once(db)
+        test_failed_materialization_does_not_complete_parent(db)
         test_single_item_batch_stays_normal(db)
-        print("PASS - AA-QA1-FIX2 parent candidate materialization verified")
+        print("PASS - AA-QA1-FIX2.2 candidate-member-first materialization verified")
     finally:
         db.close()
 
