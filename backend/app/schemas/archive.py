@@ -314,6 +314,31 @@ class MaterializeApprovedCandidatesResponse(BaseModel):
     message: str
 
 
+
+class DuplicateFragmentBatchOut(BaseModel):
+    batch_id: int
+    title: str
+    creator: str | None = None
+    year: str | None = None
+    item_count: int = 0
+    suggested_destination: str | None = None
+    source_path: str | None = None
+    status: str
+    detected_type: str
+
+
+class DuplicateFragmentClusterOut(BaseModel):
+    cluster_id: str
+    review_type: str
+    media_type: str
+    confidence: str
+    reason: str
+    batches: list[DuplicateFragmentBatchOut] = Field(default_factory=list)
+
+
+class DuplicateFragmentReviewOut(BaseModel):
+    clusters: list[DuplicateFragmentClusterOut] = Field(default_factory=list)
+
 class BatchSummary(BaseModel):
     id: int
     detected_type: str
@@ -414,6 +439,12 @@ class BatchSummary(BaseModel):
     needs_materialization: bool = False
     parent_review_state: str | None = None
     is_parent_review_container: bool = False
+    possible_duplicate_group_id: str | None = None
+    possible_duplicate_count: int = 0
+    possible_fragment_group_id: str | None = None
+    possible_fragment_count: int = 0
+    duplicate_fragment_review_state: str = "none"
+    requires_duplicate_review: bool = False
     media_category: str | None = None
     media_label: str | None = None
     primary_name: str | None = None

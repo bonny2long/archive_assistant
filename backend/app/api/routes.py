@@ -24,6 +24,7 @@ from app.schemas.archive import (
     BookMetadataUpdate,
     DiscographyMetadataUpdate,
     DevResetResponse,
+    DuplicateFragmentReviewOut,
     IngestBatchOut,
     IngestFileOut,
     LibrarySummary,
@@ -47,6 +48,10 @@ from app.services.dev_reset import (
 )
 from app.services.batch_display import build_batch_display_fields
 from app.services.parent_candidate_materialization import build_parent_candidate_summary
+from app.services.duplicate_fragment_review import (
+    build_duplicate_fragment_review,
+    duplicate_fragment_summary_for_batch,
+)
 from app.services.batch_merge import (
     find_archived_duplicate_candidate,
     find_merge_candidate_batches,
@@ -119,6 +124,18 @@ def health():
         "dev_tools_enabled": settings.debug and settings.dev_tools_enabled,
     }
 
+
+
+@router.get("/duplicate-fragment-review", response_model=DuplicateFragmentReviewOut)
+def duplicate_fragment_review(db: Session = Depends(get_db)):
+    return build_duplicate_fragment_review(db)
+
+
+@router.get("/batches/{batch_id}/duplicate-fragment-review", response_model=DuplicateFragmentReviewOut)
+def batch_duplicate_fragment_review(batch_id: int, db: Session = Depends(get_db)):
+    if db.get(IngestBatch, batch_id) is None:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    return build_duplicate_fragment_review(db, batch_id)
 
 @router.get("/system/time")
 def system_time():
@@ -1910,6 +1927,14 @@ def approve_batch(batch_id: int, db: Session = Depends(get_db)):
             message="Parent review containers require child batch creation before move approval.",
         )
 
+    duplicate_summary = duplicate_fragment_summary_for_batch(db, batch)
+    if duplicate_summary["requires_duplicate_review"]:
+        return ApproveResponse(
+            batch_id=batch.id,
+            status=batch.status,
+            message="Batch needs duplicate/fragment review before approval.",
+        )
+
     meta = build_review_state(batch.detected_type, batch.metadata_json)
     if meta["blocking_review_items"]:
         return ApproveResponse(
@@ -1967,6 +1992,8 @@ def approve_selected_batches(
             reason = "quarantine_review_required"
         elif build_parent_candidate_summary(db, batch)["is_parent_review_container"]:
             reason = "parent_review_container_needs_child_batches"
+        elif duplicate_fragment_summary_for_batch(db, batch)["requires_duplicate_review"]:
+            reason = "duplicate_fragment_review_required"
         elif metadata["blocking_review_items"]:
             reason = "blocking_review_items"
         elif batch.status in {"needs_metadata_review", "metadata_recovery"}:
@@ -2156,6 +2183,14 @@ def _batch_to_summary(
 ) -> BatchSummary:
     meta = build_review_state(batch.detected_type, batch.metadata_json)
     parent_summary = build_parent_candidate_summary(db, batch)
+    duplicate_summary = duplicate_fragment_summary_for_batch(db, batch) if db is not None else {
+        "possible_duplicate_group_id": None,
+        "possible_duplicate_count": 0,
+        "possible_fragment_group_id": None,
+        "possible_fragment_count": 0,
+        "duplicate_fragment_review_state": "none",
+        "requires_duplicate_review": False,
+    }
     display = build_batch_display_fields(batch, parent_summary)
     return BatchSummary(
         id=batch.id,
@@ -2277,6 +2312,12 @@ def _batch_to_summary(
         needs_materialization=parent_summary["needs_materialization"],
         parent_review_state=parent_summary["parent_review_state"],
         is_parent_review_container=parent_summary["is_parent_review_container"],
+        possible_duplicate_group_id=duplicate_summary["possible_duplicate_group_id"],
+        possible_duplicate_count=duplicate_summary["possible_duplicate_count"],
+        possible_fragment_group_id=duplicate_summary["possible_fragment_group_id"],
+        possible_fragment_count=duplicate_summary["possible_fragment_count"],
+        duplicate_fragment_review_state=duplicate_summary["duplicate_fragment_review_state"],
+        requires_duplicate_review=duplicate_summary["requires_duplicate_review"],
         **display,
         created_at=batch.created_at,
     )

@@ -28,6 +28,7 @@ from app.services.library_manifest import (
 )
 from app.services.move_manifest import write_move_manifest
 from app.services.parent_candidate_materialization import build_parent_candidate_summary
+from app.services.duplicate_fragment_review import duplicate_fragment_summary_for_batch
 
 
 def _safe_path_part(value: str) -> str:
@@ -2027,6 +2028,12 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
         if parent_summary["is_parent_review_container"]:
             errors.append(
                 f"Batch {batch.id} is a parent review container and requires child batch creation before moving."
+            )
+            continue
+        duplicate_summary = duplicate_fragment_summary_for_batch(db, batch)
+        if duplicate_summary["requires_duplicate_review"]:
+            errors.append(
+                f"Batch {batch.id} needs duplicate/fragment review before moving."
             )
             continue
 

@@ -51,7 +51,16 @@ function isParentReviewContainer(batch: BatchSummary): boolean {
   );
 }
 
+function duplicateFragmentLabel(batch: BatchSummary): string | null {
+  if (!batch.requires_duplicate_review) return null;
+  if (batch.duplicate_fragment_review_state === "possible_fragment") return "Possible fragment";
+  if (batch.duplicate_fragment_review_state === "possible_edition_conflict") return "Edition conflict review";
+  return "Possible duplicate";
+}
+
 function batchStatusLabel(batch: BatchSummary): string {
+  const duplicateLabel = duplicateFragmentLabel(batch);
+  if (duplicateLabel) return duplicateLabel;
   if (!isParentReviewContainer(batch)) return statusLabel(batch.status);
   if (batch.parent_review_state === "candidates_approved_waiting_materialization") {
     return "Ready to create child batches";
@@ -125,10 +134,13 @@ export default function BatchRow({
   const percent = Math.round((batch.confidence ?? 0) * 100);
   const canOpenWorkspace = batch.status !== "moved" && !quarantineReview;
   const parentReviewContainer = isParentReviewContainer(batch);
-  const approveDisabled = batch.status !== "pending_review" || parentReviewContainer;
+  const duplicateLabel = duplicateFragmentLabel(batch);
+  const approveDisabled = batch.status !== "pending_review" || parentReviewContainer || batch.requires_duplicate_review;
   const approveTitle = parentReviewContainer
     ? "Parent review containers need child batch creation before move approval"
-    : "Approve";
+    : batch.requires_duplicate_review
+      ? "Needs duplicate/fragment review before move approval"
+      : "Approve";
 
   return (
     <>
@@ -160,6 +172,11 @@ export default function BatchRow({
           {!quarantineReview && batch.ignored_sidecar_count > 0 && (
             <small className="row-artwork">
               Ignored sidecars: {batch.ignored_sidecar_count}
+            </small>
+          )}
+          {duplicateLabel && (
+            <small className="row-artwork">
+              {duplicateLabel}: {batch.possible_fragment_count || batch.possible_duplicate_count || 0} matching batches
             </small>
           )}
         </td>

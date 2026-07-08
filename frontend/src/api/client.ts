@@ -13,6 +13,7 @@ import type {
   BulkApproveResult,
   DevResetResponse,
   DiscographyMetadataUpdate,
+  DuplicateFragmentReview,
   HealthResponse,
   IngestBatch,
   LibrarySummary,
@@ -118,6 +119,8 @@ export const api = {
     request<UniversalReviewAction>(`/batches/${id}/universal-ingestion/actions`, "POST", update),
   clearUniversalIngestionAction: (id: number, actionId: number) =>
     request<UniversalReviewAction>(`/batches/${id}/universal-ingestion/actions/${actionId}/clear`, "POST"),
+  getDuplicateFragmentReview: () => request<DuplicateFragmentReview>("/duplicate-fragment-review"),
+  getBatchDuplicateFragmentReview: (id: number) => request<DuplicateFragmentReview>(`/batches/${id}/duplicate-fragment-review`),
   getReviewRouting: (id: number, targetEditor?: string) =>
     request<RoutingDecision>(`/batches/${id}/review-routing${targetEditor ? `?target_editor=${targetEditor}` : ""}`),
   getCandidateMovePreview: (id: number, snapshot = false) =>

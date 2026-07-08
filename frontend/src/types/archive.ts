@@ -280,6 +280,30 @@ export type BatchUniversalIngestion = {
   review_actions?: UniversalReviewAction[];
 };
 
+export type DuplicateFragmentBatch = {
+  batch_id: number;
+  title: string;
+  creator?: string | null;
+  year?: string | null;
+  item_count: number;
+  suggested_destination?: string | null;
+  source_path?: string | null;
+  status: string;
+  detected_type: string;
+};
+
+export type DuplicateFragmentCluster = {
+  cluster_id: string;
+  review_type: string;
+  media_type: string;
+  confidence: string;
+  reason: string;
+  batches: DuplicateFragmentBatch[];
+};
+
+export type DuplicateFragmentReview = {
+  clusters: DuplicateFragmentCluster[];
+};
 export type BatchSummary = {
   id: number;
   detected_type: string;
@@ -383,6 +407,12 @@ export type BatchSummary = {
   needs_materialization?: boolean;
   parent_review_state?: "review_in_progress" | "candidates_approved_waiting_materialization" | "split_complete" | string | null;
   is_parent_review_container?: boolean;
+  possible_duplicate_group_id?: string | null;
+  possible_duplicate_count?: number;
+  possible_fragment_group_id?: string | null;
+  possible_fragment_count?: number;
+  duplicate_fragment_review_state?: string;
+  requires_duplicate_review?: boolean;
   media_category?: string | null;
   media_label?: string | null;
   primary_name?: string | null;
