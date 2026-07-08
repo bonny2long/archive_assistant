@@ -371,7 +371,7 @@ export default function ReviewWorkspace({
         const detail = materializeFailure instanceof Error ? materializeFailure.message : "Unable to create child batches";
         const friendly = detail.includes("no scoped files")
           ? "Could not create child batches because one approved candidate has no scoped files. Open Technical for details."
-          : detail.includes("No approved current candidate") || detail.includes("All candidate groups must be approved")
+          : detail.includes("No approved current candidate")
             ? "This workspace changed. Refresh it and approve the current candidate groups before creating child batches."
             : detail.includes("could not be materialized")
               ? "Some approved candidates could not be materialized. Refresh and retry; child batches may already exist."

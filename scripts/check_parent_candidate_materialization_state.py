@@ -88,14 +88,18 @@ def add_candidate(db, batch_id: int, release: dict, files: list[IngestFile]) -> 
     return candidate
 
 
-def approve_candidate(db, batch_id: int, candidate_id: int) -> None:
+def add_candidate_action(db, batch_id: int, candidate_id: int, action_type: str) -> None:
     db.add(UniversalIngestionReviewAction(
         batch_id=batch_id,
         candidate_id=candidate_id,
-        action_type="approve_candidate",
+        action_type=action_type,
         decision_status="active",
         reason="QA1-FIX2 materialization regression",
     ))
+
+
+def approve_candidate(db, batch_id: int, candidate_id: int) -> None:
+    add_candidate_action(db, batch_id, candidate_id, "approve_candidate")
 
 
 def make_lil_wayne_parent(db, include_album_rows: bool = True, role: str = "music_audio") -> tuple[IngestBatch, list[MediaIdentityCandidate]]:
@@ -219,7 +223,8 @@ def test_split_complete_parent_without_candidates_stays_container(db) -> None:
     assert summary["is_parent_review_container"] is True
     assert summary["parent_review_state"] == "split_complete"
     assert summary["candidate_group_count"] == 3
-    assert summary["approved_candidate_count"] == 3
+    assert summary["approved_candidate_count"] == 0
+    assert summary["materialized_child_count"] == 3
     assert summary["remaining_candidate_count"] == 0
     assert summary["needs_materialization"] is False
 
@@ -229,6 +234,92 @@ def test_split_complete_parent_without_candidates_stays_container(db) -> None:
     assert display["item_label"] == "candidate groups"
     assert display["item_count"] == 3
     assert display["item_count"] != 63
+
+
+def test_partial_materialization_keeps_unresolved_parent_remainder(db) -> None:
+    parent = IngestBatch(
+        source_kind="manual-drop",
+        source_path=str(PROJECT_ROOT / ".tmp" / "drive-download-20260628T012539Z-3-004"),
+        detected_type="music_discography",
+        status="pending_review",
+        confidence=0.68,
+        metadata_json={
+            "type": "music_discography",
+            "artist": "drive-download-20260628T012539Z-3-004",
+            "album_count": 5,
+            "release_count": 5,
+        },
+    )
+    db.add(parent)
+    db.flush()
+
+    known_release = album_row("Known Album", "2024")
+    blocked_release = album_row("Blocked Unknown", "2024")
+    review_later_release = album_row("Review Later Unknown", "2024")
+    excluded_release = album_row("Excluded Unknown", "2024")
+    unresolved_release = album_row("Still Unknown", "2024")
+    known_file = add_album_file(parent, known_release, 1, role="discography_track")
+    blocked_file = add_album_file(parent, blocked_release, 2, role="discography_track")
+    review_later_file = add_album_file(parent, review_later_release, 3, role="discography_track")
+    excluded_file = add_album_file(parent, excluded_release, 4, role="discography_track")
+    unresolved_file = add_album_file(parent, unresolved_release, 5, role="discography_track")
+    db.flush()
+
+    known = add_candidate(db, parent.id, known_release, [known_file])
+    blocked = add_candidate(db, parent.id, blocked_release, [blocked_file])
+    review_later = add_candidate(db, parent.id, review_later_release, [review_later_file])
+    excluded = add_candidate(db, parent.id, excluded_release, [excluded_file])
+    unresolved = add_candidate(db, parent.id, unresolved_release, [unresolved_file])
+    approve_candidate(db, parent.id, known.id)
+    add_candidate_action(db, parent.id, blocked.id, "block_candidate")
+    add_candidate_action(db, parent.id, review_later.id, "mark_review_later")
+    add_candidate_action(db, parent.id, excluded.id, "exclude_from_move_plan")
+    db.commit()
+
+    result = materialize_approved_candidates(db, parent.id)
+    assert result["created_count"] == 1
+    assert result["skipped_count"] == 0
+    assert result["parent_review_state"] == "parent_partially_materialized"
+    assert result["unresolved_candidate_count"] == 1
+    assert result["blocked_candidate_count"] == 1
+    assert result["excluded_candidate_count"] == 1
+    assert result["review_later_candidate_count"] == 1
+
+    db.refresh(parent)
+    assert parent.status == "pending_review"
+    summary = build_parent_candidate_summary(db, parent)
+    assert summary["is_parent_review_container"] is True
+    assert summary["parent_review_state"] == "parent_partially_materialized"
+    assert summary["materialized_child_count"] == 1
+    assert summary["unresolved_candidate_count"] == 1
+    assert summary["blocked_candidate_count"] == 1
+    assert summary["review_later_candidate_count"] == 1
+    assert summary["excluded_candidate_count"] == 1
+    assert summary["needs_materialization"] is False
+
+    child = db.get(IngestBatch, result["created_child_batch_ids"][0])
+    assert child is not None
+    assert child.detected_type == "music_album"
+    assert child.metadata_json["album"] == "Known Album"
+    assert db.query(IngestFile).filter(IngestFile.batch_id == child.id).count() == 1
+    assert db.query(IngestFile).filter(IngestFile.batch_id == child.id, IngestFile.id == known_file.id).count() == 1
+    for remainder_file in (blocked_file, review_later_file, excluded_file, unresolved_file):
+        assert db.query(IngestFile).filter(IngestFile.batch_id == parent.id, IngestFile.id == remainder_file.id).count() == 1
+
+    audit = (parent.metadata_json or {}).get("partial_materialization_audit") or []
+    assert audit
+    latest = audit[-1]
+    assert latest["materialized_candidate_ids"] == [known.id]
+    assert latest["blocked_candidate_ids"] == [blocked.id]
+    assert latest["excluded_candidate_ids"] == [excluded.id]
+    assert latest["review_later_candidate_ids"] == [review_later.id]
+    assert latest["unresolved_candidate_ids"] == [unresolved.id]
+
+    parent.status = "approved"
+    db.commit()
+    moved, errors = move_approved_batches(db)
+    assert moved == 0
+    assert any("parent review container" in error for error in errors)
 
 def test_failed_materialization_does_not_complete_parent(db) -> None:
     good_release = album_row("Good Candidate", "2024")
@@ -322,6 +413,7 @@ def main() -> None:
         test_multi_candidate_parent_is_container(db)
         test_materializes_approved_candidates_once(db)
         test_split_complete_parent_without_candidates_stays_container(db)
+        test_partial_materialization_keeps_unresolved_parent_remainder(db)
         test_failed_materialization_does_not_complete_parent(db)
         test_single_item_batch_stays_normal(db)
         print("PASS - AA-QA1-FIX2.2 candidate-member-first materialization verified")

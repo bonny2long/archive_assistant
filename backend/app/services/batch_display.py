@@ -39,10 +39,25 @@ def _parent_review_primary_name(batch: IngestBatch, metadata: dict) -> str:
 
 def _parent_review_secondary_name(parent_summary: dict) -> str:
     approved = int(parent_summary.get("approved_candidate_count") or 0)
+    materialized = int(parent_summary.get("materialized_child_count") or 0)
     remaining = int(parent_summary.get("remaining_candidate_count") or 0)
     excluded = int(parent_summary.get("excluded_candidate_count") or 0)
+    blocked = int(parent_summary.get("blocked_candidate_count") or 0)
+    review_later = int(parent_summary.get("review_later_candidate_count") or 0)
     if parent_summary.get("parent_review_state") == "split_complete":
-        return f"{_plural(approved, 'child batch', 'child batches')} created, split complete"
+        child_count = materialized or approved
+        return f"{_plural(child_count, 'child batch', 'child batches')} created, split complete"
+    if parent_summary.get("parent_review_state") == "parent_partially_materialized":
+        parts = [_plural(materialized, "child batch", "child batches") + " created"]
+        if remaining:
+            parts.append(f"{remaining} unresolved")
+        if review_later:
+            parts.append(_plural(review_later, "review later candidate"))
+        if blocked:
+            parts.append(_plural(blocked, "blocked candidate"))
+        if excluded:
+            parts.append(_plural(excluded, "excluded candidate"))
+        return ", ".join(parts)
     parts = [
         _plural(approved, "approved candidate"),
         f"{remaining} remaining",
@@ -137,7 +152,7 @@ def build_batch_display_fields(batch: IngestBatch, parent_summary: dict | None =
             "media_category": "tv",
             "media_label": "TV Show",
             "primary_name": metadata.get("show_title") or "Unknown TV Show",
-            "secondary_name": " Ã‚Â· ".join(parts),
+            "secondary_name": " Ãƒâ€šÃ‚Â· ".join(parts),
             "item_label": "videos",
             "item_count": video_count or episode_count,
             "edit_kind": "tv_show",
@@ -162,7 +177,7 @@ def build_batch_display_fields(batch: IngestBatch, parent_summary: dict | None =
             "media_category": "books",
             "media_label": "Book",
             "primary_name": metadata.get("title") or "Unknown Title",
-            "secondary_name": f"{author} Ã‚Â· {year}" if year else author,
+            "secondary_name": f"{author} Ãƒâ€šÃ‚Â· {year}" if year else author,
             "item_label": "book files",
             "item_count": int(metadata.get("book_file_count") or 0),
             "edit_kind": "book",
@@ -182,7 +197,7 @@ def build_batch_display_fields(batch: IngestBatch, parent_summary: dict | None =
             "media_category": "audiobooks",
             "media_label": "Audiobook",
             "primary_name": author,
-            "secondary_name": " Ã‚Â· ".join(details),
+            "secondary_name": " Ãƒâ€šÃ‚Â· ".join(details),
             "item_label": "audio files",
             "item_count": int(metadata.get("audiobook_file_count") or 0),
             "edit_kind": "audiobook",

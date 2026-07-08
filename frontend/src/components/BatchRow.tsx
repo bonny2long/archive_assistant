@@ -75,6 +75,7 @@ function batchStatusLabel(batch: BatchSummary): string {
     return "Ready to create child batches";
   }
   if (batch.parent_review_state === "split_complete") return "Split complete";
+  if (batch.parent_review_state === "parent_partially_materialized") return "Partially materialized";
   return "Review in progress";
 }
 
@@ -175,7 +176,7 @@ export default function BatchRow({
           {secondaryName}
           {quarantineReview && (
             <small className="row-artwork">
-              {batch.file_count} file(s) Ãƒâ€šÃ‚Â· {batch.folder_count} folder(s)
+              {batch.file_count} file(s) ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· {batch.folder_count} folder(s)
             </small>
           )}
           {!quarantineReview && batch.artwork_count > 0 && (

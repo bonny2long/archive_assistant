@@ -10,11 +10,14 @@ from app.models.media_metadata import MediaIdentityCandidate, UniversalIngestion
 
 PARENT_REVIEW_IN_PROGRESS = "review_in_progress"
 PARENT_CANDIDATES_APPROVED_WAITING_MATERIALIZATION = "candidates_approved_waiting_materialization"
+PARENT_PARTIALLY_MATERIALIZED = "parent_partially_materialized"
 PARENT_SPLIT_COMPLETE = "split_complete"
 
 MATERIALIZATION_DECISION_ACTIONS = {
     "approve_candidate",
     "exclude_from_move_plan",
+    "mark_review_later",
+    "block_candidate",
 }
 
 
@@ -23,6 +26,11 @@ def empty_parent_candidate_summary() -> dict[str, Any]:
         "candidate_group_count": 0,
         "approved_candidate_count": 0,
         "excluded_candidate_count": 0,
+        "blocked_candidate_count": 0,
+        "review_later_candidate_count": 0,
+        "unresolved_candidate_count": 0,
+        "materialized_child_count": 0,
+        "child_candidate_count": 0,
         "remaining_candidate_count": 0,
         "needs_materialization": False,
         "parent_review_state": None,
@@ -58,8 +66,13 @@ def build_parent_candidate_summary(db: Session | None, batch: IngestBatch) -> di
         split_count = candidate_group_count or materialized_count or fallback_count
         return {
             "candidate_group_count": split_count,
-            "approved_candidate_count": split_count,
+            "approved_candidate_count": 0,
             "excluded_candidate_count": 0,
+            "blocked_candidate_count": 0,
+            "review_later_candidate_count": 0,
+            "unresolved_candidate_count": 0,
+            "materialized_child_count": split_count,
+            "child_candidate_count": split_count,
             "remaining_candidate_count": 0,
             "needs_materialization": False,
             "parent_review_state": PARENT_SPLIT_COMPLETE,
@@ -72,7 +85,7 @@ def build_parent_candidate_summary(db: Session | None, batch: IngestBatch) -> di
         }
 
     candidate_id_set = set(candidate_ids)
-    latest_materialization_decision: dict[int, str] = {}
+    latest_materialization_decision: dict[int, tuple[str, str]] = {}
     actions = (
         db.query(UniversalIngestionReviewAction)
         .filter(
@@ -89,32 +102,59 @@ def build_parent_candidate_summary(db: Session | None, batch: IngestBatch) -> di
     )
     for action in actions:
         if action.candidate_id in candidate_id_set:
-            latest_materialization_decision[action.candidate_id] = action.action_type
+            latest_materialization_decision[int(action.candidate_id)] = (action.action_type, action.decision_status)
+
+    history = metadata.get("materialization_history")
+    materialized_candidate_ids = {
+        int(item.get("candidate_id") or 0)
+        for item in history or []
+        if isinstance(item, dict) and item.get("candidate_id")
+    } if isinstance(history, list) else set()
+    materialized_child_count = len(materialized_candidate_ids & candidate_id_set)
 
     approved_candidate_count = sum(
-        1 for action_type in latest_materialization_decision.values() if action_type == "approve_candidate"
+        1
+        for candidate_id, (action_type, decision_status) in latest_materialization_decision.items()
+        if candidate_id not in materialized_candidate_ids
+        and action_type == "approve_candidate"
+        and decision_status != "applied"
     )
     excluded_candidate_count = sum(
-        1 for action_type in latest_materialization_decision.values() if action_type == "exclude_from_move_plan"
+        1 for action_type, _status in latest_materialization_decision.values() if action_type == "exclude_from_move_plan"
     )
-    remaining_candidate_count = max(
-        0,
-        candidate_group_count - approved_candidate_count - excluded_candidate_count,
+    blocked_candidate_count = sum(
+        1 for action_type, _status in latest_materialization_decision.values() if action_type == "block_candidate"
     )
+    review_later_candidate_count = sum(
+        1 for action_type, _status in latest_materialization_decision.values() if action_type == "mark_review_later"
+    )
+    resolved_candidate_ids = set(materialized_candidate_ids)
+    resolved_candidate_ids.update(
+        candidate_id
+        for candidate_id, (action_type, _status) in latest_materialization_decision.items()
+        if action_type in {"approve_candidate", "exclude_from_move_plan", "block_candidate", "mark_review_later"}
+    )
+    unresolved_candidate_count = max(0, candidate_group_count - len(resolved_candidate_ids & candidate_id_set))
+    remaining_candidate_count = unresolved_candidate_count
 
-    if batch.status == PARENT_SPLIT_COMPLETE:
-        parent_review_state = PARENT_SPLIT_COMPLETE
-    elif approved_candidate_count > 0 and remaining_candidate_count == 0:
+    if materialized_child_count > 0:
+        parent_review_state = PARENT_PARTIALLY_MATERIALIZED
+    elif approved_candidate_count > 0:
         parent_review_state = PARENT_CANDIDATES_APPROVED_WAITING_MATERIALIZATION
     else:
         parent_review_state = PARENT_REVIEW_IN_PROGRESS
 
-    needs_materialization = parent_review_state == PARENT_CANDIDATES_APPROVED_WAITING_MATERIALIZATION
+    needs_materialization = approved_candidate_count > 0
 
     return {
         "candidate_group_count": candidate_group_count,
         "approved_candidate_count": approved_candidate_count,
         "excluded_candidate_count": excluded_candidate_count,
+        "blocked_candidate_count": blocked_candidate_count,
+        "review_later_candidate_count": review_later_candidate_count,
+        "unresolved_candidate_count": unresolved_candidate_count,
+        "materialized_child_count": materialized_child_count,
+        "child_candidate_count": materialized_child_count,
         "remaining_candidate_count": remaining_candidate_count,
         "needs_materialization": needs_materialization,
         "parent_review_state": parent_review_state,

@@ -310,6 +310,11 @@ class MaterializeApprovedCandidatesResponse(BaseModel):
     created_child_batch_ids: list[int] = Field(default_factory=list)
     created_count: int
     skipped_count: int
+    materialized_child_count: int = 0
+    unresolved_candidate_count: int = 0
+    blocked_candidate_count: int = 0
+    excluded_candidate_count: int = 0
+    review_later_candidate_count: int = 0
     parent_review_state: str
     message: str
 
@@ -462,6 +467,11 @@ class BatchSummary(BaseModel):
     candidate_group_count: int = 0
     approved_candidate_count: int = 0
     excluded_candidate_count: int = 0
+    blocked_candidate_count: int = 0
+    review_later_candidate_count: int = 0
+    unresolved_candidate_count: int = 0
+    materialized_child_count: int = 0
+    child_candidate_count: int = 0
     remaining_candidate_count: int = 0
     needs_materialization: bool = False
     parent_review_state: str | None = None

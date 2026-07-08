@@ -15,6 +15,7 @@ from app.services.batch_split import (
     _suggested_metadata as _music_suggested_metadata,
 )
 from app.services.parent_candidate_materialization import (
+    PARENT_PARTIALLY_MATERIALIZED,
     PARENT_SPLIT_COMPLETE,
     build_parent_candidate_summary,
 )
@@ -34,7 +35,7 @@ def _active_candidate_decisions(db: Session, batch_id: int, candidate_ids: set[i
         .filter(
             UniversalIngestionReviewAction.batch_id == batch_id,
             UniversalIngestionReviewAction.candidate_id.isnot(None),
-            UniversalIngestionReviewAction.action_type.in_({"approve_candidate", "exclude_from_move_plan"}),
+            UniversalIngestionReviewAction.action_type.in_({"approve_candidate", "exclude_from_move_plan", "mark_review_later", "block_candidate"}),
             UniversalIngestionReviewAction.decision_status != "cleared",
         )
         .order_by(
@@ -339,9 +340,6 @@ def materialize_approved_candidates(db: Session, batch_id: int) -> dict[str, Any
     parent_summary = build_parent_candidate_summary(db, parent_batch)
     if not parent_summary["is_parent_review_container"]:
         raise ValueError("Batch is not a parent review container")
-    if parent_summary["remaining_candidate_count"] > 0:
-        raise ValueError("All candidate groups must be approved or excluded before child batches can be created")
-
     current_candidates = {
         candidate.id: candidate
         for candidate in db.query(MediaIdentityCandidate)
@@ -351,15 +349,22 @@ def materialize_approved_candidates(db: Session, batch_id: int) -> dict[str, Any
     decisions = _active_candidate_decisions(db, batch_id, set(current_candidates))
     approved_candidate_ids = [candidate_id for candidate_id, action_type in decisions.items() if action_type == "approve_candidate"]
     if not approved_candidate_ids:
-        raise ValueError("No approved current candidate groups are available to materialize. Refresh the workspace and approve the current candidates.")
+        raise ValueError("No approved current candidate groups are available to materialize. Approve safe candidate groups before creating child batches.")
 
     candidates = {
         candidate_id: current_candidates[candidate_id]
         for candidate_id in approved_candidate_ids
         if candidate_id in current_candidates
     }
+    candidate_id_set = set(current_candidates)
+    blocked_candidate_ids = sorted(candidate_id for candidate_id, action_type in decisions.items() if action_type == "block_candidate")
+    excluded_candidate_ids = sorted(candidate_id for candidate_id, action_type in decisions.items() if action_type == "exclude_from_move_plan")
+    review_later_candidate_ids = sorted(candidate_id for candidate_id, action_type in decisions.items() if action_type == "mark_review_later")
+    decisioned_ids = set(approved_candidate_ids) | set(blocked_candidate_ids) | set(excluded_candidate_ids) | set(review_later_candidate_ids)
+    unresolved_candidate_ids = sorted(candidate_id_set - decisioned_ids)
 
     child_batch_ids: list[int] = []
+    materialized_candidate_ids: list[int] = []
     created_count = 0
     skipped_count = 0
     try:
@@ -369,21 +374,57 @@ def materialize_approved_candidates(db: Session, batch_id: int) -> dict[str, Any
                 raise MaterializationError("Some approved candidates could not be materialized.")
             child_id, created = _materialize_candidate(db, parent_batch, candidate)
             child_batch_ids.append(child_id)
+            materialized_candidate_ids.append(candidate_id)
             if created:
                 created_count += 1
             else:
                 skipped_count += 1
 
-        parent_batch.status = PARENT_SPLIT_COMPLETE
-        parent_batch.updated_at = now_utc()
+        timestamp = now_utc()
+        metadata = dict(parent_batch.metadata_json or {})
+        partial_audit = list(metadata.get("partial_materialization_audit") or [])
+        partial_audit.append({
+            "parent_batch_id": parent_batch.id,
+            "materialized_candidate_ids": sorted(materialized_candidate_ids),
+            "blocked_candidate_ids": blocked_candidate_ids,
+            "excluded_candidate_ids": excluded_candidate_ids,
+            "review_later_candidate_ids": review_later_candidate_ids,
+            "unresolved_candidate_ids": unresolved_candidate_ids,
+            "created_child_batch_ids": child_batch_ids,
+            "materialized_at": timestamp.isoformat(),
+        })
+        metadata["partial_materialization_audit"] = partial_audit
+        metadata["child_candidate_count"] = len(candidate_id_set)
+        metadata["materialized_child_count"] = len({
+            int(item.get("candidate_id") or 0)
+            for item in metadata.get("materialization_history") or []
+            if isinstance(item, dict) and item.get("candidate_id")
+        })
+        metadata["blocked_candidate_count"] = len(blocked_candidate_ids)
+        metadata["excluded_candidate_count"] = len(excluded_candidate_ids)
+        metadata["review_later_candidate_count"] = len(review_later_candidate_ids)
+        metadata["unresolved_candidate_count"] = len(unresolved_candidate_ids)
+        all_candidates_materialized = metadata["materialized_child_count"] >= len(candidate_id_set)
+        parent_batch.status = PARENT_SPLIT_COMPLETE if all_candidates_materialized else "pending_review"
+        metadata["parent_review_state"] = PARENT_SPLIT_COMPLETE if all_candidates_materialized else PARENT_PARTIALLY_MATERIALIZED
+        parent_batch.metadata_json = metadata
+        parent_batch.updated_at = timestamp
         db.commit()
     except Exception:
         db.rollback()
         raise
 
+    db.refresh(parent_batch)
+    parent_summary = build_parent_candidate_summary(db, parent_batch)
+    parent_state = parent_summary["parent_review_state"]
+    remaining_detail = parent_summary["unresolved_candidate_count"] + parent_summary["review_later_candidate_count"] + parent_summary["blocked_candidate_count"]
     message = (
-        f"Created {created_count} child batch{'es' if created_count != 1 else ''}. Parent marked split complete."
+        f"Created {created_count} child batch{'es' if created_count != 1 else ''}. {remaining_detail} candidate{'s' if remaining_detail != 1 else ''} remain on the parent."
+        if created_count and parent_state != PARENT_SPLIT_COMPLETE
+        else f"Created {created_count} child batch{'es' if created_count != 1 else ''}. Parent marked split complete."
         if created_count
+        else f"Approved child batches already exist. {remaining_detail} candidate{'s' if remaining_detail != 1 else ''} remain on the parent."
+        if parent_state != PARENT_SPLIT_COMPLETE
         else "Approved child batches already exist. Parent marked split complete."
     )
     return {
@@ -391,6 +432,11 @@ def materialize_approved_candidates(db: Session, batch_id: int) -> dict[str, Any
         "created_child_batch_ids": child_batch_ids,
         "created_count": created_count,
         "skipped_count": skipped_count,
-        "parent_review_state": PARENT_SPLIT_COMPLETE,
+        "materialized_child_count": parent_summary["materialized_child_count"],
+        "unresolved_candidate_count": parent_summary["unresolved_candidate_count"],
+        "blocked_candidate_count": parent_summary["blocked_candidate_count"],
+        "excluded_candidate_count": parent_summary["excluded_candidate_count"],
+        "review_later_candidate_count": parent_summary["review_later_candidate_count"],
+        "parent_review_state": parent_state,
         "message": message,
     }

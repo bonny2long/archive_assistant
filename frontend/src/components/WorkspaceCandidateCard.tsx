@@ -14,8 +14,12 @@ function stateIcon(state: CandidateViewModel["displayState"]): string {
 }
 
 function stateLabel(candidate: CandidateViewModel): string {
+  if (hasAppliedAction(candidate, "approve_candidate") || hasAppliedAction(candidate, "split_candidate")) return "Child batch created";
+  if (hasAction(candidate, "exclude_from_move_plan")) return "Excluded";
+  if (hasAction(candidate, "block_candidate")) return "Blocked";
+  if (hasAction(candidate, "mark_review_later")) return "Review later";
+  if (hasAction(candidate, "approve_candidate")) return "Ready to extract";
   if (candidate.displayState === "blocked") return "Blocked";
-  if (candidate.displayState === "approved") return "Approved";
   if (candidate.hasChunkIdentityRisk) return "Identity review";
   if (candidate.displayState === "review") return "Needs review";
   return "Safe";

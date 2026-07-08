@@ -19,6 +19,10 @@ function hasActiveAction(actions: Array<{ action_type: string; decision_status?:
   return actions.some((action) => action.action_type === actionType && action.decision_status !== "cleared");
 }
 
+function hasPendingAction(actions: Array<{ action_type: string; decision_status?: string | null }>, actionType: string): boolean {
+  return actions.some((action) => action.action_type === actionType && action.decision_status !== "cleared" && action.decision_status !== "applied");
+}
+
 export default function WorkspaceHeader({
   batch,
   ingestion,
@@ -34,22 +38,27 @@ export default function WorkspaceHeader({
   const canApprove = !!ingestion && blocked === 0 && review === 0;
   const candidates = ingestion?.candidates ?? [];
   const isParentReviewContainer = candidateCount > 1;
-  const approvedCount = candidates.filter((candidate) => hasActiveAction(candidate.active_actions ?? [], "approve_candidate")).length;
+  const approvedCount = candidates.filter((candidate) => hasPendingAction(candidate.active_actions ?? [], "approve_candidate")).length;
+  const materializedCount = candidates.filter((candidate) => hasActiveAction(candidate.active_actions ?? [], "approve_candidate") && !hasPendingAction(candidate.active_actions ?? [], "approve_candidate")).length;
   const excludedCount = candidates.filter((candidate) => hasActiveAction(candidate.active_actions ?? [], "exclude_from_move_plan")).length;
+  const blockedCount = candidates.filter((candidate) => hasActiveAction(candidate.active_actions ?? [], "block_candidate")).length;
+  const reviewLaterCount = candidates.filter((candidate) => hasActiveAction(candidate.active_actions ?? [], "mark_review_later")).length;
   const remainingCount = candidates.filter((candidate) => {
     const actions = candidate.active_actions ?? [];
-    return !hasActiveAction(actions, "approve_candidate") && !hasActiveAction(actions, "exclude_from_move_plan");
+    return !hasActiveAction(actions, "approve_candidate")
+      && !hasActiveAction(actions, "exclude_from_move_plan")
+      && !hasActiveAction(actions, "block_candidate")
+      && !hasActiveAction(actions, "mark_review_later");
   }).length || (ingestion ? 0 : candidateCount);
-  const allCandidatesResolved = isParentReviewContainer && approvedCount > 0 && remainingCount === 0;
-  const canMaterialize = allCandidatesResolved && !!onMaterializeApprovedCandidates;
+  const canMaterialize = isParentReviewContainer && approvedCount > 0 && !!onMaterializeApprovedCandidates;
   const approveDisabled = isParentReviewContainer || !canApprove;
   const approveTitle = isParentReviewContainer
     ? "Approved candidate groups must be materialized into child batches before this parent can move."
     : "Approves groups the backend currently considers safe. Individual candidate decisions remain visible in the workspace.";
   const approveLabel = isParentReviewContainer
-    ? "Child batch creation required"
+    ? "Create safe child batches"
     : "Approve backend-safe groups";
-  const materializeLabel = `Create ${approvedCount} child batch${approvedCount === 1 ? "" : "es"}`;
+  const materializeLabel = `Create ${approvedCount} safe child batch${approvedCount === 1 ? "" : "es"}`;
 
   return (
     <header className="review-workspace__header">
@@ -63,21 +72,28 @@ export default function WorkspaceHeader({
               <i className="ti ti-circle-check" /> {approvedCount} {isParentReviewContainer ? "approved candidate groups" : "approved"}
             </span>
           )}
+          {materializedCount > 0 && (
+            <span className="review-workspace__badge--approved">
+              <i className="ti ti-git-branch" /> {materializedCount} child batches created
+            </span>
+          )}
           {excludedCount > 0 && (
             <span className="review-workspace__badge--excluded">
               <i className="ti ti-eye-off" /> {excludedCount} excluded
             </span>
           )}
+          {blockedCount > 0 && <span className="review-workspace__badge--warn">{blockedCount} blocked</span>}
+          {reviewLaterCount > 0 && <span>{reviewLaterCount} review later</span>}
           <span className={remainingCount > 0 ? "review-workspace__badge--remaining" : ""}>
-            {remainingCount} remaining
+            {remainingCount} unresolved
           </span>
           <span>{batch.files.length} files</span>
           <span>{decisionLabel(routing?.decision)}</span>
           {routing?.summary.chunk_identity_candidate_count ? (
             <span className="review-workspace__badge--warn">chunk identity risk</span>
           ) : null}
-          {allCandidatesResolved && (
-            <span className="review-workspace__badge--warn">Next: create child batches</span>
+          {canMaterialize && (
+            <span className="review-workspace__badge--warn">Next: create safe child batches</span>
           )}
         </div>
         {routing && routing.decision !== "music_editor_allowed" && (

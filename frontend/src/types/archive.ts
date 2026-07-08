@@ -446,9 +446,14 @@ export type BatchSummary = {
   candidate_group_count?: number;
   approved_candidate_count?: number;
   excluded_candidate_count?: number;
+  blocked_candidate_count?: number;
+  review_later_candidate_count?: number;
+  unresolved_candidate_count?: number;
+  materialized_child_count?: number;
+  child_candidate_count?: number;
   remaining_candidate_count?: number;
   needs_materialization?: boolean;
-  parent_review_state?: "review_in_progress" | "candidates_approved_waiting_materialization" | "split_complete" | string | null;
+  parent_review_state?: "review_in_progress" | "candidates_approved_waiting_materialization" | "parent_partially_materialized" | "split_complete" | string | null;
   is_parent_review_container?: boolean;
   possible_duplicate_group_id?: string | null;
   possible_duplicate_count?: number;
@@ -1111,10 +1116,15 @@ export interface SplitCandidateResult {
 }
 
 export interface MaterializeApprovedCandidatesResult {
-  parent_batch_id: number;
-  created_child_batch_ids: number[];
-  created_count: number;
-  skipped_count: number;
-  parent_review_state: string;
-  message: string;
-}
+    parent_batch_id: number;
+    created_child_batch_ids: number[];
+    created_count: number;
+    skipped_count: number;
+    materialized_child_count: number;
+    unresolved_candidate_count: number;
+    blocked_candidate_count: number;
+    excluded_candidate_count: number;
+    review_later_candidate_count: number;
+    parent_review_state: string;
+    message: string;
+  }
