@@ -314,6 +314,15 @@ export default function App() {
     const result = await api.resolveDuplicateFragmentReview(batchId, update);
     showToast(result.message);
     await loadBatches();
+    if (result.canonical_batch_id) {
+      try {
+        const detail = await api.getBatch(result.canonical_batch_id);
+        setDetails((previous) => ({ ...previous, [result.canonical_batch_id as number]: detail }));
+        setWorkspaceDetail((current) => current?.id === result.canonical_batch_id ? detail : current);
+      } catch {
+        // Dashboard refresh still succeeded; stale detail will reload when opened.
+      }
+    }
     try {
       const review = await api.getBatchDuplicateFragmentReview(batchId);
       setDuplicateReview(review);

@@ -98,6 +98,16 @@ function duplicateBatchIds(cluster: DuplicateFragmentCluster | null, canonicalBa
   return cluster.batches.map((batch) => batch.batch_id).filter((id) => id !== canonicalBatchId);
 }
 
+function metadataText(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function destinationFormatMismatch(detail: IngestBatch | null, destination: string | null): boolean {
+  const format = metadataText(detail?.metadata_json?.format).toUpperCase();
+  if (!destination || !["FLAC", "MP3"].includes(format)) return false;
+  return !destination.replace(/\\/g, "/").includes(`Music/Library/${format}`);
+}
+
 export default function DuplicateFragmentReviewWorkspace({ review, selectedBatchId, onClose, onResolve }: Props) {
   const cluster = useMemo(() => selectedCluster(review, selectedBatchId), [review, selectedBatchId]);
   const [activeBatchId, setActiveBatchId] = useState<number | null>(selectedBatchId);
@@ -151,12 +161,18 @@ export default function DuplicateFragmentReviewWorkspace({ review, selectedBatch
   const selectedFileCount = selected ? displayFileCount(selected, detail) : 0;
   const selectedMissingFileOwnership = selected ? hasMissingFileOwnership(selected, detail) : false;
   const groupHasFileOwnershipWarnings = Boolean(cluster?.has_file_ownership_warnings || cluster?.batches.some((batch) => hasMissingFileOwnership(batch)));
+  const groupHasMixedFormats = Boolean(cluster?.mixed_file_formats);
+  const hasDestinationMismatch = destinationFormatMismatch(detail, destination);
   const resolutionDisabled = groupHasFileOwnershipWarnings || !cluster || !selected || resolvingAction !== null;
   const selectedDuplicateBatchIds = duplicateBatchIds(cluster, selected?.batch_id ?? null);
 
   async function submitResolution(action: DuplicateFragmentResolutionAction) {
     if (!selected || !cluster || resolutionDisabled) return;
     setResolutionError(null);
+    if (action === "merge_into_one_batch" && groupHasMixedFormats) {
+      setResolutionError("Mixed audio formats require format review before merge.");
+      return;
+    }
     const update: DuplicateFragmentResolutionRequest = { action };
     if (action === "merge_into_one_batch") {
       const summary = [
@@ -203,7 +219,7 @@ export default function DuplicateFragmentReviewWorkspace({ review, selectedBatch
         <section className="duplicate-review-workspace__main" aria-label="Matching batches">
           <div className="duplicate-review-workspace__notice">
             <i className="ti ti-alert-triangle" />
-            <span>{groupHasFileOwnershipWarnings ? "This group has missing scoped files and is blocked from move approval until file ownership is repaired." : "Resolution actions are coming next. This group is blocked from move approval until it is resolved."}</span>
+            <span>{groupHasFileOwnershipWarnings ? "This group has missing scoped files and is blocked from move approval until file ownership is repaired." : groupHasMixedFormats ? "This group has mixed audio formats. Merge is blocked until format review is completed." : "File ownership is verified. Choose a resolution before move approval."}</span>
           </div>
 
           <div className="duplicate-review-workspace__batch-list">
@@ -264,6 +280,11 @@ export default function DuplicateFragmentReviewWorkspace({ review, selectedBatch
               <section className="workspace-inspector__section">
                 <h3>Destination preview</h3>
                 {destination ? <code title={destination}>{destination}</code> : <small>No destination preview available.</small>}
+                {hasDestinationMismatch && (
+                  <div className="duplicate-review-workspace__file-warning">
+                    <i className="ti ti-alert-triangle" /> Destination does not match file format. Rebuild required before move.
+                  </div>
+                )}
               </section>
 
               <section className="workspace-inspector__section">
@@ -273,11 +294,11 @@ export default function DuplicateFragmentReviewWorkspace({ review, selectedBatch
 
               <section className="workspace-inspector__section duplicate-review-workspace__decision-section">
                 <h3>Group decision</h3>
-                <p>{groupHasFileOwnershipWarnings ? "Resolution actions remain disabled because one or more batches are missing scoped files." : "File ownership is verified. These actions change review state only; they do not move files to the final library."}</p>
+                <p>{groupHasFileOwnershipWarnings ? "Resolution actions remain disabled because one or more batches are missing scoped files." : groupHasMixedFormats ? "Merge is disabled because this group contains mixed audio formats. Other decisions do not move files to the final library." : "File ownership is verified. These actions change review state only; they do not move files to the final library."}</p>
                 {resolutionError && <small className="error-text">{resolutionError}</small>}
                 <div className="duplicate-review-workspace__decision-grid">
                   <button className="btn-sm" disabled={resolutionDisabled} onClick={() => void submitResolution("keep_separate")}><i className="ti ti-copy-check" /> Keep separate</button>
-                  <button className="btn-sm" disabled={resolutionDisabled} onClick={() => void submitResolution("merge_into_one_batch")}><i className="ti ti-git-merge" /> Merge into one batch</button>
+                  <button className="btn-sm" disabled={resolutionDisabled || groupHasMixedFormats} onClick={() => void submitResolution("merge_into_one_batch")}><i className="ti ti-git-merge" /> Merge into one batch</button>
                   <button className="btn-sm" disabled={resolutionDisabled} onClick={() => void submitResolution("mark_duplicate")}><i className="ti ti-layers-subtract" /> Mark duplicate</button>
                   <button className="btn-sm" disabled={resolutionDisabled} onClick={() => void submitResolution("review_later")}><i className="ti ti-clock" /> Review later</button>
                   <button className="btn-sm" disabled={resolutionDisabled} onClick={() => void submitResolution("block_move")}><i className="ti ti-lock" /> Block move</button>

@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.config import settings
 from app.core.time import now_utc
 from app.models.archive import IngestBatch, IngestFile
 from app.services.parent_candidate_materialization import build_parent_candidate_summary
@@ -45,6 +46,10 @@ DUPLICATE_RESOLUTION_ACTIONS = {
     "review_later",
     "block_move",
 }
+AUDIO_ROLE_VALUES = {"audio", "audio_track", "music_audio", "music_track", "discography_track"}
+AUDIO_EXTENSIONS = {".mp3", ".flac", ".m4a", ".aac", ".wav", ".ogg", ".opus", ".wma", ".aiff", ".alac"}
+MERGE_FORMAT_EXTENSIONS = {".flac": "FLAC", ".mp3": "MP3"}
+_SAFE_PART_PATTERN = re.compile(r'[<>:"/\\|?*]+')
 
 
 class DuplicateFragmentResolutionError(ValueError):
@@ -196,8 +201,11 @@ def _has_missing_file_ownership(batch: IngestBatch) -> bool:
     return _item_count(batch, metadata) > 0 and len(batch.files or []) == 0
 
 def _file_formats(batch: IngestBatch) -> list[str]:
-    formats = sorted({(file.extension or "").lower().lstrip(".") for file in (batch.files or []) if file.extension})
-    return formats
+    files = batch.files or []
+    audio_formats = sorted({(_music_file_format(file) or _file_extension(file).lstrip(".").upper()) for file in files if _is_music_audio_file(file)})
+    if audio_formats:
+        return audio_formats
+    return sorted({(file.extension or "").lower().lstrip(".") for file in files if file.extension})
 
 def _batch_row(batch: IngestBatch) -> dict[str, Any]:
     metadata = batch.metadata_json or {}
@@ -211,6 +219,7 @@ def _batch_row(batch: IngestBatch) -> dict[str, Any]:
         "year": year_value(metadata) or None,
         "item_count": item_count,
         "file_count": file_count,
+        "file_formats": _file_formats(batch),
         "file_ownership_status": "missing_files" if missing_files else "verified",
         "file_ownership_warning": "Batch has media item metadata but no attached scoped files." if missing_files else None,
         "suggested_destination": batch.suggested_destination,
@@ -245,6 +254,7 @@ def _cluster_for(cluster_id: str, batches: list[IngestBatch], *, same_destinatio
     metadata = batches[0].metadata_json or {}
     review_type = _review_type_for(batches, same_destination=same_destination)
     rows = [_batch_row(batch) for batch in sorted(batches, key=lambda item: item.id)]
+    file_formats = sorted({file_format for row in rows for file_format in row.get("file_formats", [])})
     return {
         "cluster_id": cluster_id,
         "review_type": review_type,
@@ -252,6 +262,8 @@ def _cluster_for(cluster_id: str, batches: list[IngestBatch], *, same_destinatio
         "confidence": "high" if same_destination else "medium",
         "reason": _cluster_reason(review_type, same_destination),
         "has_file_ownership_warnings": any(row["file_ownership_status"] == "missing_files" for row in rows),
+        "mixed_file_formats": len(file_formats) > 1,
+        "file_formats": file_formats,
         "batches": rows,
     }
 
@@ -423,26 +435,131 @@ def _normalized_destination(value: str | None) -> str:
     return normalize_identity_value(str(value or "").replace("\\", "/"))
 
 
-def _rebuild_canonical_metadata(canonical: IngestBatch, source_batches: list[IngestBatch], action: str) -> None:
+def _safe_path_part(value: object, fallback: str = "Unknown") -> str:
+    text = str(value or "").strip()
+    if not text:
+        text = fallback
+    text = _SAFE_PART_PATTERN.sub(" ", text)
+    text = re.sub(r"\s+", " ", text).strip(" .")
+    return text or fallback
+
+
+def _file_extension(ingest_file: IngestFile) -> str:
+    value = ingest_file.extension or Path(ingest_file.file_name or ingest_file.file_path).suffix
+    return str(value or "").lower()
+
+
+def _is_music_audio_file(ingest_file: IngestFile) -> bool:
+    return _file_extension(ingest_file) in AUDIO_EXTENSIONS or (ingest_file.detected_role or "") in AUDIO_ROLE_VALUES
+
+
+def _music_file_format(ingest_file: IngestFile) -> str | None:
+    return MERGE_FORMAT_EXTENSIONS.get(_file_extension(ingest_file))
+
+
+def _first_text(*values: object, fallback: str = "") -> str:
+    for value in values:
+        text = str(value or "").strip()
+        if text:
+            return text
+    return fallback
+
+
+def _music_destination_for_format(canonical: IngestBatch, audio_files: list[IngestFile], format_bucket: str) -> str:
+    metadata = canonical.metadata_json or {}
+    first_meta = audio_files[0].metadata_json or {} if audio_files else {}
+    artist = _safe_path_part(
+        _first_text(
+            metadata.get("artist"),
+            metadata.get("albumartist"),
+            metadata.get("album_artist"),
+            first_meta.get("artist"),
+            first_meta.get("albumartist"),
+            fallback="Unknown Artist",
+        ),
+        "Unknown Artist",
+    )
+    album = _safe_path_part(
+        _first_text(
+            metadata.get("album"),
+            metadata.get("title"),
+            first_meta.get("album"),
+            fallback=Path(canonical.source_path or "").name or "Unknown Album",
+        ),
+        "Unknown Album",
+    )
+    year = _safe_path_part(year_value(metadata) or year_value(first_meta), "").strip()
+    album_folder = f"{year} - {album}" if year else album
+    root = settings.music_flac_dir if format_bucket == "FLAC" else settings.music_mp3_dir
+    return str(Path(root) / artist / album_folder)
+
+
+def _validate_music_destination(format_bucket: str, destination: str) -> None:
+    normalized = destination.replace("\\", "/")
+    expected = f"Music/Library/{format_bucket}"
+    if expected not in normalized:
+        raise DuplicateFragmentResolutionError("Destination does not match file format. Rebuild required before move.")
+
+
+def _plan_music_merge_rebuild(canonical: IngestBatch, batches: list[IngestBatch]) -> tuple[str | None, str | None]:
+    if not (canonical.detected_type or "").startswith("music"):
+        return None, None
+    audio_files = [ingest_file for batch in batches for ingest_file in (batch.files or []) if _is_music_audio_file(ingest_file)]
+    if not audio_files:
+        raise DuplicateFragmentResolutionError("Music merge requires attached scoped audio files.")
+    raw_formats = {_music_file_format(ingest_file) for ingest_file in audio_files}
+    if any(value is None for value in raw_formats):
+        raise DuplicateFragmentResolutionError("Unsupported audio formats require format review before merge.")
+    formats = sorted(str(value) for value in raw_formats)
+    if len(formats) != 1:
+        raise DuplicateFragmentResolutionError("Mixed audio formats require format review before merge.")
+    format_bucket = formats[0]
+    destination = _music_destination_for_format(canonical, audio_files, format_bucket)
+    _validate_music_destination(format_bucket, destination)
+    return format_bucket, destination
+
+
+def _rebuild_canonical_metadata(
+    canonical: IngestBatch,
+    source_batches: list[IngestBatch],
+    action: str,
+    *,
+    rebuilt_format: str | None = None,
+    rebuilt_destination: str | None = None,
+) -> None:
     files = sorted(canonical.files or [], key=lambda item: item.id)
+    audio_files = [ingest_file for ingest_file in files if _is_music_audio_file(ingest_file)]
     metadata = dict(canonical.metadata_json or {})
     metadata["file_count"] = len(files)
-    metadata["track_count"] = len(files) if canonical.detected_type.startswith("music") else metadata.get("track_count", len(files))
-    if canonical.detected_type.startswith("music"):
+    if (canonical.detected_type or "").startswith("music"):
+        for ingest_file in audio_files:
+            ingest_file.detected_role = "music_track"
+        metadata["track_count"] = len(audio_files)
         tracks = []
         discs = set()
-        for index, ingest_file in enumerate(files, start=1):
+        for index, ingest_file in enumerate(audio_files, start=1):
             file_metadata = ingest_file.metadata_json or {}
-            disc = str(file_metadata.get("discnumber") or "1").split("/")[0]
+            disc = str(file_metadata.get("discnumber") or file_metadata.get("disc_number") or "1").split("/")[0]
             discs.add(disc)
             tracks.append({
                 "title": file_metadata.get("title") or Path(ingest_file.file_name).stem,
-                "track_number": file_metadata.get("tracknumber") or str(index),
-                "disc_number": file_metadata.get("discnumber") or "1",
+                "track_number": file_metadata.get("tracknumber") or file_metadata.get("track_number") or str(index),
+                "disc_number": file_metadata.get("discnumber") or file_metadata.get("disc_number") or "1",
                 "file_name": ingest_file.file_name,
+                "file_id": ingest_file.id,
             })
         metadata["tracks"] = tracks
         metadata["disc_count"] = max(1, len(discs))
+        if rebuilt_format is None or rebuilt_destination is None:
+            rebuilt_format, rebuilt_destination = _plan_music_merge_rebuild(canonical, [canonical])
+        metadata["format"] = rebuilt_format
+        metadata["suggested_destination"] = rebuilt_destination
+        canonical.suggested_destination = rebuilt_destination
+        suggested = dict(canonical.suggested_metadata or {})
+        suggested["format"] = rebuilt_format
+        suggested["suggested_destination"] = rebuilt_destination
+        canonical.suggested_metadata = suggested
+        _validate_music_destination(rebuilt_format, rebuilt_destination)
     warnings = list(metadata.get("metadata_warnings") or [])
     warnings.append(f"duplicate_fragment_resolution_{action}")
     metadata["metadata_warnings"] = list(dict.fromkeys(warnings))
@@ -452,7 +569,6 @@ def _rebuild_canonical_metadata(canonical: IngestBatch, source_batches: list[Ing
     canonical.approved_at = None
     canonical.approved_by = None
     canonical.updated_at = now_utc()
-
 
 def resolve_duplicate_fragment_group(
     db: Session,
@@ -494,6 +610,7 @@ def resolve_duplicate_fragment_group(
         message = "Group marked as separate reviewed batches."
 
     elif action == "merge_into_one_batch":
+        rebuilt_format, rebuilt_destination = _plan_music_merge_rebuild(canonical, batches)
         source_batches = [batch for batch in batches if batch.id != canonical.id]
         collapsed_ids = [batch.id for batch in source_batches]
         record = _resolution_record(
@@ -514,7 +631,13 @@ def resolve_duplicate_fragment_group(
             _append_resolution_audit(source, record)
         db.flush()
         db.refresh(canonical)
-        _rebuild_canonical_metadata(canonical, source_batches, action)
+        _rebuild_canonical_metadata(
+            canonical,
+            source_batches,
+            action,
+            rebuilt_format=rebuilt_format,
+            rebuilt_destination=rebuilt_destination,
+        )
         _append_resolution_audit(canonical, record)
         message = f"Merged {len(source_batches)} fragment batch(es) into batch {canonical.id}."
 

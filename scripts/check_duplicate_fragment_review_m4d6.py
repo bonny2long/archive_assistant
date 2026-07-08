@@ -17,7 +17,7 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.db.session import Base  # noqa: E402
-from app.models.archive import IngestBatch, IngestFile  # noqa: E402
+from app.models.archive import IngestBatch, IngestFile, MoveAction  # noqa: E402
 from app.services.duplicate_fragment_review import (  # noqa: E402
     DuplicateFragmentResolutionError,
     build_duplicate_fragment_review,
@@ -38,15 +38,24 @@ def add_music_batch(
     destination: str | None = None,
     edition: str | None = None,
     attach_files: bool = True,
+    extension: str = ".flac",
+    destination_format: str | None = None,
 ) -> IngestBatch:
+    normalized_extension = extension if extension.startswith(".") else f".{extension}"
+    format_bucket = destination_format or (
+        "FLAC" if normalized_extension.lower() == ".flac"
+        else "MP3" if normalized_extension.lower() == ".mp3"
+        else normalized_extension.lstrip(".").upper()
+    )
+    suggested_destination = destination or str(PROJECT_ROOT / ".tmp" / "Music" / "Library" / format_bucket / artist / f"{year} - {album}")
     batch = IngestBatch(
         source_kind="manual-drop",
         source_path=str(PROJECT_ROOT / ".tmp" / artist / f"{year} - {album} {track_count}"),
         detected_type="music_album",
         status="pending_review",
         confidence=0.95,
-        suggested_destination=destination or str(PROJECT_ROOT / ".tmp" / "Library" / artist / f"{year} - {album}"),
-        suggested_metadata={"artist": artist, "album": album, "year": year},
+        suggested_destination=suggested_destination,
+        suggested_metadata={"artist": artist, "album": album, "year": year, "format": format_bucket},
         metadata_confirmed=True,
         metadata_json={
             "metadata_quality": "good",
@@ -59,6 +68,9 @@ def add_music_batch(
             "year": year,
             "edition": edition,
             "track_count": track_count,
+            "file_count": track_count if attach_files else 0,
+            "format": format_bucket,
+            "suggested_destination": suggested_destination,
             "review_type": "music_album",
             "review_mode": "single_item",
         },
@@ -69,12 +81,12 @@ def add_music_batch(
         for index in range(1, track_count + 1):
             db.add(IngestFile(
                 batch_id=batch.id,
-                file_path=str(Path(batch.source_path) / f"{index:02d} - Track {index}.flac"),
-                file_name=f"{index:02d} - Track {index}.flac",
-                extension=".flac",
+                file_path=str(Path(batch.source_path) / f"{index:02d} - Track {index}{normalized_extension}"),
+                file_name=f"{index:02d} - Track {index}{normalized_extension}",
+                extension=normalized_extension,
                 size_bytes=4096,
-                checksum=f"{artist}:{album}:{track_count}:{index}",
-                detected_role="music_audio",
+                checksum=f"{artist}:{album}:{track_count}:{normalized_extension}:{index}",
+                detected_role="discography_track",
                 metadata_json={
                     "artist": artist,
                     "albumartist": artist,
@@ -87,7 +99,6 @@ def add_music_batch(
     db.commit()
     db.refresh(batch)
     return batch
-
 
 def test_fragment_cluster_blocks_approval_and_move(db) -> None:
     donda10 = add_music_batch(db, artist="Kanye West", album="Donda", year="2021", track_count=10)
@@ -122,6 +133,7 @@ def test_fragment_cluster_blocks_approval_and_move(db) -> None:
         "year",
         "item_count",
         "file_count",
+        "file_formats",
         "suggested_destination",
         "source_path",
         "status",
@@ -206,8 +218,56 @@ def test_merge_resolution_reassigns_scoped_files_without_deleting_sources(db) ->
     assert (source.metadata_json or {}).get("merged_into_batch_id") == canonical.id
     assert db.query(IngestFile).filter(IngestFile.batch_id == canonical.id).count() == 13
     assert db.query(IngestFile).filter(IngestFile.batch_id == source.id).count() == 0
+    metadata = canonical.metadata_json or {}
+    destination = str(canonical.suggested_destination or "").replace("\\", "/")
+    assert metadata.get("format") == "FLAC"
+    assert "Music/Library/FLAC" in destination
+    assert metadata.get("suggested_destination") == canonical.suggested_destination
+    assert metadata.get("file_count") == 13
+    assert metadata.get("track_count") == 13
+    assert len(metadata.get("tracks") or []) == 13
+    assert metadata.get("duplicate_fragment_resolution_audit")
+    assert all(file.detected_role == "music_track" for file in canonical.files)
+    assert db.query(MoveAction).count() == 0
     assert duplicate_fragment_summary_for_batch(db, canonical)["requires_duplicate_review"] is False
 
+
+def test_merge_resolution_rebuilds_mp3_destination(db) -> None:
+    first = add_music_batch(db, artist="Kanye West", album="Yeezus", year="2013", track_count=5, extension=".mp3")
+    second = add_music_batch(db, artist="Kanye West", album="Yeezus", year="2013", track_count=4, extension=".mp3")
+
+    resolve_duplicate_fragment_group(db, second.id, "merge_into_one_batch", canonical_batch_id=first.id)
+    canonical = db.get(IngestBatch, first.id)
+    assert canonical is not None
+    metadata = canonical.metadata_json or {}
+    destination = str(canonical.suggested_destination or "").replace("\\", "/")
+    assert metadata.get("format") == "MP3"
+    assert "Music/Library/MP3" in destination
+    assert metadata.get("file_count") == 9
+    assert metadata.get("track_count") == 9
+    assert db.query(MoveAction).count() == 0
+
+
+def test_mixed_format_merge_is_blocked_before_collapse(db) -> None:
+    flac = add_music_batch(db, artist="Kanye West", album="Donda", year="2021", track_count=10, extension=".flac")
+    mp3 = add_music_batch(db, artist="Kanye West", album="Donda", year="2021", track_count=3, extension=".mp3")
+
+    try:
+        resolve_duplicate_fragment_group(db, mp3.id, "merge_into_one_batch", canonical_batch_id=flac.id)
+    except DuplicateFragmentResolutionError as exc:
+        assert "Mixed audio formats" in str(exc)
+    else:
+        raise AssertionError("Mixed format merge should be blocked")
+
+    flac_after = db.get(IngestBatch, flac.id)
+    mp3_after = db.get(IngestBatch, mp3.id)
+    assert flac_after is not None
+    assert mp3_after is not None
+    assert flac_after.status == "pending_review"
+    assert mp3_after.status == "pending_review"
+    assert db.query(IngestFile).filter(IngestFile.batch_id == flac.id).count() == 10
+    assert db.query(IngestFile).filter(IngestFile.batch_id == mp3.id).count() == 3
+    assert db.query(MoveAction).count() == 0
 
 def test_keep_separate_requires_distinct_destinations(db) -> None:
     destination = str(PROJECT_ROOT / ".tmp" / "Library" / "Kanye West" / "2007 - Graduation")
@@ -316,6 +376,8 @@ def main() -> None:
         test_missing_file_ownership_is_flagged_and_blocked,
         test_missing_file_ownership_cannot_resolve,
         test_merge_resolution_reassigns_scoped_files_without_deleting_sources,
+        test_merge_resolution_rebuilds_mp3_destination,
+        test_mixed_format_merge_is_blocked_before_collapse,
         test_keep_separate_requires_distinct_destinations,
         test_keep_separate_with_distinct_destinations_clears_blocker,
         test_mark_duplicate_blocks_duplicate_batch_from_move,
