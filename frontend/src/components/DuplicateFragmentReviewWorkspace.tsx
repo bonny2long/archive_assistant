@@ -15,6 +15,7 @@ function reviewTypeLabel(value: string): string {
     possible_fragment: "Possible fragment",
     possible_duplicate: "Possible duplicate",
     possible_edition_conflict: "Edition conflict",
+    possible_append_to_canonical: "Append to existing album",
     reviewed_keep_separate: "Reviewed - keep separate",
   };
   return labels[value] ?? value.replace(/_/g, " ");
@@ -163,8 +164,14 @@ export default function DuplicateFragmentReviewWorkspace({ review, selectedBatch
   const selectedMissingFileOwnership = selected ? hasMissingFileOwnership(selected, detail) : false;
   const groupHasFileOwnershipWarnings = Boolean(cluster?.has_file_ownership_warnings || cluster?.batches.some((batch) => hasMissingFileOwnership(batch)));
   const groupHasMixedFormats = Boolean(cluster?.mixed_file_formats);
+  const appendPlan = cluster?.append_plan ?? null;
+  const appendConflictCount = appendPlan?.conflict_file_ids?.length ?? 0;
+  const appendNewCount = appendPlan?.new_file_ids?.length ?? 0;
+  const appendDuplicateCount = appendPlan?.duplicate_file_ids?.length ?? 0;
+  const isAppendReview = cluster?.review_type === "possible_append_to_canonical";
   const hasDestinationMismatch = destinationFormatMismatch(detail, destination);
   const resolutionDisabled = groupHasFileOwnershipWarnings || !cluster || !selected || resolvingAction !== null;
+  const appendDisabled = resolutionDisabled || appendConflictCount > 0 || appendNewCount <= 0;
   const selectedDuplicateBatchIds = duplicateBatchIds(cluster, selected?.batch_id ?? null);
 
   async function submitResolution(action: DuplicateFragmentResolutionAction) {
@@ -174,7 +181,14 @@ export default function DuplicateFragmentReviewWorkspace({ review, selectedBatch
       setResolutionError("Mixed audio formats require format review before merge.");
       return;
     }
+    if (action === "append_to_existing_canonical_batch" && appendConflictCount > 0) {
+      setResolutionError("Track conflicts require review before append.");
+      return;
+    }
     const update: DuplicateFragmentResolutionRequest = { action };
+    if (action === "append_to_existing_canonical_batch") {
+      update.canonical_batch_id = cluster.canonical_batch_id ?? appendPlan?.canonical_batch_id ?? selected.batch_id;
+    }
     if (action === "merge_into_one_batch") {
       const summary = [
         `Merge ${cluster.batches.length} batches into batch ${selected.batch_id}?`,
@@ -245,8 +259,19 @@ export default function DuplicateFragmentReviewWorkspace({ review, selectedBatch
         <section className="duplicate-review-workspace__main" aria-label="Matching batches">
           <div className="duplicate-review-workspace__notice">
             <i className="ti ti-alert-triangle" />
-            <span>{groupHasFileOwnershipWarnings ? "This group has missing scoped files and is blocked from move approval until file ownership is repaired." : groupHasMixedFormats ? "This group has mixed audio formats. Merge is blocked until format review is completed." : "File ownership is verified. Choose a resolution before move approval."}</span>
+            <span>{groupHasFileOwnershipWarnings ? "This group has missing scoped files and is blocked from move approval until file ownership is repaired." : appendConflictCount > 0 ? "Track conflicts must be reviewed before this fragment can be appended." : isAppendReview ? "This later fragment can add new files to the existing reviewed album batch." : groupHasMixedFormats ? "This group has mixed audio formats. Merge is blocked until format review is completed." : "File ownership is verified. Choose a resolution before move approval."}</span>
           </div>
+
+          {isAppendReview && (
+            <section className="workspace-inspector__section duplicate-review-workspace__append-plan">
+              <h3>Append plan</h3>
+              <div className="duplicate-review-workspace__chips">
+                <span>{appendNewCount} new file(s)</span>
+                <span>{appendDuplicateCount} duplicate file(s) skipped</span>
+                <span>{appendConflictCount} conflict(s)</span>
+              </div>
+            </section>
+          )}
 
           <div className="duplicate-review-workspace__batch-list">
             {cluster?.batches.map((batch) => {
@@ -320,11 +345,12 @@ export default function DuplicateFragmentReviewWorkspace({ review, selectedBatch
 
               <section className="workspace-inspector__section duplicate-review-workspace__decision-section">
                 <h3>Group decision</h3>
-                <p>{groupHasFileOwnershipWarnings ? "Resolution actions remain disabled because one or more batches are missing scoped files." : groupHasMixedFormats ? "Merge is disabled because this group contains mixed audio formats. Other decisions do not move files to the final library." : "File ownership is verified. These actions change review state only; they do not move files to the final library."}</p>
+                <p>{groupHasFileOwnershipWarnings ? "Resolution actions remain disabled because one or more batches are missing scoped files." : appendConflictCount > 0 ? "Append is disabled because incoming files conflict with existing track numbers." : isAppendReview ? "Add only the new scoped files to the existing reviewed album batch. Duplicate incoming files are skipped and logged." : groupHasMixedFormats ? "Merge is disabled because this group contains mixed audio formats. Other decisions do not move files to the final library." : "File ownership is verified. These actions change review state only; they do not move files to the final library."}</p>
                 {resolutionError && <small className="error-text">{resolutionError}</small>}
                 <div className="duplicate-review-workspace__decision-grid">
+                  {isAppendReview && <button className="btn-sm" disabled={appendDisabled} onClick={() => void submitResolution("append_to_existing_canonical_batch")}><i className="ti ti-playlist-add" /> Add new files to existing album batch</button>}
                   <button className="btn-sm" disabled={resolutionDisabled} onClick={() => void submitResolution("keep_separate")}><i className="ti ti-copy-check" /> Keep separate</button>
-                  <button className="btn-sm" disabled={resolutionDisabled || groupHasMixedFormats} onClick={() => void submitResolution("merge_into_one_batch")}><i className="ti ti-git-merge" /> Merge into one batch</button>
+                  <button className="btn-sm" disabled={resolutionDisabled || groupHasMixedFormats || isAppendReview} onClick={() => void submitResolution("merge_into_one_batch")}><i className="ti ti-git-merge" /> Merge into one batch</button>
                   <button className="btn-sm" disabled={resolutionDisabled} onClick={() => void submitResolution("mark_duplicate")}><i className="ti ti-layers-subtract" /> Mark duplicate</button>
                   <button className="btn-sm" disabled={resolutionDisabled} onClick={() => void submitResolution("review_later")}><i className="ti ti-clock" /> Review later</button>
                   <button className="btn-sm" disabled={resolutionDisabled} onClick={() => void submitResolution("block_move")}><i className="ti ti-lock" /> Block move</button>

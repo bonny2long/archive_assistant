@@ -31,6 +31,17 @@ from app.services.parent_candidate_materialization import build_parent_candidate
 from app.services.duplicate_fragment_review import duplicate_fragment_summary_for_batch
 
 
+def _music_track_completeness_blocker(batch: IngestBatch) -> str | None:
+    metadata = batch.metadata_json or {}
+    if batch.detected_type != "music_album":
+        return None
+    if metadata.get("accepted_incomplete_album"):
+        return None
+    status = metadata.get("completeness_status") or (metadata.get("track_completeness") or {}).get("completeness_status")
+    if status in {"incomplete", "conflict"}:
+        return "Music album has missing or conflicting tracks before move."
+    return None
+
 def _safe_path_part(value: str) -> str:
     return "".join(c if c not in '<>:"/\\|?*' else "_" for c in value).strip()
 
@@ -389,7 +400,7 @@ def _move_movie_collection_batch(
     movie_items = metadata.get("movie_items") or []
 
     if not movie_items:
-        return [], ["Movie collection has no movie_items â€” cannot move"]
+        return [], ["Movie collection has no movie_items Ã¢â‚¬â€ cannot move"]
 
     moved_files: list[str] = []
     failed_files: list[str] = []
@@ -600,7 +611,7 @@ def _tv_episode_destination(
 
     suffix = Path(ingest_file.file_name).suffix.lower()
 
-    # Preserve original filename â€” just need a season/group folder
+    # Preserve original filename Ã¢â‚¬â€ just need a season/group folder
     if preserve:
         if season_number is not None:
             folder = _tv_season_destination(destination, int(season_number))
@@ -663,7 +674,7 @@ def _tv_subtitle_destination(
     suffix = Path(ingest_file.file_name).suffix.lower()
 
     if is_special and destination_group in {"oad", "ova", "extras", "specials"}:
-        # Subtitle for a special â€” place alongside the episode
+        # Subtitle for a special Ã¢â‚¬â€ place alongside the episode
         file_name = (
             f"{episode_code}{language_suffix}{suffix}"
             if episode_code
@@ -2035,6 +2046,13 @@ def move_approved_batches(db: Session) -> tuple[int, list[str]]:
             errors.append(
                 f"Batch {batch.id} needs duplicate/fragment review before moving."
             )
+            continue
+        completeness_blocker = _music_track_completeness_blocker(batch)
+        if completeness_blocker:
+            batch.status = "needs_metadata_review"
+            batch.updated_at = now_utc()
+            db.commit()
+            errors.append(f"Batch {batch.id}: {completeness_blocker}")
             continue
 
         moved_files = []

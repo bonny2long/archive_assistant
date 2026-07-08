@@ -340,6 +340,8 @@ class DuplicateFragmentClusterOut(BaseModel):
     has_file_ownership_warnings: bool = False
     mixed_file_formats: bool = False
     file_formats: list[str] = Field(default_factory=list)
+    canonical_batch_id: int | None = None
+    append_plan: dict[str, Any] | None = None
     batches: list[DuplicateFragmentBatchOut] = Field(default_factory=list)
 
 

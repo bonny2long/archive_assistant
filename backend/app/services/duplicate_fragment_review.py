@@ -16,6 +16,7 @@ DUPLICATE_STATE_NONE = "none"
 DUPLICATE_STATE_POSSIBLE_DUPLICATE = "possible_duplicate"
 DUPLICATE_STATE_POSSIBLE_FRAGMENT = "possible_fragment"
 DUPLICATE_STATE_POSSIBLE_EDITION_CONFLICT = "possible_edition_conflict"
+DUPLICATE_STATE_POSSIBLE_APPEND_TO_CANONICAL = "possible_append_to_canonical"
 DUPLICATE_REVIEWED_STATES = {
     "reviewed_keep_separate",
     "reviewed_merged",
@@ -28,6 +29,7 @@ BLOCKING_DUPLICATE_STATES = {
     DUPLICATE_STATE_POSSIBLE_DUPLICATE,
     DUPLICATE_STATE_POSSIBLE_FRAGMENT,
     DUPLICATE_STATE_POSSIBLE_EDITION_CONFLICT,
+    DUPLICATE_STATE_POSSIBLE_APPEND_TO_CANONICAL,
     "reviewed_merge_required",
     "reviewed_duplicate",
     "reviewed_blocked",
@@ -45,6 +47,7 @@ DUPLICATE_RESOLUTION_ACTIONS = {
     "mark_duplicate",
     "review_later",
     "block_move",
+    "append_to_existing_canonical_batch",
 }
 AUDIO_ROLE_VALUES = {"audio", "audio_track", "music_audio", "music_track", "discography_track"}
 AUDIO_EXTENSIONS = {".mp3", ".flac", ".m4a", ".aac", ".wav", ".ogg", ".opus", ".wma", ".aiff", ".alac"}
@@ -234,6 +237,204 @@ def _batch_row(batch: IngestBatch) -> dict[str, Any]:
     }
 
 
+def _metadata_value(metadata: dict[str, Any], *keys: str) -> str:
+    for key in keys:
+        value = metadata.get(key)
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    embedded = metadata.get("embedded_metadata_fields")
+    if isinstance(embedded, dict):
+        for key in keys:
+            value = embedded.get(key)
+            if value is not None and str(value).strip():
+                return str(value).strip()
+    return ""
+
+
+def _track_number(value: object) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    return re.split(r"[/\-]", text)[0].strip()
+
+
+def _track_key(ingest_file: IngestFile) -> tuple[str, str] | None:
+    metadata = ingest_file.metadata_json or {}
+    disc = _track_number(_metadata_value(metadata, "discnumber", "disc_number")) or "1"
+    track = _track_number(_metadata_value(metadata, "tracknumber", "track_number"))
+    return (disc, track) if track else None
+
+
+def _duration_seconds(ingest_file: IngestFile) -> float | None:
+    metadata = ingest_file.metadata_json or {}
+    value = metadata.get("duration_seconds") or metadata.get("duration")
+    try:
+        return float(value) if value is not None and str(value).strip() else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _file_title(ingest_file: IngestFile) -> str:
+    metadata = ingest_file.metadata_json or {}
+    return normalize_identity_value(_metadata_value(metadata, "title") or Path(ingest_file.file_name).stem)
+
+
+def _embedded_identity_key(ingest_file: IngestFile) -> tuple[str, str, str, str] | None:
+    metadata = ingest_file.metadata_json or {}
+    title = normalize_identity_value(_metadata_value(metadata, "title") or Path(ingest_file.file_name).stem)
+    track = _track_number(_metadata_value(metadata, "tracknumber", "track_number"))
+    album = normalize_identity_value(_metadata_value(metadata, "album"))
+    artist = normalize_identity_value(_metadata_value(metadata, "artist", "albumartist", "album_artist"))
+    if not title or not track:
+        return None
+    return title, track, album, artist
+
+
+def _filename_size_key(ingest_file: IngestFile) -> tuple[str, int]:
+    return normalize_identity_value(ingest_file.file_name), int(ingest_file.size_bytes or 0)
+
+
+def _same_track_duplicate(existing: IngestFile, incoming: IngestFile) -> bool:
+    if int(existing.size_bytes or 0) == int(incoming.size_bytes or 0):
+        return True
+    existing_duration = _duration_seconds(existing)
+    incoming_duration = _duration_seconds(incoming)
+    if existing_duration is not None and incoming_duration is not None and abs(existing_duration - incoming_duration) <= 2.0:
+        return True
+    return _file_title(existing) == _file_title(incoming)
+
+
+def _format_class(batch: IngestBatch) -> str:
+    metadata = batch.metadata_json or {}
+    value = str(metadata.get("format") or "").upper().strip()
+    if value in {"FLAC", "MP3"}:
+        return value
+    destination = str(batch.suggested_destination or metadata.get("suggested_destination") or "").replace("\\", "/")
+    if "Music/Library/FLAC" in destination:
+        return "FLAC"
+    if "Music/Library/MP3" in destination:
+        return "MP3"
+    formats = _file_formats(batch)
+    if len(formats) == 1 and formats[0].upper() in {"FLAC", "MP3"}:
+        return formats[0].upper()
+    return ""
+
+
+def _canonical_append_key(batch: IngestBatch) -> str | None:
+    identity = canonical_identity_key(batch)
+    format_class = _format_class(batch)
+    return f"{identity}:{format_class}" if identity and format_class else None
+
+
+def _is_appendable_canonical(batch: IngestBatch) -> bool:
+    metadata = batch.metadata_json or {}
+    return (
+        batch.detected_type == "music_album"
+        and metadata.get("duplicate_fragment_review_state") in {"reviewed_merged", "canonical_merge"}
+        and not _destination_sync_problem(batch)
+        and len(batch.files or []) > 0
+    )
+
+
+def _canonical_append_batches(db: Session) -> list[IngestBatch]:
+    batches = (
+        db.query(IngestBatch)
+        .options(selectinload(IngestBatch.files))
+        .filter(IngestBatch.status.in_(REVIEWABLE_BATCH_STATUSES))
+        .all()
+    )
+    return [batch for batch in batches if _is_appendable_canonical(batch)]
+
+
+def _append_plan(canonical: IngestBatch, incoming_batches: list[IngestBatch]) -> dict[str, Any]:
+    canonical_files = [file for file in (canonical.files or []) if _is_music_audio_file(file)]
+    incoming_files = [file for batch in incoming_batches for file in (batch.files or []) if _is_music_audio_file(file)]
+    canonical_ids = {file.id for file in canonical_files}
+    filename_size_keys = {_filename_size_key(file): file for file in canonical_files}
+    embedded_keys = {key: file for file in canonical_files if (key := _embedded_identity_key(file)) is not None}
+    track_keys: dict[tuple[str, str], list[IngestFile]] = defaultdict(list)
+    for file in canonical_files:
+        key = _track_key(file)
+        if key is not None:
+            track_keys[key].append(file)
+
+    new_file_ids: list[int] = []
+    duplicate_file_ids: list[int] = []
+    conflict_file_ids: list[int] = []
+    duplicate_reasons: dict[str, str] = {}
+    conflict_details: list[dict[str, Any]] = []
+
+    for incoming in incoming_files:
+        reason = None
+        if incoming.id in canonical_ids:
+            reason = "already_attached_file_id"
+        elif _filename_size_key(incoming) in filename_size_keys:
+            reason = "normalized_filename_and_size"
+        else:
+            embedded_key = _embedded_identity_key(incoming)
+            track_key = _track_key(incoming)
+            if embedded_key is not None and embedded_key in embedded_keys:
+                reason = "embedded_title_track_album_artist"
+            elif track_key is not None and track_key in track_keys:
+                existing_matches = track_keys[track_key]
+                if any(_same_track_duplicate(existing, incoming) for existing in existing_matches):
+                    reason = "same_disc_track_duplicate"
+                else:
+                    conflict_file_ids.append(incoming.id)
+                    conflict_details.append({
+                        "incoming_file_id": incoming.id,
+                        "incoming_file_name": incoming.file_name,
+                        "disc_number": track_key[0],
+                        "track_number": track_key[1],
+                        "existing_file_ids": [file.id for file in existing_matches],
+                        "reason": "same_disc_track_different_identity",
+                    })
+                    continue
+        if reason:
+            duplicate_file_ids.append(incoming.id)
+            duplicate_reasons[str(incoming.id)] = reason
+        else:
+            new_file_ids.append(incoming.id)
+
+    return {
+        "canonical_batch_id": canonical.id,
+        "incoming_batch_ids": [batch.id for batch in incoming_batches],
+        "new_file_ids": new_file_ids,
+        "duplicate_file_ids": duplicate_file_ids,
+        "conflict_file_ids": conflict_file_ids,
+        "duplicate_reasons": duplicate_reasons,
+        "conflict_details": conflict_details,
+    }
+
+
+def _append_clusters(db: Session, incoming_batches: list[IngestBatch]) -> list[dict[str, Any]]:
+    incoming_by_key: dict[str, list[IngestBatch]] = defaultdict(list)
+    for batch in incoming_batches:
+        if _has_resolved_duplicate_review_state(batch):
+            continue
+        key = _canonical_append_key(batch)
+        if key:
+            incoming_by_key[key].append(batch)
+
+    clusters: list[dict[str, Any]] = []
+    for canonical in _canonical_append_batches(db):
+        key = _canonical_append_key(canonical)
+        if not key:
+            continue
+        incoming = [batch for batch in incoming_by_key.get(key, []) if batch.id != canonical.id]
+        if not incoming:
+            continue
+        plan = _append_plan(canonical, incoming)
+        clusters.append(_cluster_for(
+            f"append:{key}:canonical:{canonical.id}",
+            [canonical, *incoming],
+            same_destination=False,
+            review_type=DUPLICATE_STATE_POSSIBLE_APPEND_TO_CANONICAL,
+            canonical_batch_id=canonical.id,
+            append_plan=plan,
+        ))
+    return clusters
+
 def _review_type_for(batches: list[IngestBatch], *, same_destination: bool) -> str:
     counts = {_item_count(batch, batch.metadata_json or {}) for batch in batches}
     if len(counts) > 1:
@@ -255,20 +456,30 @@ def _cluster_reason(review_type: str, same_destination: bool) -> str:
     return "Multiple pending batches share the same media identity."
 
 
-def _cluster_for(cluster_id: str, batches: list[IngestBatch], *, same_destination: bool) -> dict[str, Any]:
+def _cluster_for(
+    cluster_id: str,
+    batches: list[IngestBatch],
+    *,
+    same_destination: bool,
+    review_type: str | None = None,
+    canonical_batch_id: int | None = None,
+    append_plan: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     metadata = batches[0].metadata_json or {}
-    review_type = _review_type_for(batches, same_destination=same_destination)
+    resolved_review_type = review_type or _review_type_for(batches, same_destination=same_destination)
     rows = [_batch_row(batch) for batch in sorted(batches, key=lambda item: item.id)]
     file_formats = sorted({file_format for row in rows for file_format in row.get("file_formats", [])})
     return {
         "cluster_id": cluster_id,
-        "review_type": review_type,
+        "review_type": resolved_review_type,
         "media_type": _media_type(batches[0], metadata),
-        "confidence": "high" if same_destination else "medium",
-        "reason": _cluster_reason(review_type, same_destination),
+        "confidence": "high" if same_destination or resolved_review_type == DUPLICATE_STATE_POSSIBLE_APPEND_TO_CANONICAL else "medium",
+        "reason": "Later matching fragment can be appended to an existing reviewed canonical batch." if resolved_review_type == DUPLICATE_STATE_POSSIBLE_APPEND_TO_CANONICAL else _cluster_reason(resolved_review_type, same_destination),
         "has_file_ownership_warnings": any(row["file_ownership_status"] == "missing_files" for row in rows),
         "mixed_file_formats": len(file_formats) > 1,
         "file_formats": file_formats,
+        "canonical_batch_id": canonical_batch_id,
+        "append_plan": append_plan,
         "batches": rows,
     }
 
@@ -343,6 +554,8 @@ def build_duplicate_fragment_review(db: Session, batch_id: int | None = None) ->
         grouped_batches = [by_id[item] for item in sorted(ids)]
         clusters.append(_cluster_for(cluster_id, grouped_batches, same_destination=bool(destination_keys)))
 
+    clusters.extend(_append_clusters(db, batches))
+
     if batch_id is not None:
         clusters = [
             cluster for cluster in clusters
@@ -392,9 +605,10 @@ def duplicate_fragment_summary_for_batch(db: Session, batch: IngestBatch) -> dic
         }
 
     state_order = {
-        DUPLICATE_STATE_POSSIBLE_FRAGMENT: 0,
-        DUPLICATE_STATE_POSSIBLE_DUPLICATE: 1,
-        DUPLICATE_STATE_POSSIBLE_EDITION_CONFLICT: 2,
+        DUPLICATE_STATE_POSSIBLE_APPEND_TO_CANONICAL: 0,
+        DUPLICATE_STATE_POSSIBLE_FRAGMENT: 1,
+        DUPLICATE_STATE_POSSIBLE_DUPLICATE: 2,
+        DUPLICATE_STATE_POSSIBLE_EDITION_CONFLICT: 3,
     }
     cluster = sorted(clusters, key=lambda item: state_order.get(item["review_type"], 99))[0]
     review_type = str(cluster["review_type"])
@@ -582,6 +796,68 @@ def _plan_music_merge_rebuild(canonical: IngestBatch, batches: list[IngestBatch]
     return format_bucket, destination
 
 
+
+def _track_int(value: object) -> int | None:
+    text = _track_number(value)
+    if not text or not text.isdigit():
+        return None
+    number = int(text)
+    return number if number > 0 else None
+
+
+def _music_track_completeness(audio_files: list[IngestFile], metadata: dict[str, Any]) -> dict[str, Any]:
+    by_track: dict[int, list[IngestFile]] = defaultdict(list)
+    for ingest_file in audio_files:
+        key = _track_key(ingest_file)
+        if not key:
+            continue
+        track_number = _track_int(key[1])
+        if track_number is not None:
+            by_track[track_number].append(ingest_file)
+
+    present = sorted(by_track)
+    duplicate_numbers = sorted(number for number, files in by_track.items() if len(files) > 1)
+    conflicts: list[dict[str, Any]] = []
+    for number, files in sorted(by_track.items()):
+        titles = {(_file_title(file) or "") for file in files}
+        if len(titles) > 1:
+            conflicts.append({
+                "track_number": number,
+                "file_ids": [file.id for file in files],
+                "titles": sorted(titles),
+            })
+
+    expected_total = None
+    for key in ("expected_track_count", "total_tracks", "track_total", "track_count"):
+        value = metadata.get(key)
+        try:
+            number = int(value)
+        except (TypeError, ValueError):
+            continue
+        if number > 0:
+            expected_total = number
+            break
+    if expected_total is None and present:
+        expected_total = max(present)
+
+    missing = [] if expected_total is None else [number for number in range(1, expected_total + 1) if number not in by_track]
+    if not present:
+        status = "unknown"
+    elif conflicts or duplicate_numbers:
+        status = "conflict"
+    elif missing:
+        status = "incomplete"
+    else:
+        status = "complete"
+
+    return {
+        "present_track_numbers": present,
+        "missing_track_numbers": missing,
+        "duplicate_track_numbers": duplicate_numbers,
+        "track_number_conflicts": conflicts,
+        "completeness_status": status,
+    }
+
 def _rebuild_canonical_metadata(
     canonical: IngestBatch,
     source_batches: list[IngestBatch],
@@ -613,6 +889,13 @@ def _rebuild_canonical_metadata(
             })
         metadata["tracks"] = tracks
         metadata["disc_count"] = max(1, len(discs))
+        completeness = _music_track_completeness(audio_files, metadata)
+        metadata["track_completeness"] = completeness
+        metadata["present_track_numbers"] = completeness["present_track_numbers"]
+        metadata["missing_track_numbers"] = completeness["missing_track_numbers"]
+        metadata["duplicate_track_numbers"] = completeness["duplicate_track_numbers"]
+        metadata["track_number_conflicts"] = completeness["track_number_conflicts"]
+        metadata["completeness_status"] = completeness["completeness_status"]
         if rebuilt_format is None or rebuilt_destination is None:
             rebuilt_format, rebuilt_destination = _plan_music_merge_rebuild(canonical, [canonical])
         destination_text = str(rebuilt_destination)
@@ -708,6 +991,55 @@ def resolve_duplicate_fragment_group(
         _append_resolution_audit(canonical, record)
         message = f"Merged {len(source_batches)} fragment batch(es) into batch {canonical.id}."
 
+    elif action == "append_to_existing_canonical_batch":
+        if cluster.get("review_type") != DUPLICATE_STATE_POSSIBLE_APPEND_TO_CANONICAL:
+            raise DuplicateFragmentResolutionError("Append is only available for later fragments matching a reviewed canonical batch.")
+        canonical_id = canonical_batch_id or cluster.get("canonical_batch_id")
+        canonical = _canonical_batch(batches, canonical_id)
+        incoming_batches = [batch for batch in batches if batch.id != canonical.id]
+        plan = _append_plan(canonical, incoming_batches)
+        if plan["conflict_file_ids"]:
+            raise DuplicateFragmentResolutionError("Track conflicts require review before append.")
+        appended_file_ids = set(plan["new_file_ids"])
+        skipped_duplicate_file_ids = set(plan["duplicate_file_ids"])
+        collapsed_ids = [batch.id for batch in incoming_batches]
+        record = _resolution_record(
+            action,
+            cluster,
+            resolution_state="reviewed_merged",
+            canonical_batch_id=canonical.id,
+            appended_source_batch_ids=collapsed_ids,
+            appended_file_ids=sorted(appended_file_ids),
+            skipped_duplicate_file_ids=sorted(skipped_duplicate_file_ids),
+            skipped_duplicate_reasons=plan["duplicate_reasons"],
+        )
+        for source in incoming_batches:
+            for ingest_file in list(source.files or []):
+                if ingest_file.id in appended_file_ids:
+                    ingest_file.batch_id = canonical.id
+            source_metadata = dict(source.metadata_json or {})
+            source_metadata["appended_to_batch_id"] = canonical.id
+            source_metadata["collapsed_by_duplicate_fragment_append"] = True
+            source_metadata["skipped_duplicate_file_ids"] = sorted(skipped_duplicate_file_ids)
+            source.metadata_json = source_metadata
+            source.status = "merged"
+            _append_resolution_audit(source, record)
+        db.flush()
+        db.refresh(canonical)
+        rebuilt_format, rebuilt_destination = _plan_music_merge_rebuild(canonical, [canonical])
+        _rebuild_canonical_metadata(
+            canonical,
+            incoming_batches,
+            action,
+            rebuilt_format=rebuilt_format,
+            rebuilt_destination=rebuilt_destination,
+        )
+        canonical_metadata = dict(canonical.metadata_json or {})
+        canonical_metadata["duplicate_fragment_append_plan"] = plan
+        canonical.metadata_json = canonical_metadata
+        record = {**record, "track_completeness": canonical_metadata.get("track_completeness")}
+        _append_resolution_audit(canonical, record)
+        message = f"Appended {len(appended_file_ids)} new file(s) to batch {canonical.id}; skipped {len(skipped_duplicate_file_ids)} duplicate file(s)."
     elif action == "mark_duplicate":
         duplicate_ids = set(duplicate_batch_ids or [batch.id for batch in batches if batch.id != canonical.id])
         if canonical.id in duplicate_ids:
@@ -749,7 +1081,7 @@ def resolve_duplicate_fragment_group(
     return {
         "cluster_id": cluster["cluster_id"],
         "action": action,
-        "canonical_batch_id": canonical.id if action in {"merge_into_one_batch", "mark_duplicate"} else None,
+        "canonical_batch_id": canonical.id if action in {"merge_into_one_batch", "mark_duplicate", "append_to_existing_canonical_batch"} else None,
         "resolved_batch_ids": [batch.id for batch in batches],
         "collapsed_batch_ids": collapsed_ids,
         "blocked_batch_ids": blocked_ids,

@@ -119,6 +119,18 @@ from app.core.time import configured_timezone, now_local, now_utc, serialize_utc
 
 router = APIRouter(prefix="/api")
 
+
+def _music_track_completeness_blocker(batch: IngestBatch) -> str | None:
+    metadata = batch.metadata_json or {}
+    if batch.detected_type != "music_album":
+        return None
+    if metadata.get("accepted_incomplete_album"):
+        return None
+    status = metadata.get("completeness_status") or (metadata.get("track_completeness") or {}).get("completeness_status")
+    if status in {"incomplete", "conflict"}:
+        return "Music album has missing or conflicting tracks before approval."
+    return None
+
 @router.get("/health")
 def health():
     return {
@@ -1959,6 +1971,13 @@ def approve_batch(batch_id: int, db: Session = Depends(get_db)):
             status=batch.status,
             message="Batch needs duplicate/fragment review before approval.",
         )
+    completeness_blocker = _music_track_completeness_blocker(batch)
+    if completeness_blocker:
+        return ApproveResponse(
+            batch_id=batch.id,
+            status=batch.status,
+            message=completeness_blocker,
+        )
 
     meta = build_review_state(batch.detected_type, batch.metadata_json)
     if meta["blocking_review_items"]:
@@ -2019,6 +2038,8 @@ def approve_selected_batches(
             reason = "parent_review_container_needs_child_batches"
         elif duplicate_fragment_summary_for_batch(db, batch)["requires_duplicate_review"]:
             reason = "duplicate_fragment_review_required"
+        elif _music_track_completeness_blocker(batch):
+            reason = "music_track_completeness_required"
         elif metadata["blocking_review_items"]:
             reason = "blocking_review_items"
         elif batch.status in {"needs_metadata_review", "metadata_recovery"}:

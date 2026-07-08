@@ -305,6 +305,16 @@ export type DuplicateFragmentCluster = {
   has_file_ownership_warnings?: boolean;
   mixed_file_formats?: boolean;
   file_formats?: string[];
+  canonical_batch_id?: number | null;
+  append_plan?: {
+    canonical_batch_id?: number;
+    incoming_batch_ids?: number[];
+    new_file_ids?: number[];
+    duplicate_file_ids?: number[];
+    conflict_file_ids?: number[];
+    duplicate_reasons?: Record<string, string>;
+    conflict_details?: Array<Record<string, unknown>>;
+  } | null;
   batches: DuplicateFragmentBatch[];
 };
 
@@ -318,7 +328,8 @@ export type DuplicateFragmentResolutionAction =
   | "merge_into_one_batch"
   | "mark_duplicate"
   | "review_later"
-  | "block_move";
+  | "block_move"
+  | "append_to_existing_canonical_batch";
 
 export type DuplicateFragmentResolutionRequest = {
   action: DuplicateFragmentResolutionAction;

@@ -100,6 +100,73 @@ def add_music_batch(
     db.refresh(batch)
     return batch
 
+
+def add_music_batch_with_tracks(
+    db,
+    *,
+    artist: str,
+    album: str,
+    year: str,
+    track_numbers: list[int],
+    extension: str = ".flac",
+    title_overrides: dict[int, str] | None = None,
+    size_overrides: dict[int, int] | None = None,
+) -> IngestBatch:
+    normalized_extension = extension if extension.startswith(".") else f".{extension}"
+    format_bucket = "FLAC" if normalized_extension.lower() == ".flac" else "MP3"
+    suggested_destination = str(PROJECT_ROOT / ".tmp" / "Music" / "Library" / format_bucket / artist / f"{year} - {album}")
+    batch = IngestBatch(
+        source_kind="manual-drop",
+        source_path=str(PROJECT_ROOT / ".tmp" / artist / f"{year} - {album} tracks {'-'.join(str(item) for item in track_numbers)}"),
+        detected_type="music_album",
+        status="pending_review",
+        confidence=0.95,
+        suggested_destination=suggested_destination,
+        suggested_metadata={"artist": artist, "album": album, "year": year, "format": format_bucket, "suggested_destination": suggested_destination},
+        metadata_confirmed=True,
+        metadata_json={
+            "metadata_quality": "good",
+            "metadata_warnings": [],
+            "blocking_review_items": [],
+            "artist": artist,
+            "albumartist": artist,
+            "album": album,
+            "title": album,
+            "year": year,
+            "track_count": max(track_numbers) if track_numbers else 0,
+            "file_count": len(track_numbers),
+            "format": format_bucket,
+            "suggested_destination": suggested_destination,
+            "review_type": "music_album",
+            "review_mode": "single_item",
+        },
+    )
+    db.add(batch)
+    db.flush()
+    for track_number in track_numbers:
+        title = (title_overrides or {}).get(track_number, f"Track {track_number}")
+        size = (size_overrides or {}).get(track_number, 4096 + track_number)
+        db.add(IngestFile(
+            batch_id=batch.id,
+            file_path=str(Path(batch.source_path) / f"{track_number:02d} - {title}{normalized_extension}"),
+            file_name=f"{track_number:02d} - {title}{normalized_extension}",
+            extension=normalized_extension,
+            size_bytes=size,
+            checksum=f"{artist}:{album}:{normalized_extension}:{track_number}:{title}:{size}",
+            detected_role="discography_track",
+            metadata_json={
+                "artist": artist,
+                "albumartist": artist,
+                "album": album,
+                "title": title,
+                "tracknumber": str(track_number),
+                "date": year,
+            },
+        ))
+    db.commit()
+    db.refresh(batch)
+    return batch
+
 def test_fragment_cluster_blocks_approval_and_move(db) -> None:
     donda10 = add_music_batch(db, artist="Kanye West", album="Donda", year="2021", track_count=10)
     donda3 = add_music_batch(db, artist="Kanye West", album="Donda", year="2021", track_count=3)
@@ -403,6 +470,86 @@ def test_edition_conflicts_are_grouped_not_fragmented(db) -> None:
     assert duplicate_fragment_summary_for_batch(db, deluxe)["requires_duplicate_review"] is False
 
 
+
+def test_incremental_append_adds_only_new_files_and_blocks_incomplete_move(db) -> None:
+    canonical_seed = add_music_batch_with_tracks(db, artist="Kanye West", album="Donda", year="2021", track_numbers=[1, 2])
+    first_fragment = add_music_batch_with_tracks(db, artist="Kanye West", album="Donda", year="2021", track_numbers=[5])
+    resolve_duplicate_fragment_group(db, first_fragment.id, "merge_into_one_batch", canonical_batch_id=canonical_seed.id)
+
+    incoming = add_music_batch_with_tracks(db, artist="Kanye West", album="Donda", year="2021", track_numbers=[2, 3])
+    scoped_review = batch_duplicate_fragment_review(incoming.id, db)
+    assert scoped_review["active_cluster"] is True
+    cluster = scoped_review["clusters"][0]
+    assert cluster["review_type"] == "possible_append_to_canonical"
+    assert cluster["canonical_batch_id"] == canonical_seed.id
+    append_plan = cluster["append_plan"]
+    assert append_plan["canonical_batch_id"] == canonical_seed.id
+    assert len(append_plan["new_file_ids"]) == 1
+    assert len(append_plan["duplicate_file_ids"]) == 1
+    assert append_plan["conflict_file_ids"] == []
+
+    result = resolve_duplicate_fragment_group(
+        db,
+        incoming.id,
+        "append_to_existing_canonical_batch",
+        canonical_batch_id=canonical_seed.id,
+    )
+    assert result["canonical_batch_id"] == canonical_seed.id
+    canonical = db.get(IngestBatch, canonical_seed.id)
+    source = db.get(IngestBatch, incoming.id)
+    assert canonical is not None
+    assert source is not None
+    assert source.status == "merged"
+    assert db.query(IngestFile).filter(IngestFile.batch_id == canonical.id).count() == 4
+    assert db.query(IngestFile).filter(IngestFile.batch_id == source.id).count() == 1
+    metadata = canonical.metadata_json or {}
+    assert metadata.get("duplicate_fragment_resolution_audit")[-1]["action"] == "append_to_existing_canonical_batch"
+    assert metadata.get("track_count") == 4
+    assert metadata.get("file_count") == 4
+    assert metadata.get("completeness_status") == "incomplete"
+    assert metadata.get("missing_track_numbers") == [4]
+    assert metadata.get("format") == "FLAC"
+    assert "Music/Library/FLAC" in str(canonical.suggested_destination).replace("\\", "/")
+
+    response = approve_batch(canonical.id, db)
+    assert response.status == "pending_review"
+    assert "missing or conflicting tracks" in response.message
+    canonical.status = "approved"
+    db.commit()
+    moved, errors = move_approved_batches(db)
+    assert moved == 0
+    assert any("missing or conflicting tracks" in error for error in errors)
+    assert db.query(MoveAction).count() == 0
+
+
+def test_incremental_append_conflict_is_blocked(db) -> None:
+    canonical_seed = add_music_batch_with_tracks(db, artist="Kanye West", album="Donda", year="2021", track_numbers=[1, 2])
+    first_fragment = add_music_batch_with_tracks(db, artist="Kanye West", album="Donda", year="2021", track_numbers=[5])
+    resolve_duplicate_fragment_group(db, first_fragment.id, "merge_into_one_batch", canonical_batch_id=canonical_seed.id)
+
+    incoming = add_music_batch_with_tracks(
+        db,
+        artist="Kanye West",
+        album="Donda",
+        year="2021",
+        track_numbers=[2],
+        title_overrides={2: "Different Track Two"},
+        size_overrides={2: 9999},
+    )
+    scoped_review = batch_duplicate_fragment_review(incoming.id, db)
+    cluster = scoped_review["clusters"][0]
+    assert cluster["review_type"] == "possible_append_to_canonical"
+    assert len(cluster["append_plan"]["conflict_file_ids"]) == 1
+
+    try:
+        resolve_duplicate_fragment_group(db, incoming.id, "append_to_existing_canonical_batch", canonical_batch_id=canonical_seed.id)
+    except DuplicateFragmentResolutionError as exc:
+        assert "Track conflicts" in str(exc)
+    else:
+        raise AssertionError("Append should reject same track number with different identity")
+    assert db.query(IngestFile).filter(IngestFile.batch_id == canonical_seed.id).count() == 3
+    assert db.query(IngestFile).filter(IngestFile.batch_id == incoming.id).count() == 1
+
 def main() -> None:
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
     Base.metadata.create_all(bind=engine)
@@ -418,6 +565,8 @@ def main() -> None:
         test_keep_separate_requires_distinct_destinations,
         test_keep_separate_with_distinct_destinations_clears_blocker,
         test_mark_duplicate_blocks_duplicate_batch_from_move,
+        test_incremental_append_adds_only_new_files_and_blocks_incomplete_move,
+        test_incremental_append_conflict_is_blocked,
         test_singletons_are_not_flagged,
         test_edition_conflicts_are_grouped_not_fragmented,
     ]

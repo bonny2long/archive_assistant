@@ -63,6 +63,7 @@ function duplicateFragmentLabel(batch: BatchSummary): string | null {
   if (!hasActiveDuplicateFragmentReview(batch)) return null;
   if (batch.duplicate_fragment_review_state === "possible_fragment") return "Possible fragment";
   if (batch.duplicate_fragment_review_state === "possible_edition_conflict") return "Edition conflict review";
+  if (batch.duplicate_fragment_review_state === "possible_append_to_canonical") return "Append to existing batch";
   return "Possible duplicate";
 }
 
@@ -173,7 +174,7 @@ export default function BatchRow({
           {secondaryName}
           {quarantineReview && (
             <small className="row-artwork">
-              {batch.file_count} file(s) · {batch.folder_count} folder(s)
+              {batch.file_count} file(s) Â· {batch.folder_count} folder(s)
             </small>
           )}
           {!quarantineReview && batch.artwork_count > 0 && (
