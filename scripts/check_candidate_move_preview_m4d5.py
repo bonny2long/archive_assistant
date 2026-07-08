@@ -82,6 +82,67 @@ def main():
             assert g["target_library"] == "Music/Library"
             assert "Music/Library" in g["destination_preview"]
 
+        def music_album_uses_authoritative_format_destination():
+            destination = PROJECT_ROOT / ".tmp" / "Music" / "Library" / "FLAC" / "Kanye West" / "2013 - Yeezus"
+            b = IngestBatch(
+                source_kind="manual-drop",
+                source_path=str(PROJECT_ROOT / ".tmp" / "m4d5-authoritative-flac"),
+                detected_type="music_album",
+                status="pending_review",
+                confidence=0.95,
+                suggested_destination=str(destination),
+                suggested_metadata={"artist": "Kanye West", "album": "Yeezus", "year": "2013", "format": "FLAC"},
+                metadata_json={
+                    "artist": "Kanye West",
+                    "albumartist": "Kanye West",
+                    "album": "Yeezus",
+                    "title": "Yeezus",
+                    "year": "2013",
+                    "format": "FLAC",
+                    "suggested_destination": str(destination),
+                    "track_count": 1,
+                    "file_count": 1,
+                    "review_type": "music_album",
+                },
+            )
+            db.add(b); db.flush()
+            add_file(b, "Yeezus/01 - On Sight.flac", music_meta(album="Yeezus", artist="Kanye West", title="On Sight"))
+            snapshot_universal_ingestion_boundary(db, b); db.commit()
+            p = build_candidate_move_plan_preview(db, b.id)
+            g = first_group(p)
+            assert g["target_library"] == "Music/Library/FLAC"
+            assert g["destination_preview"] == str(destination)
+
+            mp3_destination = PROJECT_ROOT / ".tmp" / "Music" / "Library" / "MP3" / "Kanye West" / "2008 - 808s & Heartbreak"
+            mp3 = IngestBatch(
+                source_kind="manual-drop",
+                source_path=str(PROJECT_ROOT / ".tmp" / "m4d5-authoritative-mp3"),
+                detected_type="music_album",
+                status="pending_review",
+                confidence=0.95,
+                suggested_destination=str(mp3_destination),
+                suggested_metadata={"artist": "Kanye West", "album": "808s & Heartbreak", "year": "2008", "format": "MP3"},
+                metadata_json={
+                    "artist": "Kanye West",
+                    "albumartist": "Kanye West",
+                    "album": "808s & Heartbreak",
+                    "title": "808s & Heartbreak",
+                    "year": "2008",
+                    "format": "MP3",
+                    "suggested_destination": str(mp3_destination),
+                    "track_count": 1,
+                    "file_count": 1,
+                    "review_type": "music_album",
+                },
+            )
+            db.add(mp3); db.flush()
+            add_file(mp3, "808s/01 - Say You Will.mp3", music_meta(album="808s & Heartbreak", artist="Kanye West", title="Say You Will"))
+            snapshot_universal_ingestion_boundary(db, mp3); db.commit()
+            p = build_candidate_move_plan_preview(db, mp3.id)
+            g = first_group(p)
+            assert g["target_library"] == "Music/Library/MP3"
+            assert g["destination_preview"] == str(mp3_destination)
+
         def music_fragmented():
             b = IngestBatch(source_kind="manual-drop", source_path=str(PROJECT_ROOT / ".tmp" / "m4d5-frag"), detected_type="unknown", status="pending_review", confidence=0.5, metadata_json={})
             db.add(b); db.flush()
@@ -154,6 +215,7 @@ def main():
             assert p["status"] == "not_analyzed"
 
         check("Music-only clean candidate returns music preview", music_clean)
+        check("Music album preview uses authoritative FLAC/MP3 destination", music_album_uses_authoritative_format_destination)
         check("Music-only fragmented batch is identified", music_fragmented)
         check("Mixed music + ebook batch is mixed media", mixed_music_ebook)
         check("Audiobook routes to Audiobooks/Library", lambda: candidate_routes("m4b", "Audiobooks/Library"))

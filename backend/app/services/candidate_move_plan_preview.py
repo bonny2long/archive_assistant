@@ -125,6 +125,28 @@ def _media_type_from_class(media_class: str) -> str:
     return mapping.get(media_class, media_class)
 
 
+def _batch_music_destination(batch: IngestBatch, media_type: str, weak_identity: bool) -> tuple[str, str] | None:
+    if weak_identity or media_type != "music" or batch.detected_type != "music_album":
+        return None
+    metadata = batch.metadata_json or {}
+    destination = str(batch.suggested_destination or metadata.get("suggested_destination") or "").strip()
+    if not destination:
+        return None
+    normalized = destination.replace("\\", "/")
+    format_bucket = str(metadata.get("format") or "").upper().strip()
+    if format_bucket not in {"FLAC", "MP3"}:
+        parts = {part.upper() for part in Path(normalized).parts}
+        if "FLAC" in parts:
+            format_bucket = "FLAC"
+        elif "MP3" in parts:
+            format_bucket = "MP3"
+    if format_bucket not in {"FLAC", "MP3"}:
+        return None
+    expected = f"Music/Library/{format_bucket}"
+    if expected not in normalized:
+        return None
+    return expected, destination
+
 def _destination(media_type: str, title: str | None, creator: str | None, year: str | None, key: str, weak_identity: bool) -> tuple[str, str]:
     if weak_identity:
         weak = _safe_part(title or creator or key, "Weak Identity")
@@ -226,6 +248,9 @@ def build_candidate_move_plan_preview(db: Session, batch_id: int, *, snapshot: b
         source_fragment_names = sorted({Path(member.relative_path).parts[0] if Path(member.relative_path).parts else "." for member in candidate_members})
         weak_identity = _is_source_chunk_name(title) or _is_source_chunk_name(creator) or _is_source_chunk_name(candidate.candidate_key)
         target_library, destination_preview = _destination(media_type, title, creator, year, candidate.candidate_key, weak_identity)
+        authoritative_destination = _batch_music_destination(batch, media_type, weak_identity)
+        if authoritative_destination is not None:
+            target_library, destination_preview = authoritative_destination
         warnings: list[str] = []
         requires_review = False
         blocked = False
