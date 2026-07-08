@@ -382,7 +382,9 @@ def _library_album_destination(album: dict[str, Any]) -> str:
     title = safe_path_part(album.get("album") or album.get("title") or "Unknown Album", "Unknown Album")
     year = safe_path_part(album.get("year") or "", "").strip()
     album_folder = f"{year} - {title}" if year else title
-    return str(Path(settings.music_mp3_dir) / artist / album_folder)
+    format_value = str(album.get("format") or "").strip().upper()
+    root = settings.music_flac_dir if format_value == "FLAC" else settings.music_mp3_dir
+    return str(Path(root) / artist / album_folder)
 
 
 def _build_album_batch_metadata(
@@ -403,8 +405,12 @@ def _build_album_batch_metadata(
     first_meta = first_audio.metadata_json or {} if first_audio else {}
     embedded = _embedded_fields(first_audio) if first_audio else {}
 
+    manual_artist = album.get("artist") or album.get("album_artist") if candidate is None else None
+    manual_title = album.get("album") or album.get("title") if candidate is None else None
+    manual_year = album.get("year") if candidate is None else None
     artist = _first_non_empty(
         _candidate_artist(candidate, identity_override) if candidate else None,
+        manual_artist,
         embedded.get("album_artist"),
         embedded.get("albumartist"),
         first_meta.get("albumartist"),
@@ -416,6 +422,7 @@ def _build_album_batch_metadata(
     )
     title = _first_non_empty(
         _candidate_title(candidate, identity_override) if candidate else None,
+        manual_title,
         embedded.get("album"),
         first_meta.get("album"),
         album.get("album"),
@@ -424,6 +431,7 @@ def _build_album_batch_metadata(
     )
     year = _first_non_empty(
         _candidate_year(candidate, identity_override) if candidate else None,
+        manual_year,
         first_meta.get("year"),
         embedded.get("date"),
         first_meta.get("date"),
@@ -434,6 +442,8 @@ def _build_album_batch_metadata(
         year = year[:4]
 
     genre = _first_non_empty(
+        album.get("genre") if candidate is None else None,
+        album.get("primary_genre") if candidate is None else None,
         first_meta.get("genre"),
         embedded.get("genre"),
         album.get("genre"),
@@ -441,6 +451,8 @@ def _build_album_batch_metadata(
         fallback="Unknown",
     )
     primary_genre = _first_non_empty(
+        album.get("primary_genre") if candidate is None else None,
+        album.get("genre") if candidate is None else None,
         first_meta.get("primary_genre"),
         album.get("primary_genre"),
         genre,
@@ -580,6 +592,166 @@ def _resolve_split_album_and_files(
             "The batch may have already been partially split."
         )
     return album, source_folder, files_to_move
+
+
+def _existing_split_child_id(db: Session, split_history: list[dict[str, Any]], source_folder: str) -> int | None:
+    target = _norm_match(source_folder)
+    for item in split_history:
+        if not isinstance(item, dict):
+            continue
+        if _norm_match(item.get("source_folder")) != target:
+            continue
+        child_id = int(item.get("child_batch_id") or 0)
+        if child_id and db.get(IngestBatch, child_id) is not None:
+            return child_id
+    return None
+
+
+def execute_split_discography_releases(db: Session, batch_id: int) -> dict[str, Any]:
+    parent_batch = db.query(IngestBatch).options(selectinload(IngestBatch.files)).filter(IngestBatch.id == batch_id).first()
+    if parent_batch is None:
+        raise ValueError("Batch not found")
+    if parent_batch.detected_type != "music_discography":
+        raise ValueError("Only music discography batches can create release child batches")
+    if parent_batch.status in {"moved", "move_failed", "merged"}:
+        raise ValueError("Moved or closed batches cannot create child batches")
+
+    timestamp = now_utc()
+    batch_metadata = deepcopy(parent_batch.metadata_json or {})
+    albums = [item for item in batch_metadata.get("albums", []) if isinstance(item, dict)]
+    included_albums = [
+        album for album in albums
+        if album.get("include", True) is not False and album.get("release_type") != "exclude"
+    ]
+    split_history = batch_metadata.get("split_history") if isinstance(batch_metadata.get("split_history"), list) else []
+    if not included_albums:
+        existing_child_ids = [
+            int(item.get("child_batch_id") or 0)
+            for item in split_history
+            if isinstance(item, dict) and item.get("child_batch_id") and db.get(IngestBatch, int(item.get("child_batch_id") or 0)) is not None
+        ]
+        if existing_child_ids:
+            remaining_parent_file_count = db.query(IngestFile).filter(IngestFile.batch_id == parent_batch.id).count()
+            return {
+                "parent_batch_id": parent_batch.id,
+                "created_child_batch_ids": [],
+                "existing_child_batch_ids": existing_child_ids,
+                "created_count": 0,
+                "skipped_count": len(existing_child_ids),
+                "remaining_parent_file_count": remaining_parent_file_count,
+                "parent_status": parent_batch.status,
+                "parent_review_state": batch_metadata.get("parent_review_state") or parent_batch.status,
+                "message": "Included release child batches already exist.",
+            }
+        raise ValueError("No included discography releases are available to create child batches.")
+
+    created_child_batch_ids: list[int] = []
+    skipped_child_batch_ids: list[int] = []
+    skipped_sources: list[str] = []
+    split_sources: set[str] = set()
+
+    for album in included_albums:
+        source_folder = _album_source_folder(album)
+        if not source_folder:
+            skipped_sources.append(str(album.get("album") or album.get("title") or "Unknown release"))
+            continue
+
+        existing_child_id = _existing_split_child_id(db, split_history, source_folder)
+        if existing_child_id is not None:
+            skipped_child_batch_ids.append(existing_child_id)
+            split_sources.add(_norm_match(source_folder))
+            continue
+
+        files_to_move = _files_for_source_folder(parent_batch.files, source_folder)
+        if not files_to_move:
+            skipped_sources.append(source_folder)
+            continue
+
+        album_metadata = _build_album_batch_metadata(
+            album=album,
+            parent_batch=parent_batch,
+            files_to_move=files_to_move,
+            source_folder=source_folder,
+            candidate=None,
+            identity_override=None,
+        )
+        child_batch = IngestBatch(
+            source_kind=parent_batch.source_kind,
+            source_path=parent_batch.source_path,
+            detected_type="music_album",
+            status="pending_review",
+            confidence=max(parent_batch.confidence or 0.0, 0.7),
+            suggested_destination=_library_album_destination(album_metadata),
+            suggested_metadata=_suggested_metadata(album_metadata),
+            metadata_json=album_metadata,
+            metadata_confirmed=False,
+            created_at=timestamp,
+            updated_at=timestamp,
+        )
+        db.add(child_batch)
+        db.flush()
+
+        for ingest_file in files_to_move:
+            ingest_file.batch_id = child_batch.id
+
+        split_history.append({
+            "candidate_id": None,
+            "child_batch_id": child_batch.id,
+            "source_folder": source_folder,
+            "album": album_metadata.get("album") or album_metadata.get("title"),
+            "artist": album_metadata.get("artist") or album_metadata.get("album_artist"),
+            "moved_file_count": len(files_to_move),
+            "split_at": timestamp.isoformat(),
+            "source": "discography_editor_release_split",
+        })
+        created_child_batch_ids.append(child_batch.id)
+        split_sources.add(_norm_match(source_folder))
+
+    if not created_child_batch_ids and not skipped_child_batch_ids:
+        raise ValueError(
+            "No child batches were created. Make sure each included release has a source folder with attached files."
+        )
+
+    remaining_albums = [
+        album for album in albums
+        if _norm_match(_album_source_folder(album)) not in split_sources
+    ]
+    batch_metadata["albums"] = remaining_albums
+    batch_metadata["album_count"] = len(remaining_albums)
+    batch_metadata["release_count"] = len(remaining_albums)
+    batch_metadata["split_history"] = split_history
+    db.flush()
+    batch_metadata["materialized_child_count"] = len(split_history)
+    batch_metadata["child_candidate_count"] = len(split_history)
+    batch_metadata["remaining_parent_file_count"] = db.query(IngestFile).filter(IngestFile.batch_id == parent_batch.id).count()
+    batch_metadata["parent_review_state"] = "split_complete" if not remaining_albums and batch_metadata["remaining_parent_file_count"] == 0 else "parent_partially_materialized"
+    parent_batch.status = "split_complete" if batch_metadata["parent_review_state"] == "split_complete" else "pending_review"
+    parent_batch.metadata_json = batch_metadata
+    parent_batch.updated_at = timestamp
+    db.commit()
+    db.refresh(parent_batch)
+
+    created_count = len(created_child_batch_ids)
+    skipped_count = len(skipped_child_batch_ids) + len(skipped_sources)
+    message = (
+        f"Created {created_count} child batch{'es' if created_count != 1 else ''} from included releases."
+        if created_count
+        else "Included release child batches already exist."
+    )
+    if skipped_sources:
+        message += f" {len(skipped_sources)} release{'s' if len(skipped_sources) != 1 else ''} had no attached files and stayed on the parent."
+
+    return {
+        "parent_batch_id": parent_batch.id,
+        "created_child_batch_ids": created_child_batch_ids,
+        "existing_child_batch_ids": skipped_child_batch_ids,
+        "created_count": created_count,
+        "skipped_count": skipped_count,
+        "remaining_parent_file_count": batch_metadata["remaining_parent_file_count"],
+        "parent_status": parent_batch.status,
+        "parent_review_state": batch_metadata["parent_review_state"],
+        "message": message,
+    }
 
 
 def execute_split_candidate(db: Session, batch_id: int, candidate_id: int) -> dict[str, Any]:

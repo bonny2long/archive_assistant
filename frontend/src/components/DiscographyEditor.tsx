@@ -13,6 +13,7 @@ type Props = {
   batch: BatchSummary;
   saving: boolean;
   onSave: (update: DiscographyMetadataUpdate) => Promise<void>;
+  onCreateChildBatches?: (update: DiscographyMetadataUpdate) => Promise<void>;
   onConfirm: () => Promise<void>;
   onClose: () => void;
 };
@@ -53,8 +54,12 @@ function sanitizePathPart(value: string): string {
   return value.replace(/[<>:"/\\|?*]/g, "_").trim();
 }
 
+function batchAlbums(batch: BatchSummary) {
+  return batch.albums ?? [];
+}
+
 function initialAlbums(batch: BatchSummary): DiscographyAlbumUpdate[] {
-  return batch.albums.map((album) => {
+  return batchAlbums(batch).map((album) => {
     const releaseType = album.release_type
       ?? (album.track_count === 1 ? "single" : "album");
     return {
@@ -92,6 +97,7 @@ export default function DiscographyEditor({
   batch,
   saving,
   onSave,
+  onCreateChildBatches,
   onConfirm,
   onClose,
 }: Props) {
@@ -112,12 +118,12 @@ export default function DiscographyEditor({
     [artist],
   );
   const trackCount = useMemo(
-    () => batch.albums.reduce((total, album) => total + album.track_count, 0),
-    [batch.albums],
+    () => batchAlbums(batch).reduce((total, album) => total + album.track_count, 0),
+    [batch],
   );
   const albumsBySource = useMemo(
-    () => new Map(batch.albums.map((album) => [album.source_folder, album])),
-    [batch.albums],
+    () => new Map(batchAlbums(batch).map((album) => [album.source_folder, album])),
+    [batch],
   );
   const visibleAlbums = albums.filter((album) => {
     if (filter === "included") return album.include;
@@ -132,6 +138,15 @@ export default function DiscographyEditor({
       (!album.include || album.album.trim().length > 0 || album.accepted_unknown_album_title)
       && (!album.year || /^(19|20)\d{2}$/.test(album.year))
     ));
+  const includedAlbumCount = albums.filter((album) => album.include && album.release_type !== "exclude").length;
+
+  const buildUpdate = (): DiscographyMetadataUpdate => ({
+    artist: artist.trim() || "Unknown Artist",
+    primary_genre: primaryGenre.trim() || null,
+    albums,
+    accepted_unknown_discography_artist: acceptedUnknownArtist,
+    lookup_later: lookupLater,
+  });
 
   const updateAlbum = (
     sourceFolder: string,
@@ -151,13 +166,7 @@ export default function DiscographyEditor({
         onMouseDown={(event) => event.stopPropagation()}
         onSubmit={(event) => {
           event.preventDefault();
-          if (valid) void onSave({
-            artist: artist.trim() || "Unknown Artist",
-            primary_genre: primaryGenre.trim() || null,
-            albums,
-            accepted_unknown_discography_artist: acceptedUnknownArtist,
-            lookup_later: lookupLater,
-          });
+          if (valid) void onSave(buildUpdate());
         }}
       >
         <div className="discography-editor__header">
@@ -414,6 +423,18 @@ export default function DiscographyEditor({
           </span>
           <div className="discography-editor__footer-actions">
             <button type="button" className="btn" disabled={saving} onClick={onClose}>Cancel</button>
+            {onCreateChildBatches && (
+              <button
+                type="button"
+                className="btn"
+                disabled={saving || !valid || includedAlbumCount === 0}
+                title="Saves these corrections, then creates separate review batches from the included releases. Files are not moved to the final library."
+                onClick={() => void onCreateChildBatches(buildUpdate())}
+              >
+                <i className={`ti ti-${saving ? "loader-2 spinner" : "git-branch"}`} />
+                Save and create child batches
+              </button>
+            )}
             <button type="submit" className="btn btn--green" disabled={saving || !valid}>
               <i className={`ti ti-${saving ? "loader-2 spinner" : "device-floppy"}`} />
               Save discography corrections

@@ -72,6 +72,8 @@ def build_batch_display_fields(batch: IngestBatch, parent_summary: dict | None =
     detected_type = batch.detected_type
     if parent_summary and parent_summary.get("is_parent_review_container"):
         candidate_group_count = int(parent_summary.get("candidate_group_count") or 0)
+        parent_state = parent_summary.get("parent_review_state")
+        edit_kind = "music_discography" if detected_type == "music_discography" and parent_state == "parent_partially_materialized" else None
         return {
             "media_category": "review",
             "media_label": _parent_review_media_label(detected_type),
@@ -79,7 +81,7 @@ def build_batch_display_fields(batch: IngestBatch, parent_summary: dict | None =
             "secondary_name": _parent_review_secondary_name(parent_summary),
             "item_label": "candidate groups",
             "item_count": candidate_group_count,
-            "edit_kind": None,
+            "edit_kind": edit_kind,
         }
     if detected_type == "music_discography":
         release_count = int(

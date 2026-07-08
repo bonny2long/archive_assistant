@@ -403,8 +403,15 @@ def materialize_approved_candidates(db: Session, batch_id: int) -> dict[str, Any
         metadata["blocked_candidate_count"] = len(blocked_candidate_ids)
         metadata["excluded_candidate_count"] = len(excluded_candidate_ids)
         metadata["review_later_candidate_count"] = len(review_later_candidate_ids)
+        remaining_parent_file_count = db.query(IngestFile).filter(IngestFile.batch_id == parent_batch.id).count()
+        metadata["remaining_parent_file_count"] = remaining_parent_file_count
         metadata["unresolved_candidate_count"] = len(unresolved_candidate_ids)
-        all_candidates_materialized = metadata["materialized_child_count"] >= len(candidate_id_set)
+        if remaining_parent_file_count > 0 and metadata["unresolved_candidate_count"] == 0:
+            metadata["unresolved_candidate_count"] = 1
+        all_candidates_materialized = (
+            metadata["materialized_child_count"] >= len(candidate_id_set)
+            and remaining_parent_file_count == 0
+        )
         parent_batch.status = PARENT_SPLIT_COMPLETE if all_candidates_materialized else "pending_review"
         metadata["parent_review_state"] = PARENT_SPLIT_COMPLETE if all_candidates_materialized else PARENT_PARTIALLY_MATERIALIZED
         parent_batch.metadata_json = metadata

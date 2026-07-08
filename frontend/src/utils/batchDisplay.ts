@@ -293,7 +293,8 @@ export function getBatchItemText(batch: DisplayBatch): string {
 }
 
 export function getBatchEditKind(batch: BatchSummary): string | null {
-  if (batch.edit_kind !== undefined) return batch.edit_kind;
+  if (batch.edit_kind) return batch.edit_kind;
+  if (batch.edit_kind === null && batch.detected_type !== "music_discography") return null;
   if (batch.detected_type === "video_movie") return "movie";
   if (batch.detected_type === "video_tv_show") return "tv_show";
   if (batch.detected_type === "music_discography") return "music_discography";

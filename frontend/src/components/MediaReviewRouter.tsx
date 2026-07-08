@@ -24,6 +24,7 @@ type Props = {
   saving: boolean;
   onMetadataSave: (update: BatchMetadataUpdate) => Promise<void>;
   onDiscographySave: (update: DiscographyMetadataUpdate) => Promise<void>;
+  onDiscographyCreateChildren: (update: DiscographyMetadataUpdate) => Promise<void>;
   onMovieSave: (update: MovieMetadataUpdate) => Promise<void>;
   onMovieCollectionSave: (update: MovieCollectionReviewUpdate) => Promise<void>;
   onBookSave: (update: BookMetadataUpdate) => Promise<void>;
@@ -40,6 +41,7 @@ export default function MediaReviewRouter({
   saving,
   onMetadataSave,
   onDiscographySave,
+  onDiscographyCreateChildren,
   onMovieSave,
   onMovieCollectionSave,
   onBookSave,
@@ -79,6 +81,7 @@ export default function MediaReviewRouter({
         batch={batch}
         saving={saving}
         onSave={onDiscographySave}
+        onCreateChildBatches={onDiscographyCreateChildren}
         onConfirm={onConfirm}
         onClose={onClose}
       />

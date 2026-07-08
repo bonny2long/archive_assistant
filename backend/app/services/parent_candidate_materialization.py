@@ -4,7 +4,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.models.archive import IngestBatch
+from app.models.archive import IngestBatch, IngestFile
 from app.models.media_metadata import MediaIdentityCandidate, UniversalIngestionReviewAction
 
 
@@ -43,6 +43,7 @@ def build_parent_candidate_summary(db: Session | None, batch: IngestBatch) -> di
     if db is None:
         return empty_parent_candidate_summary()
 
+    remaining_parent_file_count = db.query(IngestFile).filter(IngestFile.batch_id == batch.id).count()
     candidate_ids = [
         candidate_id
         for (candidate_id,) in db.query(MediaIdentityCandidate.id)
@@ -63,19 +64,23 @@ def build_parent_candidate_summary(db: Session | None, batch: IngestBatch) -> di
             or metadata.get("candidate_group_count")
             or 0
         )
-        split_count = candidate_group_count or materialized_count or fallback_count
+        split_count = max(candidate_group_count, materialized_count, fallback_count)
+        has_remaining_parent_files = remaining_parent_file_count > 0
+        unresolved_remainder_count = 1 if has_remaining_parent_files else 0
+        parent_review_state = PARENT_PARTIALLY_MATERIALIZED if has_remaining_parent_files else PARENT_SPLIT_COMPLETE
+        displayed_materialized_count = materialized_count or (0 if has_remaining_parent_files else split_count)
         return {
-            "candidate_group_count": split_count,
+            "candidate_group_count": max(split_count, displayed_materialized_count + unresolved_remainder_count),
             "approved_candidate_count": 0,
             "excluded_candidate_count": 0,
             "blocked_candidate_count": 0,
             "review_later_candidate_count": 0,
-            "unresolved_candidate_count": 0,
-            "materialized_child_count": split_count,
-            "child_candidate_count": split_count,
-            "remaining_candidate_count": 0,
+            "unresolved_candidate_count": unresolved_remainder_count,
+            "materialized_child_count": displayed_materialized_count,
+            "child_candidate_count": displayed_materialized_count,
+            "remaining_candidate_count": unresolved_remainder_count,
             "needs_materialization": False,
-            "parent_review_state": PARENT_SPLIT_COMPLETE,
+            "parent_review_state": parent_review_state,
             "is_parent_review_container": True,
         }
     if candidate_group_count <= 1:

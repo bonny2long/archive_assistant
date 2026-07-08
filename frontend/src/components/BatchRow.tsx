@@ -143,7 +143,12 @@ export default function BatchRow({
   const year = batch.year ?? "-";
   const percent = Math.round((batch.confidence ?? 0) * 100);
   const parentReviewContainer = isParentReviewContainer(batch);
-  const splitCompleteParent = parentReviewContainer && batch.parent_review_state === "split_complete";
+  const hasDiscographyRemainderReview = batch.detected_type === "music_discography"
+    && batch.status === "split_complete"
+    && ((batch.file_count ?? 0) > 0 || (batch.track_count ?? 0) > 0);
+  const splitCompleteParent = parentReviewContainer
+    && batch.parent_review_state === "split_complete"
+    && !hasDiscographyRemainderReview;
   const canOpenWorkspace = batch.status !== "moved" && !quarantineReview && !splitCompleteParent;
   const duplicateLabel = duplicateFragmentLabel(batch);
   const activeDuplicateReview = hasActiveDuplicateFragmentReview(batch);

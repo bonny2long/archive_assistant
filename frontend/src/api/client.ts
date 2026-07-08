@@ -26,6 +26,7 @@ import type {
   ScanMusicResponse,
   ScanJobStatus,
   SplitCandidateResult,
+  SplitDiscographyReleasesResult,
   MaterializeApprovedCandidatesResult,
   SystemPathsResponse,
   SystemTimeResponse,
@@ -131,6 +132,8 @@ export const api = {
     request<CandidateMovePreview>(`/batches/${id}/candidate-move-preview${snapshot ? "?snapshot=true" : ""}`),
   splitCandidate: (id: number, candidateId: number) =>
     request<SplitCandidateResult>(`/batches/${id}/split-candidate`, "POST", { candidate_id: candidateId }),
+  splitDiscographyReleases: (id: number) =>
+    request<SplitDiscographyReleasesResult>(`/batches/${id}/split-discography-releases`, "POST", undefined, 180000),
   materializeApprovedCandidates: (id: number) =>
     request<MaterializeApprovedCandidatesResult>(`/batches/${id}/materialize-approved-candidates`, "POST", undefined, 180000),
   getBatchMoves: (id: number) => request<BatchMoveSummary>(`/batches/${id}/moves`),

@@ -20,6 +20,7 @@ from app.db.session import Base  # noqa: E402
 from app.models.archive import IngestBatch, IngestFile  # noqa: E402
 from app.models.media_metadata import CandidateMember, MediaIdentityCandidate, UniversalIngestionReviewAction  # noqa: E402
 from app.services.approved_candidate_materialization import materialize_approved_candidates  # noqa: E402
+from app.services.batch_split import execute_split_discography_releases  # noqa: E402
 from app.services.batch_display import build_batch_display_fields  # noqa: E402
 from app.services.mover import move_approved_batches  # noqa: E402
 from app.services.parent_candidate_materialization import build_parent_candidate_summary  # noqa: E402
@@ -236,6 +237,50 @@ def test_split_complete_parent_without_candidates_stays_container(db) -> None:
     assert display["item_count"] != 63
 
 
+def test_split_complete_parent_with_remaining_files_requires_remainder_review(db) -> None:
+    parent = IngestBatch(
+        source_kind="manual-drop",
+        source_path=str(PROJECT_ROOT / ".tmp" / "drive-download-20260628T012539Z-3-010"),
+        detected_type="music_discography",
+        status="split_complete",
+        confidence=1.0,
+        metadata_json={
+            "type": "music_discography",
+            "artist": "drive-download-20260628T012539Z-3-010",
+            "release_count": 3,
+            "album_count": 3,
+            "track_count": 63,
+            "materialization_history": [
+                {"candidate_id": 101, "child_batch_id": 201},
+            ],
+        },
+    )
+    db.add(parent)
+    db.flush()
+    add_album_file(parent, album_row("Remaining Discography", "2024"), 1, role="discography_track")
+    add_album_file(parent, album_row("Remaining Discography", "2024"), 2, role="discography_track")
+    db.commit()
+    db.refresh(parent)
+
+    summary = build_parent_candidate_summary(db, parent)
+    assert summary["is_parent_review_container"] is True
+    assert summary["parent_review_state"] == "parent_partially_materialized"
+    assert summary["candidate_group_count"] == 3
+    assert summary["materialized_child_count"] == 1
+    assert summary["child_candidate_count"] == 1
+    assert summary["unresolved_candidate_count"] == 1
+    assert summary["remaining_candidate_count"] == 1
+    assert summary["needs_materialization"] is False
+
+    display = build_batch_display_fields(parent, summary)
+    assert display["media_label"] == "Discography Source"
+    assert display["secondary_name"] == "1 child batch created, 1 unresolved"
+    assert display["item_label"] == "candidate groups"
+    assert display["item_count"] == 3
+    assert display["item_count"] != 63
+    assert display["edit_kind"] == "music_discography"
+
+
 def test_partial_materialization_keeps_unresolved_parent_remainder(db) -> None:
     parent = IngestBatch(
         source_kind="manual-drop",
@@ -320,6 +365,67 @@ def test_partial_materialization_keeps_unresolved_parent_remainder(db) -> None:
     moved, errors = move_approved_batches(db)
     assert moved == 0
     assert any("parent review container" in error for error in errors)
+
+def test_discography_editor_rows_create_child_batches_without_candidates(db) -> None:
+    releases = [
+        {**album_row("Graduation", "2007"), "artist": "Kanye West", "source_folder": "Kanye West - Discography"},
+        {**album_row("Tha Block Is Hot", "1999"), "artist": "Lil Wayne", "source_folder": "Lil Wayne - Tha Block Is Hot"},
+        {**album_row("Trilogy - House Of Balloons", "2012"), "artist": "The Weeknd", "source_folder": "The Weeknd Discography"},
+    ]
+    parent = IngestBatch(
+        source_kind="manual-drop",
+        source_path=str(PROJECT_ROOT / ".tmp" / "drive-download-20260628T012539Z-3-010"),
+        detected_type="music_discography",
+        status="pending_review",
+        confidence=1.0,
+        suggested_destination=str(PROJECT_ROOT / ".tmp" / "Music" / "Discographies" / "drive-download-20260628T012539Z-3-010"),
+        suggested_metadata={"artist": "drive-download-20260628T012539Z-3-010"},
+        metadata_json={
+            "type": "music_discography",
+            "artist": "drive-download-20260628T012539Z-3-010",
+            "review_type": "music_discography",
+            "review_mode": "item_list",
+            "albums": [
+                {**release, "format": "FLAC", "include": True, "release_type": "album", "warnings": ["folder_artist_mismatch"]}
+                for release in releases
+            ],
+            "album_count": 3,
+            "release_count": 3,
+            "track_count": 3,
+        },
+    )
+    db.add(parent)
+    db.flush()
+    for index, release in enumerate(releases, start=1):
+        add_album_file(parent, release, index, role="discography_track")
+    db.commit()
+    db.refresh(parent)
+
+    result = execute_split_discography_releases(db, parent.id)
+    assert result["created_count"] == 3
+    assert result["skipped_count"] == 0
+    assert result["parent_status"] == "split_complete"
+    assert result["parent_review_state"] == "split_complete"
+    assert result["remaining_parent_file_count"] == 0
+
+    db.refresh(parent)
+    assert parent.status == "split_complete"
+    assert db.query(IngestFile).filter(IngestFile.batch_id == parent.id).count() == 0
+    children = [db.get(IngestBatch, child_id) for child_id in result["created_child_batch_ids"]]
+    assert {child.metadata_json["artist"] for child in children if child is not None} == {"Kanye West", "Lil Wayne", "The Weeknd"}
+    assert {child.metadata_json["album"] for child in children if child is not None} == {"Graduation", "Tha Block Is Hot", "Trilogy - House Of Balloons"}
+    assert all(child.detected_type == "music_album" for child in children if child is not None)
+    assert all(child.status == "pending_review" for child in children if child is not None)
+    assert all("Music" in (child.suggested_destination or "") and "FLAC" in (child.suggested_destination or "") for child in children if child is not None)
+
+    second = execute_split_discography_releases(db, parent.id)
+    assert second["created_count"] == 0
+    assert set(second["existing_child_batch_ids"]) == set(result["created_child_batch_ids"])
+    assert db.query(IngestBatch).filter(
+        IngestBatch.detected_type == "music_album",
+        IngestBatch.source_path == parent.source_path,
+    ).count() == 3
+
 
 def test_failed_materialization_does_not_complete_parent(db) -> None:
     good_release = album_row("Good Candidate", "2024")
@@ -413,7 +519,9 @@ def main() -> None:
         test_multi_candidate_parent_is_container(db)
         test_materializes_approved_candidates_once(db)
         test_split_complete_parent_without_candidates_stays_container(db)
+        test_split_complete_parent_with_remaining_files_requires_remainder_review(db)
         test_partial_materialization_keeps_unresolved_parent_remainder(db)
+        test_discography_editor_rows_create_child_batches_without_candidates(db)
         test_failed_materialization_does_not_complete_parent(db)
         test_single_item_batch_stays_normal(db)
         print("PASS - AA-QA1-FIX2.2 candidate-member-first materialization verified")

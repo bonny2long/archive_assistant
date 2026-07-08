@@ -42,6 +42,7 @@ from app.schemas.archive import (
     RoutingDecisionOut,
     SplitCandidateRequest,
     SplitCandidateResponse,
+    SplitDiscographyReleasesResponse,
 )
 from app.services.dev_reset import (
     DevResetBlockedError,
@@ -89,7 +90,7 @@ from app.services.book_metadata import (
 from app.services.title_display import clean_display_title, destination_title
 from app.services.metadata_quality_gate import get_batch_metadata_quality
 from app.services.candidate_move_plan_preview import build_candidate_move_plan_preview
-from app.services.batch_split import execute_split_candidate
+from app.services.batch_split import execute_split_candidate, execute_split_discography_releases
 from app.services.approved_candidate_materialization import materialize_approved_candidates
 from app.services.universal_review_routing import get_batch_routing_decision
 from app.services.universal_ingestion_review import (
@@ -129,6 +130,24 @@ def _music_track_completeness_blocker(batch: IngestBatch) -> str | None:
     status = metadata.get("completeness_status") or (metadata.get("track_completeness") or {}).get("completeness_status")
     if status in {"incomplete", "conflict"}:
         return "Music album has missing or conflicting tracks before approval."
+    return None
+
+
+def _discography_child_batch_blocker(batch: IngestBatch) -> str | None:
+    if batch.detected_type != "music_discography":
+        return None
+    metadata = batch.metadata_json or {}
+    albums = [item for item in metadata.get("albums", []) if isinstance(item, dict)]
+    included = [item for item in albums if item.get("include", True) is not False and item.get("release_type") != "exclude"]
+    if len(included) <= 1:
+        return None
+    source_name = Path(batch.source_path or "").name.casefold()
+    artist = str(metadata.get("artist") or "").strip().casefold()
+    has_source_identity = artist.startswith("drive-download-") or source_name.startswith("drive-download-")
+    has_mismatch = any("folder_artist_mismatch" in (item.get("warnings") or []) for item in included)
+    has_partial_split = bool(metadata.get("split_history") or metadata.get("materialization_history"))
+    if has_source_identity or has_mismatch or has_partial_split:
+        return "Create child batches from included discography releases before approving this parent."
     return None
 
 @router.get("/health")
@@ -586,6 +605,16 @@ def split_batch_candidate(
         return execute_split_candidate(db, batch_id, request.candidate_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/batches/{batch_id}/split-discography-releases", response_model=SplitDiscographyReleasesResponse)
+def split_batch_discography_releases(batch_id: int, db: Session = Depends(get_db)):
+    try:
+        return execute_split_discography_releases(db, batch_id)
+    except ValueError as exc:
+        detail = str(exc)
+        status_code = 404 if detail == "Batch not found" else 400
+        raise HTTPException(status_code=status_code, detail=detail) from exc
 
 
 @router.post("/batches/{batch_id}/materialize-approved-candidates", response_model=MaterializeApprovedCandidatesResponse)
@@ -1978,6 +2007,13 @@ def approve_batch(batch_id: int, db: Session = Depends(get_db)):
             status=batch.status,
             message=completeness_blocker,
         )
+    discography_blocker = _discography_child_batch_blocker(batch)
+    if discography_blocker:
+        return ApproveResponse(
+            batch_id=batch.id,
+            status=batch.status,
+            message=discography_blocker,
+        )
 
     meta = build_review_state(batch.detected_type, batch.metadata_json)
     if meta["blocking_review_items"]:
@@ -2040,6 +2076,8 @@ def approve_selected_batches(
             reason = "duplicate_fragment_review_required"
         elif _music_track_completeness_blocker(batch):
             reason = "music_track_completeness_required"
+        elif _discography_child_batch_blocker(batch):
+            reason = "discography_child_batches_required"
         elif metadata["blocking_review_items"]:
             reason = "blocking_review_items"
         elif batch.status in {"needs_metadata_review", "metadata_recovery"}:

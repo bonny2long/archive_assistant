@@ -319,6 +319,18 @@ class MaterializeApprovedCandidatesResponse(BaseModel):
     message: str
 
 
+class SplitDiscographyReleasesResponse(BaseModel):
+    parent_batch_id: int
+    created_child_batch_ids: list[int] = Field(default_factory=list)
+    existing_child_batch_ids: list[int] = Field(default_factory=list)
+    created_count: int = 0
+    skipped_count: int = 0
+    remaining_parent_file_count: int = 0
+    parent_status: str
+    parent_review_state: str
+    message: str
+
+
 
 class DuplicateFragmentBatchOut(BaseModel):
     batch_id: int

@@ -1128,3 +1128,15 @@ export interface MaterializeApprovedCandidatesResult {
     parent_review_state: string;
     message: string;
   }
+
+export interface SplitDiscographyReleasesResult {
+  parent_batch_id: number;
+  created_child_batch_ids: number[];
+  existing_child_batch_ids: number[];
+  created_count: number;
+  skipped_count: number;
+  remaining_parent_file_count: number;
+  parent_status: string;
+  parent_review_state: string;
+  message: string;
+}

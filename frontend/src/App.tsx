@@ -491,6 +491,26 @@ export default function App() {
     }
   };
 
+  const handleDiscographyCreateChildren = async (update: DiscographyMetadataUpdate) => {
+    if (!editingBatch) return;
+    const batchId = editingBatch.id;
+    setSavingMetadata(true);
+    try {
+      await api.updateDiscographyMetadata(batchId, update);
+      const result = await api.splitDiscographyReleases(batchId);
+      showToast(result.message);
+      setEditingBatch(null);
+      await loadBatches();
+    } catch (saveError: unknown) {
+      showToast(
+        saveError instanceof Error ? saveError.message : "Discography child batch creation failed",
+        "error",
+      );
+    } finally {
+      setSavingMetadata(false);
+    }
+  };
+
   const handleMovieSave = async (update: MovieMetadataUpdate) => {
     if (!editingBatch) return;
     setSavingMetadata(true);
@@ -988,6 +1008,7 @@ export default function App() {
           saving={savingMetadata}
           onMetadataSave={handleMetadataSave}
           onDiscographySave={handleDiscographySave}
+          onDiscographyCreateChildren={handleDiscographyCreateChildren}
           onMovieSave={handleMovieSave}
           onMovieCollectionSave={handleMovieCollectionSave}
           onBookSave={handleBookSave}
