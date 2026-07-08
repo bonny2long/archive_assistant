@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.time import now_utc
 from app.models.archive import IngestBatch, IngestFile
 from app.services.parent_candidate_materialization import build_parent_candidate_summary
 
@@ -16,9 +17,11 @@ DUPLICATE_STATE_POSSIBLE_FRAGMENT = "possible_fragment"
 DUPLICATE_STATE_POSSIBLE_EDITION_CONFLICT = "possible_edition_conflict"
 DUPLICATE_REVIEWED_STATES = {
     "reviewed_keep_separate",
+    "reviewed_merged",
     "reviewed_merge_required",
     "reviewed_duplicate",
     "reviewed_blocked",
+    "reviewed_later",
 }
 BLOCKING_DUPLICATE_STATES = {
     DUPLICATE_STATE_POSSIBLE_DUPLICATE,
@@ -27,6 +30,7 @@ BLOCKING_DUPLICATE_STATES = {
     "reviewed_merge_required",
     "reviewed_duplicate",
     "reviewed_blocked",
+    "reviewed_later",
 }
 REVIEWABLE_BATCH_STATUSES = {
     "pending_review",
@@ -34,6 +38,18 @@ REVIEWABLE_BATCH_STATUSES = {
     "metadata_recovery",
     "approved",
 }
+DUPLICATE_RESOLUTION_ACTIONS = {
+    "keep_separate",
+    "merge_into_one_batch",
+    "mark_duplicate",
+    "review_later",
+    "block_move",
+}
+
+
+class DuplicateFragmentResolutionError(ValueError):
+    pass
+
 EDITION_TOKENS = {
     "anniversary",
     "clean",
@@ -179,6 +195,10 @@ def _has_missing_file_ownership(batch: IngestBatch) -> bool:
     metadata = batch.metadata_json or {}
     return _item_count(batch, metadata) > 0 and len(batch.files or []) == 0
 
+def _file_formats(batch: IngestBatch) -> list[str]:
+    formats = sorted({(file.extension or "").lower().lstrip(".") for file in (batch.files or []) if file.extension})
+    return formats
+
 def _batch_row(batch: IngestBatch) -> dict[str, Any]:
     metadata = batch.metadata_json or {}
     item_count = _item_count(batch, metadata)
@@ -316,7 +336,7 @@ def build_duplicate_fragment_review(db: Session, batch_id: int | None = None) ->
 def duplicate_fragment_summary_for_batch(db: Session, batch: IngestBatch) -> dict[str, Any]:
     metadata = batch.metadata_json or {}
     reviewed_state = metadata.get("duplicate_fragment_review_state")
-    if reviewed_state in DUPLICATE_REVIEWED_STATES and reviewed_state == "reviewed_keep_separate" and not _has_missing_file_ownership(batch):
+    if reviewed_state in {"reviewed_keep_separate", "reviewed_merged"} and not _has_missing_file_ownership(batch):
         return {
             "possible_duplicate_group_id": None,
             "possible_duplicate_count": 0,
@@ -352,4 +372,196 @@ def duplicate_fragment_summary_for_batch(db: Session, batch: IngestBatch) -> dic
         "possible_fragment_count": count if review_type == DUPLICATE_STATE_POSSIBLE_FRAGMENT else 0,
         "duplicate_fragment_review_state": review_type,
         "requires_duplicate_review": review_type in BLOCKING_DUPLICATE_STATES,
+    }
+
+def _append_resolution_audit(batch: IngestBatch, record: dict[str, Any]) -> None:
+    metadata = dict(batch.metadata_json or {})
+    audit = list(metadata.get("duplicate_fragment_resolution_audit") or [])
+    audit.append(record)
+    metadata["duplicate_fragment_resolution_audit"] = audit
+    metadata["duplicate_fragment_review_state"] = record["resolution_state"]
+    metadata["duplicate_fragment_resolution_action"] = record["action"]
+    metadata["duplicate_fragment_resolution_at"] = record["resolved_at"]
+    batch.metadata_json = metadata
+    batch.updated_at = now_utc()
+
+
+def _resolution_record(action: str, cluster: dict[str, Any], **extra: Any) -> dict[str, Any]:
+    return {
+        "action": action,
+        "cluster_id": cluster["cluster_id"],
+        "review_type": cluster["review_type"],
+        "source_batch_ids": [row["batch_id"] for row in cluster["batches"]],
+        "source_paths": [row.get("source_path") for row in cluster["batches"]],
+        "resolved_at": now_utc().isoformat(),
+        **extra,
+    }
+
+
+def _load_cluster_batches(db: Session, cluster: dict[str, Any]) -> list[IngestBatch]:
+    ids = [row["batch_id"] for row in cluster["batches"]]
+    batches = (
+        db.query(IngestBatch)
+        .options(selectinload(IngestBatch.files))
+        .filter(IngestBatch.id.in_(ids))
+        .all()
+    )
+    by_id = {batch.id: batch for batch in batches}
+    return [by_id[item] for item in ids if item in by_id]
+
+
+def _canonical_batch(batches: list[IngestBatch], canonical_batch_id: int | None) -> IngestBatch:
+    if canonical_batch_id is not None:
+        for batch in batches:
+            if batch.id == canonical_batch_id:
+                return batch
+        raise DuplicateFragmentResolutionError("Canonical batch is not part of this duplicate/fragment group.")
+    return max(batches, key=lambda item: (len(item.files or []), -item.id))
+
+
+def _normalized_destination(value: str | None) -> str:
+    return normalize_identity_value(str(value or "").replace("\\", "/"))
+
+
+def _rebuild_canonical_metadata(canonical: IngestBatch, source_batches: list[IngestBatch], action: str) -> None:
+    files = sorted(canonical.files or [], key=lambda item: item.id)
+    metadata = dict(canonical.metadata_json or {})
+    metadata["file_count"] = len(files)
+    metadata["track_count"] = len(files) if canonical.detected_type.startswith("music") else metadata.get("track_count", len(files))
+    if canonical.detected_type.startswith("music"):
+        tracks = []
+        discs = set()
+        for index, ingest_file in enumerate(files, start=1):
+            file_metadata = ingest_file.metadata_json or {}
+            disc = str(file_metadata.get("discnumber") or "1").split("/")[0]
+            discs.add(disc)
+            tracks.append({
+                "title": file_metadata.get("title") or Path(ingest_file.file_name).stem,
+                "track_number": file_metadata.get("tracknumber") or str(index),
+                "disc_number": file_metadata.get("discnumber") or "1",
+                "file_name": ingest_file.file_name,
+            })
+        metadata["tracks"] = tracks
+        metadata["disc_count"] = max(1, len(discs))
+    warnings = list(metadata.get("metadata_warnings") or [])
+    warnings.append(f"duplicate_fragment_resolution_{action}")
+    metadata["metadata_warnings"] = list(dict.fromkeys(warnings))
+    metadata["merged_batch_ids"] = sorted({*(metadata.get("merged_batch_ids") or []), *[batch.id for batch in source_batches]})
+    canonical.metadata_json = metadata
+    canonical.status = "pending_review"
+    canonical.approved_at = None
+    canonical.approved_by = None
+    canonical.updated_at = now_utc()
+
+
+def resolve_duplicate_fragment_group(
+    db: Session,
+    batch_id: int,
+    action: str,
+    *,
+    canonical_batch_id: int | None = None,
+    duplicate_batch_ids: list[int] | None = None,
+    confirm_distinct_destinations: bool = False,
+) -> dict[str, Any]:
+    if action not in DUPLICATE_RESOLUTION_ACTIONS:
+        raise DuplicateFragmentResolutionError("Unsupported duplicate/fragment resolution action.")
+    review = build_duplicate_fragment_review(db, batch_id)
+    clusters = review["clusters"]
+    if not clusters:
+        raise DuplicateFragmentResolutionError("No active duplicate/fragment group found for this batch.")
+    cluster = clusters[0]
+    if cluster.get("has_file_ownership_warnings"):
+        raise DuplicateFragmentResolutionError("Cannot resolve this group until every batch has verified scoped files.")
+
+    batches = _load_cluster_batches(db, cluster)
+    if len(batches) < 2:
+        raise DuplicateFragmentResolutionError("Duplicate/fragment resolution requires at least two batches.")
+
+    canonical = _canonical_batch(batches, canonical_batch_id)
+    collapsed_ids: list[int] = []
+    blocked_ids: list[int] = []
+    message = "Resolution recorded."
+
+    if action == "keep_separate":
+        destinations = [_normalized_destination(batch.suggested_destination) for batch in batches]
+        duplicate_destinations = [dest for dest, count in Counter(destinations).items() if dest and count > 1]
+        if duplicate_destinations or not confirm_distinct_destinations:
+            raise DuplicateFragmentResolutionError("Keep separate requires distinct destination previews before resolution.")
+        record = _resolution_record(action, cluster, resolution_state="reviewed_keep_separate")
+        for batch in batches:
+            _append_resolution_audit(batch, record)
+            batch.status = "pending_review"
+        message = "Group marked as separate reviewed batches."
+
+    elif action == "merge_into_one_batch":
+        source_batches = [batch for batch in batches if batch.id != canonical.id]
+        collapsed_ids = [batch.id for batch in source_batches]
+        record = _resolution_record(
+            action,
+            cluster,
+            resolution_state="reviewed_merged",
+            canonical_batch_id=canonical.id,
+            collapsed_batch_ids=collapsed_ids,
+        )
+        for source in source_batches:
+            for ingest_file in list(source.files or []):
+                ingest_file.batch_id = canonical.id
+            source_metadata = dict(source.metadata_json or {})
+            source_metadata["merged_into_batch_id"] = canonical.id
+            source_metadata["collapsed_by_duplicate_fragment_resolution"] = True
+            source.metadata_json = source_metadata
+            source.status = "merged"
+            _append_resolution_audit(source, record)
+        db.flush()
+        db.refresh(canonical)
+        _rebuild_canonical_metadata(canonical, source_batches, action)
+        _append_resolution_audit(canonical, record)
+        message = f"Merged {len(source_batches)} fragment batch(es) into batch {canonical.id}."
+
+    elif action == "mark_duplicate":
+        duplicate_ids = set(duplicate_batch_ids or [batch.id for batch in batches if batch.id != canonical.id])
+        if canonical.id in duplicate_ids:
+            raise DuplicateFragmentResolutionError("Canonical batch cannot be marked duplicate.")
+        record = _resolution_record(
+            action,
+            cluster,
+            resolution_state="reviewed_duplicate",
+            canonical_batch_id=canonical.id,
+            duplicate_batch_ids=sorted(duplicate_ids),
+        )
+        canonical_record = {**record, "resolution_state": "reviewed_keep_separate"}
+        _append_resolution_audit(canonical, canonical_record)
+        for batch in batches:
+            if batch.id not in duplicate_ids:
+                continue
+            metadata = dict(batch.metadata_json or {})
+            metadata["blocked_from_move"] = True
+            metadata["duplicate_of_batch_id"] = canonical.id
+            batch.metadata_json = metadata
+            batch.status = "duplicate_review"
+            _append_resolution_audit(batch, record)
+            blocked_ids.append(batch.id)
+        message = f"Marked {len(blocked_ids)} duplicate batch(es) as blocked from move."
+
+    elif action in {"review_later", "block_move"}:
+        state = "reviewed_later" if action == "review_later" else "reviewed_blocked"
+        record = _resolution_record(action, cluster, resolution_state=state)
+        for batch in batches:
+            metadata = dict(batch.metadata_json or {})
+            metadata["blocked_from_move"] = True
+            batch.metadata_json = metadata
+            batch.status = "needs_metadata_review"
+            _append_resolution_audit(batch, record)
+            blocked_ids.append(batch.id)
+        message = "Group remains blocked from move approval."
+
+    db.commit()
+    return {
+        "cluster_id": cluster["cluster_id"],
+        "action": action,
+        "canonical_batch_id": canonical.id if action in {"merge_into_one_batch", "mark_duplicate"} else None,
+        "resolved_batch_ids": [batch.id for batch in batches],
+        "collapsed_batch_ids": collapsed_ids,
+        "blocked_batch_ids": blocked_ids,
+        "message": message,
     }

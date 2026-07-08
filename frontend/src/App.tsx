@@ -8,6 +8,7 @@ import type {
   BookCollectionReviewUpdate,
   BookMetadataUpdate,
   DiscographyMetadataUpdate,
+  DuplicateFragmentResolutionRequest,
   DuplicateFragmentReview,
   IngestBatch,
   LibrarySummary as LibrarySummaryData,
@@ -309,6 +310,23 @@ export default function App() {
     }
   };
 
+  const handleDuplicateReviewResolution = async (batchId: number, update: DuplicateFragmentResolutionRequest) => {
+    const result = await api.resolveDuplicateFragmentReview(batchId, update);
+    showToast(result.message);
+    await loadBatches();
+    try {
+      const review = await api.getBatchDuplicateFragmentReview(batchId);
+      setDuplicateReview(review);
+      if (review.clusters.length === 0) {
+        setDuplicateReviewBatch(null);
+        setDuplicateReview(null);
+      }
+    } catch {
+      setDuplicateReviewBatch(null);
+      setDuplicateReview(null);
+    }
+    return result;
+  };
   const handleWorkspaceAction = async (batchId: number, update: UniversalReviewActionUpdate) => {
     await api.createUniversalIngestionAction(batchId, update);
   };
@@ -876,6 +894,7 @@ export default function App() {
           review={duplicateReview}
           selectedBatchId={duplicateReviewBatch.id}
           onClose={() => { setDuplicateReviewBatch(null); setDuplicateReview(null); setDuplicateReviewError(null); }}
+          onResolve={handleDuplicateReviewResolution}
         />
       )}
       {workspaceBatch && !workspaceDetail && (

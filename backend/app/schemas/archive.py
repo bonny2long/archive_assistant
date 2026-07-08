@@ -322,6 +322,7 @@ class DuplicateFragmentBatchOut(BaseModel):
     year: str | None = None
     item_count: int = 0
     file_count: int = 0
+    file_formats: list[str] = Field(default_factory=list)
     file_ownership_status: str = "verified"
     file_ownership_warning: str | None = None
     suggested_destination: str | None = None
@@ -337,12 +338,30 @@ class DuplicateFragmentClusterOut(BaseModel):
     confidence: str
     reason: str
     has_file_ownership_warnings: bool = False
+    mixed_file_formats: bool = False
+    file_formats: list[str] = Field(default_factory=list)
     batches: list[DuplicateFragmentBatchOut] = Field(default_factory=list)
 
 
 class DuplicateFragmentReviewOut(BaseModel):
     clusters: list[DuplicateFragmentClusterOut] = Field(default_factory=list)
 
+
+class DuplicateFragmentResolutionRequest(BaseModel):
+    action: str
+    canonical_batch_id: int | None = None
+    duplicate_batch_ids: list[int] = Field(default_factory=list)
+    confirm_distinct_destinations: bool = False
+
+
+class DuplicateFragmentResolutionResponse(BaseModel):
+    cluster_id: str
+    action: str
+    canonical_batch_id: int | None = None
+    resolved_batch_ids: list[int] = Field(default_factory=list)
+    collapsed_batch_ids: list[int] = Field(default_factory=list)
+    blocked_batch_ids: list[int] = Field(default_factory=list)
+    message: str
 class BatchSummary(BaseModel):
     id: int
     detected_type: str

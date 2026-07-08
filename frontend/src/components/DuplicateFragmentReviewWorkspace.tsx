@@ -1,4 +1,4 @@
-import type { DuplicateFragmentBatch, DuplicateFragmentCluster, DuplicateFragmentReview, IngestBatch } from "../types/archive";
+import type { DuplicateFragmentBatch, DuplicateFragmentCluster, DuplicateFragmentResolutionAction, DuplicateFragmentResolutionRequest, DuplicateFragmentReview, IngestBatch } from "../types/archive";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 
@@ -6,6 +6,7 @@ type Props = {
   review: DuplicateFragmentReview;
   selectedBatchId: number;
   onClose: () => void;
+  onResolve: (batchId: number, update: DuplicateFragmentResolutionRequest) => Promise<{ message: string }>;
 };
 
 function reviewTypeLabel(value: string): string {
@@ -88,14 +89,24 @@ function hasMissingFileOwnership(batch: DuplicateFragmentBatch, detail: IngestBa
 function ownershipLabel(batch: DuplicateFragmentBatch, detail: IngestBatch | null = null): string {
   return hasMissingFileOwnership(batch, detail) ? "Missing scoped files" : "Verified files";
 }
+function totalFileCount(cluster: DuplicateFragmentCluster | null): number {
+  return cluster?.batches.reduce((total, batch) => total + (batch.file_count ?? 0), 0) ?? 0;
+}
 
-export default function DuplicateFragmentReviewWorkspace({ review, selectedBatchId, onClose }: Props) {
+function duplicateBatchIds(cluster: DuplicateFragmentCluster | null, canonicalBatchId: number | null): number[] {
+  if (!cluster || canonicalBatchId === null) return [];
+  return cluster.batches.map((batch) => batch.batch_id).filter((id) => id !== canonicalBatchId);
+}
+
+export default function DuplicateFragmentReviewWorkspace({ review, selectedBatchId, onClose, onResolve }: Props) {
   const cluster = useMemo(() => selectedCluster(review, selectedBatchId), [review, selectedBatchId]);
   const [activeBatchId, setActiveBatchId] = useState<number | null>(selectedBatchId);
   const [detail, setDetail] = useState<IngestBatch | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [showTech, setShowTech] = useState(false);
+  const [resolvingAction, setResolvingAction] = useState<DuplicateFragmentResolutionAction | null>(null);
+  const [resolutionError, setResolutionError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!cluster?.batches.length) {
@@ -140,7 +151,40 @@ export default function DuplicateFragmentReviewWorkspace({ review, selectedBatch
   const selectedFileCount = selected ? displayFileCount(selected, detail) : 0;
   const selectedMissingFileOwnership = selected ? hasMissingFileOwnership(selected, detail) : false;
   const groupHasFileOwnershipWarnings = Boolean(cluster?.has_file_ownership_warnings || cluster?.batches.some((batch) => hasMissingFileOwnership(batch)));
+  const resolutionDisabled = groupHasFileOwnershipWarnings || !cluster || !selected || resolvingAction !== null;
+  const selectedDuplicateBatchIds = duplicateBatchIds(cluster, selected?.batch_id ?? null);
 
+  async function submitResolution(action: DuplicateFragmentResolutionAction) {
+    if (!selected || !cluster || resolutionDisabled) return;
+    setResolutionError(null);
+    const update: DuplicateFragmentResolutionRequest = { action };
+    if (action === "merge_into_one_batch") {
+      const summary = [
+        `Merge ${cluster.batches.length} batches into batch ${selected.batch_id}?`,
+        `Canonical batch: ${selected.title || selected.batch_id}`,
+        `Total files: ${totalFileCount(cluster)}`,
+        `Resulting destination: ${selected.suggested_destination ?? "No destination preview"}`,
+        `Collapsed source batches: ${selectedDuplicateBatchIds.join(", ") || "None"}`,
+      ].join("\n");
+      if (!window.confirm(summary)) return;
+      update.canonical_batch_id = selected.batch_id;
+    }
+    if (action === "mark_duplicate") {
+      update.canonical_batch_id = selected.batch_id;
+      update.duplicate_batch_ids = selectedDuplicateBatchIds;
+    }
+    if (action === "keep_separate") {
+      update.confirm_distinct_destinations = true;
+    }
+    setResolvingAction(action);
+    try {
+      await onResolve(selected.batch_id, update);
+    } catch (error: unknown) {
+      setResolutionError(error instanceof Error ? error.message : "Could not resolve duplicate/fragment group");
+    } finally {
+      setResolvingAction(null);
+    }
+  }
   return (
     <div className="review-workspace duplicate-review-workspace" role="dialog" aria-modal="true" aria-label="Duplicate Fragment Review">
       <header className="review-workspace__header duplicate-review-workspace__header">
@@ -229,14 +273,16 @@ export default function DuplicateFragmentReviewWorkspace({ review, selectedBatch
 
               <section className="workspace-inspector__section duplicate-review-workspace__decision-section">
                 <h3>Group decision</h3>
-                <p>{groupHasFileOwnershipWarnings ? "Resolution actions remain disabled because one or more batches are missing scoped files." : "Resolution actions are coming next. This group is blocked from move approval until it is resolved."}</p>
+                <p>{groupHasFileOwnershipWarnings ? "Resolution actions remain disabled because one or more batches are missing scoped files." : "File ownership is verified. These actions change review state only; they do not move files to the final library."}</p>
+                {resolutionError && <small className="error-text">{resolutionError}</small>}
                 <div className="duplicate-review-workspace__decision-grid">
-                  <button className="btn-sm" disabled><i className="ti ti-copy-check" /> Keep separate</button>
-                  <button className="btn-sm" disabled><i className="ti ti-git-merge" /> Merge into one batch</button>
-                  <button className="btn-sm" disabled><i className="ti ti-layers-subtract" /> Mark duplicate</button>
-                  <button className="btn-sm" disabled><i className="ti ti-clock" /> Review later</button>
-                  <button className="btn-sm" disabled><i className="ti ti-lock" /> Block move</button>
+                  <button className="btn-sm" disabled={resolutionDisabled} onClick={() => void submitResolution("keep_separate")}><i className="ti ti-copy-check" /> Keep separate</button>
+                  <button className="btn-sm" disabled={resolutionDisabled} onClick={() => void submitResolution("merge_into_one_batch")}><i className="ti ti-git-merge" /> Merge into one batch</button>
+                  <button className="btn-sm" disabled={resolutionDisabled} onClick={() => void submitResolution("mark_duplicate")}><i className="ti ti-layers-subtract" /> Mark duplicate</button>
+                  <button className="btn-sm" disabled={resolutionDisabled} onClick={() => void submitResolution("review_later")}><i className="ti ti-clock" /> Review later</button>
+                  <button className="btn-sm" disabled={resolutionDisabled} onClick={() => void submitResolution("block_move")}><i className="ti ti-lock" /> Block move</button>
                 </div>
+                {resolvingAction && <small><i className="ti ti-loader-2 spinner" /> Saving {resolvingAction.replace(/_/g, " ")}...</small>}
               </section>
 
               <section className="workspace-inspector__section">

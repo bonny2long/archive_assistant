@@ -287,6 +287,7 @@ export type DuplicateFragmentBatch = {
   year?: string | null;
   item_count: number;
   file_count?: number;
+  file_formats?: string[];
   file_ownership_status?: "verified" | "missing_files" | string;
   file_ownership_warning?: string | null;
   suggested_destination?: string | null;
@@ -302,11 +303,36 @@ export type DuplicateFragmentCluster = {
   confidence: string;
   reason: string;
   has_file_ownership_warnings?: boolean;
+  mixed_file_formats?: boolean;
+  file_formats?: string[];
   batches: DuplicateFragmentBatch[];
 };
 
 export type DuplicateFragmentReview = {
   clusters: DuplicateFragmentCluster[];
+};
+export type DuplicateFragmentResolutionAction =
+  | "keep_separate"
+  | "merge_into_one_batch"
+  | "mark_duplicate"
+  | "review_later"
+  | "block_move";
+
+export type DuplicateFragmentResolutionRequest = {
+  action: DuplicateFragmentResolutionAction;
+  canonical_batch_id?: number | null;
+  duplicate_batch_ids?: number[];
+  confirm_distinct_destinations?: boolean;
+};
+
+export type DuplicateFragmentResolutionResponse = {
+  cluster_id: string;
+  action: DuplicateFragmentResolutionAction | string;
+  canonical_batch_id?: number | null;
+  resolved_batch_ids: number[];
+  collapsed_batch_ids: number[];
+  blocked_batch_ids: number[];
+  message: string;
 };
 export type BatchSummary = {
   id: number;

@@ -24,6 +24,8 @@ from app.schemas.archive import (
     BookMetadataUpdate,
     DiscographyMetadataUpdate,
     DevResetResponse,
+    DuplicateFragmentResolutionRequest,
+    DuplicateFragmentResolutionResponse,
     DuplicateFragmentReviewOut,
     IngestBatchOut,
     IngestFileOut,
@@ -50,7 +52,9 @@ from app.services.batch_display import build_batch_display_fields
 from app.services.parent_candidate_materialization import build_parent_candidate_summary
 from app.services.duplicate_fragment_review import (
     build_duplicate_fragment_review,
+    DuplicateFragmentResolutionError,
     duplicate_fragment_summary_for_batch,
+    resolve_duplicate_fragment_group,
 )
 from app.services.batch_merge import (
     find_archived_duplicate_candidate,
@@ -137,6 +141,27 @@ def batch_duplicate_fragment_review(batch_id: int, db: Session = Depends(get_db)
         raise HTTPException(status_code=404, detail="Batch not found")
     return build_duplicate_fragment_review(db, batch_id)
 
+
+
+@router.post("/batches/{batch_id}/duplicate-fragment-review/resolve", response_model=DuplicateFragmentResolutionResponse)
+def resolve_batch_duplicate_fragment_review(
+    batch_id: int,
+    resolution: DuplicateFragmentResolutionRequest,
+    db: Session = Depends(get_db),
+):
+    if db.get(IngestBatch, batch_id) is None:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    try:
+        return resolve_duplicate_fragment_group(
+            db,
+            batch_id,
+            resolution.action,
+            canonical_batch_id=resolution.canonical_batch_id,
+            duplicate_batch_ids=resolution.duplicate_batch_ids,
+            confirm_distinct_destinations=resolution.confirm_distinct_destinations,
+        )
+    except DuplicateFragmentResolutionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 @router.get("/system/time")
 def system_time():
     utc_now = now_utc()

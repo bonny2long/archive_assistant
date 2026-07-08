@@ -19,8 +19,10 @@ if str(BACKEND_ROOT) not in sys.path:
 from app.db.session import Base  # noqa: E402
 from app.models.archive import IngestBatch, IngestFile  # noqa: E402
 from app.services.duplicate_fragment_review import (  # noqa: E402
+    DuplicateFragmentResolutionError,
     build_duplicate_fragment_review,
     duplicate_fragment_summary_for_batch,
+    resolve_duplicate_fragment_group,
 )
 from app.services.mover import move_approved_batches  # noqa: E402
 from app.api.routes import approve_batch, batch_duplicate_fragment_review, _batch_to_summary  # noqa: E402
@@ -174,6 +176,96 @@ def test_missing_file_ownership_is_flagged_and_blocked(db) -> None:
     assert duplicate_fragment_summary_for_batch(db, missing)["requires_duplicate_review"] is True
 
 
+
+
+def test_missing_file_ownership_cannot_resolve(db) -> None:
+    add_music_batch(db, artist="Kanye West", album="Donda", year="2021", track_count=10)
+    missing = add_music_batch(db, artist="Kanye West", album="Donda", year="2021", track_count=3, attach_files=False)
+
+    try:
+        resolve_duplicate_fragment_group(db, missing.id, "merge_into_one_batch")
+    except DuplicateFragmentResolutionError as exc:
+        assert "verified scoped files" in str(exc)
+    else:
+        raise AssertionError("Missing file ownership should block resolution")
+
+
+def test_merge_resolution_reassigns_scoped_files_without_deleting_sources(db) -> None:
+    donda10 = add_music_batch(db, artist="Kanye West", album="Donda", year="2021", track_count=10)
+    donda3 = add_music_batch(db, artist="Kanye West", album="Donda", year="2021", track_count=3)
+
+    result = resolve_duplicate_fragment_group(db, donda3.id, "merge_into_one_batch", canonical_batch_id=donda10.id)
+    assert result["canonical_batch_id"] == donda10.id
+    assert result["collapsed_batch_ids"] == [donda3.id]
+
+    canonical = db.get(IngestBatch, donda10.id)
+    source = db.get(IngestBatch, donda3.id)
+    assert canonical is not None
+    assert source is not None
+    assert source.status == "merged"
+    assert (source.metadata_json or {}).get("merged_into_batch_id") == canonical.id
+    assert db.query(IngestFile).filter(IngestFile.batch_id == canonical.id).count() == 13
+    assert db.query(IngestFile).filter(IngestFile.batch_id == source.id).count() == 0
+    assert duplicate_fragment_summary_for_batch(db, canonical)["requires_duplicate_review"] is False
+
+
+def test_keep_separate_requires_distinct_destinations(db) -> None:
+    destination = str(PROJECT_ROOT / ".tmp" / "Library" / "Kanye West" / "2007 - Graduation")
+    first = add_music_batch(db, artist="Kanye West", album="Graduation", year="2007", track_count=13, destination=destination)
+    add_music_batch(db, artist="Kanye West", album="Graduation", year="2007", track_count=13, destination=destination)
+
+    try:
+        resolve_duplicate_fragment_group(db, first.id, "keep_separate", confirm_distinct_destinations=True)
+    except DuplicateFragmentResolutionError as exc:
+        assert "distinct destination" in str(exc)
+    else:
+        raise AssertionError("Keep separate should reject duplicate destinations")
+
+    db.close()
+
+
+def test_keep_separate_with_distinct_destinations_clears_blocker(db) -> None:
+    standard = add_music_batch(
+        db,
+        artist="Example Artist",
+        album="Example Album",
+        year="1982",
+        track_count=10,
+        destination=str(PROJECT_ROOT / ".tmp" / "Library" / "Example Artist" / "1982 - Example Album"),
+    )
+    deluxe = add_music_batch(
+        db,
+        artist="Example Artist",
+        album="Example Album",
+        year="1982",
+        track_count=10,
+        edition="Deluxe Edition",
+        destination=str(PROJECT_ROOT / ".tmp" / "Library" / "Example Artist" / "1982 - Example Album [Deluxe]"),
+    )
+
+    resolve_duplicate_fragment_group(db, standard.id, "keep_separate", confirm_distinct_destinations=True)
+    assert duplicate_fragment_summary_for_batch(db, standard)["requires_duplicate_review"] is False
+    assert duplicate_fragment_summary_for_batch(db, deluxe)["requires_duplicate_review"] is False
+
+
+def test_mark_duplicate_blocks_duplicate_batch_from_move(db) -> None:
+    destination = str(PROJECT_ROOT / ".tmp" / "Library" / "Kanye West" / "2007 - Graduation")
+    first = add_music_batch(db, artist="Kanye West", album="Graduation", year="2007", track_count=13, destination=destination)
+    second = add_music_batch(db, artist="Kanye West", album="Graduation", year="2007", track_count=13, destination=destination)
+
+    result = resolve_duplicate_fragment_group(
+        db,
+        first.id,
+        "mark_duplicate",
+        canonical_batch_id=first.id,
+        duplicate_batch_ids=[second.id],
+    )
+    assert result["blocked_batch_ids"] == [second.id]
+    duplicate = db.get(IngestBatch, second.id)
+    assert duplicate is not None
+    assert duplicate.status == "duplicate_review"
+    assert (duplicate.metadata_json or {}).get("blocked_from_move") is True
+    assert duplicate_fragment_summary_for_batch(db, duplicate)["requires_duplicate_review"] is True
 def test_same_destination_creates_duplicate_conflict(db) -> None:
     destination = str(PROJECT_ROOT / ".tmp" / "Library" / "Kanye West" / "2007 - Graduation")
     first = add_music_batch(db, artist="Kanye West", album="Graduation", year="2007", track_count=13, destination=destination)
@@ -222,6 +314,11 @@ def main() -> None:
         test_fragment_cluster_blocks_approval_and_move,
         test_same_destination_creates_duplicate_conflict,
         test_missing_file_ownership_is_flagged_and_blocked,
+        test_missing_file_ownership_cannot_resolve,
+        test_merge_resolution_reassigns_scoped_files_without_deleting_sources,
+        test_keep_separate_requires_distinct_destinations,
+        test_keep_separate_with_distinct_destinations_clears_blocker,
+        test_mark_duplicate_blocks_duplicate_batch_from_move,
         test_singletons_are_not_flagged,
         test_edition_conflicts_are_grouped_not_fragmented,
     ]

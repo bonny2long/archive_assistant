@@ -13,6 +13,8 @@ import type {
   BulkApproveResult,
   DevResetResponse,
   DiscographyMetadataUpdate,
+  DuplicateFragmentResolutionRequest,
+  DuplicateFragmentResolutionResponse,
   DuplicateFragmentReview,
   HealthResponse,
   IngestBatch,
@@ -121,6 +123,8 @@ export const api = {
     request<UniversalReviewAction>(`/batches/${id}/universal-ingestion/actions/${actionId}/clear`, "POST"),
   getDuplicateFragmentReview: () => request<DuplicateFragmentReview>("/duplicate-fragment-review"),
   getBatchDuplicateFragmentReview: (id: number) => request<DuplicateFragmentReview>(`/batches/${id}/duplicate-fragment-review`),
+  resolveDuplicateFragmentReview: (id: number, update: DuplicateFragmentResolutionRequest) =>
+    request<DuplicateFragmentResolutionResponse>(`/batches/${id}/duplicate-fragment-review/resolve`, "POST", update),
   getReviewRouting: (id: number, targetEditor?: string) =>
     request<RoutingDecision>(`/batches/${id}/review-routing${targetEditor ? `?target_editor=${targetEditor}` : ""}`),
   getCandidateMovePreview: (id: number, snapshot = false) =>
