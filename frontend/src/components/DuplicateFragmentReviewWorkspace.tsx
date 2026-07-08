@@ -38,12 +38,11 @@ function statusLabel(value: string): string {
 }
 
 function itemLabel(count: number): string {
-  return `${count} ${count === 1 ? "item" : "items"}`;
+  return `Items: ${count}`;
 }
 
 function fileLabel(count: number | undefined): string {
-  const safeCount = count ?? 0;
-  return `${safeCount} ${safeCount === 1 ? "file" : "files"}`;
+  return `Files: ${count ?? 0}`;
 }
 
 function identityLabel(cluster: DuplicateFragmentCluster | null): string {
@@ -51,8 +50,17 @@ function identityLabel(cluster: DuplicateFragmentCluster | null): string {
   if (!first) return "No matching batches";
   const creator = first.creator?.trim();
   const title = first.title?.trim();
-  if (creator && title) return `${creator} - ${title}`;
+  if (creator && title) return `${creator} \u2014 ${title}`;
   return title || creator || `Batch ${first.batch_id}`;
+}
+
+function clusterSubtitle(cluster: DuplicateFragmentCluster | null): string {
+  if (!cluster) return "No active cluster";
+  return [
+    reviewTypeLabel(cluster.review_type),
+    `${cluster.batches.length} matching batches`,
+    mediaLabel(cluster.media_type),
+  ].join(" \u00b7 ");
 }
 
 function selectedCluster(review: DuplicateFragmentReview, selectedBatchId: number): DuplicateFragmentCluster | null {
@@ -64,6 +72,12 @@ function selectedCluster(review: DuplicateFragmentReview, selectedBatchId: numbe
 function batchSubtitle(batch: DuplicateFragmentBatch): string {
   const parts = [batch.creator, batch.year, mediaLabel(batch.detected_type)].filter(Boolean);
   return parts.join(" | ");
+}
+
+function displayFileCount(batch: DuplicateFragmentBatch, detail: IngestBatch | null): number {
+  const detailCount = detail?.id === batch.batch_id ? detail.files.length : 0;
+  if ((batch.file_count ?? 0) > 0) return batch.file_count ?? 0;
+  return detailCount;
 }
 
 export default function DuplicateFragmentReviewWorkspace({ review, selectedBatchId, onClose }: Props) {
@@ -114,6 +128,7 @@ export default function DuplicateFragmentReviewWorkspace({ review, selectedBatch
 
   const destination = selected?.suggested_destination ?? detail?.suggested_destination ?? null;
   const files = detail?.files ?? [];
+  const selectedFileCount = selected ? displayFileCount(selected, detail) : 0;
 
   return (
     <div className="review-workspace duplicate-review-workspace" role="dialog" aria-modal="true" aria-label="Duplicate Fragment Review">
@@ -121,11 +136,7 @@ export default function DuplicateFragmentReviewWorkspace({ review, selectedBatch
         <div>
           <span className="review-workspace__eyebrow">Duplicate / Fragment Review</span>
           <h2>{identityLabel(cluster)}</h2>
-          <div className="review-workspace__header-meta">
-            <span>{cluster ? reviewTypeLabel(cluster.review_type) : "No active cluster"}</span>
-            <span>{cluster?.batches.length ?? 0} matching batches</span>
-            <span>{cluster ? mediaLabel(cluster.media_type) : "Unknown media"}</span>
-          </div>
+          <div className="duplicate-review-workspace__subtitle">{clusterSubtitle(cluster)}</div>
           {cluster?.reason && <p className="duplicate-review-workspace__reason">{cluster.reason}</p>}
         </div>
         <button className="btn-sm" onClick={onClose} aria-label="Close duplicate review workspace">
@@ -137,40 +148,44 @@ export default function DuplicateFragmentReviewWorkspace({ review, selectedBatch
         <section className="duplicate-review-workspace__main" aria-label="Matching batches">
           <div className="duplicate-review-workspace__notice">
             <i className="ti ti-alert-triangle" />
-            <span>Resolution actions are not enabled yet. This group is blocked from move approval until reviewed.</span>
+            <span>Resolution actions are coming next. This group is blocked from move approval until it is resolved.</span>
           </div>
 
           <div className="duplicate-review-workspace__batch-list">
-            {cluster?.batches.map((batch) => (
-              <button
-                key={batch.batch_id}
-                className={`duplicate-review-card ${batch.batch_id === selected?.batch_id ? "is-active" : ""}`}
-                type="button"
-                onClick={() => setActiveBatchId(batch.batch_id)}
-              >
-                <div className="duplicate-review-card__topline">
-                  <span>{reviewTypeLabel(cluster.review_type)}</span>
-                  <small>{statusLabel(batch.status)}</small>
-                </div>
-                <strong>{batch.title || `Batch ${batch.batch_id}`}</strong>
-                <small>{batchSubtitle(batch) || `Batch ${batch.batch_id}`}</small>
-                <div className="duplicate-review-card__facts">
-                  <span>{itemLabel(batch.item_count)}</span>
-                  <span>{fileLabel(batch.file_count)}</span>
-                  <span>{batch.year ?? "No year"}</span>
-                </div>
-                <dl>
-                  <div>
-                    <dt>Destination</dt>
-                    <dd>{batch.suggested_destination ?? "No destination preview"}</dd>
+            {cluster?.batches.map((batch) => {
+              const isSelected = batch.batch_id === selected?.batch_id;
+              const fileCount = isSelected ? displayFileCount(batch, detail) : batch.file_count;
+              return (
+                <button
+                  key={batch.batch_id}
+                  className={`duplicate-review-card ${isSelected ? "is-active" : ""}`}
+                  type="button"
+                  onClick={() => setActiveBatchId(batch.batch_id)}
+                >
+                  <div className="duplicate-review-card__topline">
+                    <span>{reviewTypeLabel(cluster.review_type)}</span>
+                    <small>{statusLabel(batch.status)}</small>
                   </div>
-                  <div>
-                    <dt>Source</dt>
-                    <dd>{batch.source_path ?? "Unknown source"}</dd>
+                  <strong>{batch.title || `Batch ${batch.batch_id}`}</strong>
+                  <small>{batchSubtitle(batch) || `Batch ${batch.batch_id}`}</small>
+                  <div className="duplicate-review-card__facts">
+                    <span>{itemLabel(batch.item_count)}</span>
+                    <span>{fileLabel(fileCount)}</span>
+                    <span>{batch.year ?? "No year"}</span>
                   </div>
-                </dl>
-              </button>
-            ))}
+                  <dl>
+                    <div>
+                      <dt>Destination preview</dt>
+                      <dd title={batch.suggested_destination ?? undefined}>{batch.suggested_destination ?? "No destination preview"}</dd>
+                    </div>
+                    <div>
+                      <dt>Source folder</dt>
+                      <dd title={batch.source_path ?? undefined}>{batch.source_path ?? "Unknown source"}</dd>
+                    </div>
+                  </dl>
+                </button>
+              );
+            })}
           </div>
         </section>
 
@@ -183,19 +198,24 @@ export default function DuplicateFragmentReviewWorkspace({ review, selectedBatch
                 <small>{batchSubtitle(selected) || statusLabel(selected.status)}</small>
                 <div className="duplicate-review-workspace__chips">
                   <span>{itemLabel(selected.item_count)}</span>
-                  <span>{fileLabel(selected.file_count)}</span>
-                  <span>{statusLabel(selected.status)}</span>
+                  <span>{fileLabel(selectedFileCount)}</span>
+                  <span>Status: {statusLabel(selected.status)}</span>
                 </div>
               </section>
 
               <section className="workspace-inspector__section">
                 <h3>Destination preview</h3>
-                {destination ? <code>{destination}</code> : <small>No destination preview available.</small>}
+                {destination ? <code title={destination}>{destination}</code> : <small>No destination preview available.</small>}
+              </section>
+
+              <section className="workspace-inspector__section">
+                <h3>Source folder</h3>
+                {selected.source_path ? <code title={selected.source_path}>{selected.source_path}</code> : <small>Unknown source folder.</small>}
               </section>
 
               <section className="workspace-inspector__section duplicate-review-workspace__decision-section">
                 <h3>Group decision</h3>
-                <p>These controls are review placeholders until resolution endpoints are enabled. They do not move, delete, merge, or retag files.</p>
+                <p>Resolution actions are coming next. This group is blocked from move approval until it is resolved.</p>
                 <div className="duplicate-review-workspace__decision-grid">
                   <button className="btn-sm" disabled><i className="ti ti-copy-check" /> Keep separate</button>
                   <button className="btn-sm" disabled><i className="ti ti-git-merge" /> Merge into one batch</button>

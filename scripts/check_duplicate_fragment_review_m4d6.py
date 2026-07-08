@@ -110,7 +110,24 @@ def test_fragment_cluster_blocks_approval_and_move(db) -> None:
     assert len(scoped_review["clusters"]) == 1
     scoped_ids = {row["batch_id"] for row in scoped_review["clusters"][0]["batches"]}
     assert scoped_ids == {donda10.id, donda3.id, donda9.id}
-    assert all("file_count" in row for row in scoped_review["clusters"][0]["batches"])
+    rows_by_id = {row["batch_id"]: row for row in scoped_review["clusters"][0]["batches"]}
+    required_fields = {
+        "batch_id",
+        "title",
+        "creator",
+        "year",
+        "item_count",
+        "file_count",
+        "suggested_destination",
+        "source_path",
+        "status",
+        "detected_type",
+    }
+    assert all(required_fields.issubset(row) for row in rows_by_id.values())
+    assert rows_by_id[donda10.id]["file_count"] == 10
+    assert rows_by_id[donda3.id]["file_count"] == 3
+    assert rows_by_id[donda9.id]["file_count"] == 9
+    assert all(row["file_count"] > 0 for row in rows_by_id.values())
 
     response = approve_batch(donda3.id, db)
     assert response.status == "pending_review"
