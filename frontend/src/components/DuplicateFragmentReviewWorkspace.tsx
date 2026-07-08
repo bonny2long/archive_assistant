@@ -7,6 +7,7 @@ type Props = {
   selectedBatchId: number;
   onClose: () => void;
   onResolve: (batchId: number, update: DuplicateFragmentResolutionRequest) => Promise<{ message: string }>;
+  onOpenNormalReview?: () => void;
 };
 
 function reviewTypeLabel(value: string): string {
@@ -108,7 +109,7 @@ function destinationFormatMismatch(detail: IngestBatch | null, destination: stri
   return !destination.replace(/\\/g, "/").includes(`Music/Library/${format}`);
 }
 
-export default function DuplicateFragmentReviewWorkspace({ review, selectedBatchId, onClose, onResolve }: Props) {
+export default function DuplicateFragmentReviewWorkspace({ review, selectedBatchId, onClose, onResolve, onOpenNormalReview }: Props) {
   const cluster = useMemo(() => selectedCluster(review, selectedBatchId), [review, selectedBatchId]);
   const [activeBatchId, setActiveBatchId] = useState<number | null>(selectedBatchId);
   const [detail, setDetail] = useState<IngestBatch | null>(null);
@@ -200,6 +201,31 @@ export default function DuplicateFragmentReviewWorkspace({ review, selectedBatch
     } finally {
       setResolvingAction(null);
     }
+  }
+  if (review.active_cluster === false || !cluster || review.clusters.length === 0) {
+    return (
+      <div className="review-workspace duplicate-review-workspace" role="dialog" aria-modal="true" aria-label="Duplicate Fragment Review">
+        <header className="review-workspace__header duplicate-review-workspace__header">
+          <div>
+            <span className="review-workspace__eyebrow">Duplicate / Fragment Review</span>
+            <h2>No active duplicate/fragment review is required.</h2>
+            <div className="duplicate-review-workspace__subtitle">{review.message ?? "This batch can use the normal review flow."}</div>
+          </div>
+          <button className="btn-sm" onClick={onClose} aria-label="Close duplicate review workspace">
+            <i className="ti ti-x" />
+          </button>
+        </header>
+        <div className="duplicate-review-workspace__body duplicate-review-workspace__body--empty">
+          <section className="workspace-inspector__section">
+            <h3>Review route</h3>
+            <p>No matching unresolved batches were returned for this item.</p>
+            <button className="btn-sm" onClick={onOpenNormalReview ?? onClose}>
+              <i className="ti ti-layout-sidebar" /> Open normal review
+            </button>
+          </section>
+        </div>
+      </div>
+    );
   }
   return (
     <div className="review-workspace duplicate-review-workspace" role="dialog" aria-modal="true" aria-label="Duplicate Fragment Review">

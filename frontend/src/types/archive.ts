@@ -309,6 +309,8 @@ export type DuplicateFragmentCluster = {
 };
 
 export type DuplicateFragmentReview = {
+  active_cluster?: boolean;
+  message?: string | null;
   clusters: DuplicateFragmentCluster[];
 };
 export type DuplicateFragmentResolutionAction =

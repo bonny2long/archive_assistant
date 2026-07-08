@@ -51,8 +51,16 @@ function isParentReviewContainer(batch: BatchSummary): boolean {
   );
 }
 
+function duplicateFragmentMatchCount(batch: BatchSummary): number {
+  return Math.max(batch.possible_fragment_count ?? 0, batch.possible_duplicate_count ?? 0);
+}
+
+function hasActiveDuplicateFragmentReview(batch: BatchSummary): boolean {
+  return Boolean(batch.requires_duplicate_review && duplicateFragmentMatchCount(batch) > 0);
+}
+
 function duplicateFragmentLabel(batch: BatchSummary): string | null {
-  if (!batch.requires_duplicate_review) return null;
+  if (!hasActiveDuplicateFragmentReview(batch)) return null;
   if (batch.duplicate_fragment_review_state === "possible_fragment") return "Possible fragment";
   if (batch.duplicate_fragment_review_state === "possible_edition_conflict") return "Edition conflict review";
   return "Possible duplicate";
@@ -135,10 +143,12 @@ export default function BatchRow({
   const canOpenWorkspace = batch.status !== "moved" && !quarantineReview;
   const parentReviewContainer = isParentReviewContainer(batch);
   const duplicateLabel = duplicateFragmentLabel(batch);
-  const approveDisabled = batch.status !== "pending_review" || parentReviewContainer || batch.requires_duplicate_review;
+  const activeDuplicateReview = hasActiveDuplicateFragmentReview(batch);
+  const duplicateMatchCount = duplicateFragmentMatchCount(batch);
+  const approveDisabled = batch.status !== "pending_review" || parentReviewContainer || activeDuplicateReview;
   const approveTitle = parentReviewContainer
     ? "Parent review containers need child batch creation before move approval"
-    : batch.requires_duplicate_review
+    : activeDuplicateReview
       ? "Needs duplicate/fragment review before move approval"
       : "Approve";
 
@@ -176,7 +186,7 @@ export default function BatchRow({
           )}
           {duplicateLabel && (
             <small className="row-artwork">
-              {duplicateLabel}: {batch.possible_fragment_count || batch.possible_duplicate_count || 0} matching batches
+              {duplicateLabel}: {duplicateMatchCount} matching batches
             </small>
           )}
         </td>
@@ -246,11 +256,11 @@ export default function BatchRow({
           {canOpenWorkspace && (
             <button
               className="btn-sm"
-              title={batch.requires_duplicate_review ? "Open Duplicate / Fragment Review" : "Open Review Workspace"}
+              title={activeDuplicateReview ? "Open Duplicate / Fragment Review" : "Open Review Workspace"}
               style={{ color: "var(--accent-blue)" }}
               onClick={(event) => { event.stopPropagation(); onOpenWorkspace(batch); }}
             >
-              <i className={`ti ${batch.requires_duplicate_review ? "ti-layers-intersect" : "ti-layout-sidebar"}`} />
+              <i className={`ti ${activeDuplicateReview ? "ti-layers-intersect" : "ti-layout-sidebar"}`} />
             </button>
           )}
           <button

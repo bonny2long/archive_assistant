@@ -243,6 +243,8 @@ export default function App() {
   const selectedBatches = batches.filter((batch) => selected.has(batch.id));
   const workspaceErrorMessage = workspaceBatch ? workspaceError ?? detailErrors[workspaceBatch.id] ?? null : null;
 
+  const duplicateMatchCount = (batch: BatchSummary) => Math.max(batch.possible_fragment_count ?? 0, batch.possible_duplicate_count ?? 0);
+  const hasActiveDuplicateReview = (batch: BatchSummary) => Boolean(batch.requires_duplicate_review && duplicateMatchCount(batch) > 0);
   const handleLoadDetail = async (id: number) => {
     if (details[id] || detailLoading.has(id)) return;
     setDetailLoading((previous) => new Set(previous).add(id));
@@ -274,7 +276,7 @@ export default function App() {
     }
   };
   const handleOpenWorkspace = async (batch: BatchSummary) => {
-    if (batch.requires_duplicate_review) {
+    if (hasActiveDuplicateReview(batch)) {
       setWorkspaceBatch(null);
       setWorkspaceDetail(null);
       setWorkspaceError(null);
@@ -283,6 +285,18 @@ export default function App() {
       setDuplicateReviewError(null);
       try {
         const review = await api.getBatchDuplicateFragmentReview(batch.id);
+        if (review.active_cluster === false || review.clusters.length === 0) {
+          setDuplicateReviewBatch(null);
+          setDuplicateReview(null);
+          setWorkspaceBatch(batch);
+          setWorkspaceDetail(null);
+          setWorkspaceError(null);
+          const detail = details[batch.id] ?? await api.getBatch(batch.id);
+          setDetails((previous) => ({ ...previous, [batch.id]: detail }));
+          setWorkspaceDetail(detail);
+          void handleLoadDetail(batch.id);
+          return;
+        }
         setDuplicateReview(review);
       } catch (openError: unknown) {
         const message = openError instanceof Error ? openError.message : "Unable to open Duplicate / Fragment Review";
@@ -904,6 +918,25 @@ export default function App() {
           selectedBatchId={duplicateReviewBatch.id}
           onClose={() => { setDuplicateReviewBatch(null); setDuplicateReview(null); setDuplicateReviewError(null); }}
           onResolve={handleDuplicateReviewResolution}
+          onOpenNormalReview={() => {
+            const batch = duplicateReviewBatch;
+            setDuplicateReviewBatch(null);
+            setDuplicateReview(null);
+            setDuplicateReviewError(null);
+            setWorkspaceBatch(batch);
+            setWorkspaceDetail(null);
+            setWorkspaceError(null);
+            void (async () => {
+              try {
+                const detail = details[batch.id] ?? await api.getBatch(batch.id);
+                setDetails((previous) => ({ ...previous, [batch.id]: detail }));
+                setWorkspaceDetail(detail);
+                void handleLoadDetail(batch.id);
+              } catch (error: unknown) {
+                setWorkspaceError(error instanceof Error ? error.message : "Unable to open Review Workspace");
+              }
+            })();
+          }}
         />
       )}
       {workspaceBatch && !workspaceDetail && (

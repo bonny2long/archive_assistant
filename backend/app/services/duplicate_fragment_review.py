@@ -200,6 +200,11 @@ def _has_missing_file_ownership(batch: IngestBatch) -> bool:
     metadata = batch.metadata_json or {}
     return _item_count(batch, metadata) > 0 and len(batch.files or []) == 0
 
+
+def _has_resolved_duplicate_review_state(batch: IngestBatch) -> bool:
+    state = (batch.metadata_json or {}).get("duplicate_fragment_review_state")
+    return state in {"reviewed_keep_separate", "reviewed_merged", "reviewed_duplicate", "reviewed_blocked"}
+
 def _file_formats(batch: IngestBatch) -> list[str]:
     files = batch.files or []
     audio_formats = sorted({(_music_file_format(file) or _file_extension(file).lstrip(".").upper()) for file in files if _is_music_audio_file(file)})
@@ -278,6 +283,7 @@ def _load_reviewable_batches(db: Session) -> list[IngestBatch]:
     return [
         batch for batch in batches
         if not build_parent_candidate_summary(db, batch)["is_parent_review_container"]
+        and not _has_resolved_duplicate_review_state(batch)
     ]
 
 
@@ -342,7 +348,12 @@ def build_duplicate_fragment_review(db: Session, batch_id: int | None = None) ->
             cluster for cluster in clusters
             if any(row["batch_id"] == batch_id for row in cluster["batches"])
         ]
-    return {"clusters": sorted(clusters, key=lambda item: item["cluster_id"])}
+    sorted_clusters = sorted(clusters, key=lambda item: item["cluster_id"])
+    return {
+        "active_cluster": bool(sorted_clusters),
+        "message": None if sorted_clusters else "No active duplicate or fragment review is required for this batch.",
+        "clusters": sorted_clusters,
+    }
 
 
 def duplicate_fragment_summary_for_batch(db: Session, batch: IngestBatch) -> dict[str, Any]:
@@ -369,13 +380,15 @@ def duplicate_fragment_summary_for_batch(db: Session, batch: IngestBatch) -> dic
 
     clusters = build_duplicate_fragment_review(db, batch.id)["clusters"] if db is not None else []
     if not clusters:
+        resolved_without_cluster = reviewed_state in DUPLICATE_REVIEWED_STATES
+        missing_file_ownership = _has_missing_file_ownership(batch)
         return {
             "possible_duplicate_group_id": None,
             "possible_duplicate_count": 0,
             "possible_fragment_group_id": None,
             "possible_fragment_count": 0,
             "duplicate_fragment_review_state": reviewed_state or DUPLICATE_STATE_NONE,
-            "requires_duplicate_review": reviewed_state in BLOCKING_DUPLICATE_STATES,
+            "requires_duplicate_review": True if missing_file_ownership else (False if resolved_without_cluster else reviewed_state in BLOCKING_DUPLICATE_STATES),
         }
 
     state_order = {

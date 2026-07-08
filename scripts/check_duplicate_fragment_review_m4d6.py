@@ -230,7 +230,18 @@ def test_merge_resolution_reassigns_scoped_files_without_deleting_sources(db) ->
     assert metadata.get("duplicate_fragment_resolution_audit")
     assert all(file.detected_role == "music_track" for file in canonical.files)
     assert db.query(MoveAction).count() == 0
-    assert duplicate_fragment_summary_for_batch(db, canonical)["requires_duplicate_review"] is False
+    summary = duplicate_fragment_summary_for_batch(db, canonical)
+    assert summary["requires_duplicate_review"] is False
+    assert summary["possible_duplicate_count"] == 0
+    assert summary["possible_fragment_count"] == 0
+    rendered = _batch_to_summary(canonical, db=db)
+    assert rendered.requires_duplicate_review is False
+    assert rendered.possible_duplicate_count == 0
+    assert rendered.possible_fragment_count == 0
+    scoped_review = batch_duplicate_fragment_review(canonical.id, db)
+    assert scoped_review["active_cluster"] is False
+    assert scoped_review["clusters"] == []
+    assert scoped_review["message"] == "No active duplicate or fragment review is required for this batch."
 
 
 def test_merge_resolution_rebuilds_mp3_destination(db) -> None:
@@ -326,6 +337,8 @@ def test_keep_separate_with_distinct_destinations_clears_blocker(db) -> None:
     resolve_duplicate_fragment_group(db, standard.id, "keep_separate", confirm_distinct_destinations=True)
     assert duplicate_fragment_summary_for_batch(db, standard)["requires_duplicate_review"] is False
     assert duplicate_fragment_summary_for_batch(db, deluxe)["requires_duplicate_review"] is False
+    assert batch_duplicate_fragment_review(standard.id, db)["active_cluster"] is False
+    assert batch_duplicate_fragment_review(deluxe.id, db)["active_cluster"] is False
 
 
 def test_mark_duplicate_blocks_duplicate_batch_from_move(db) -> None:
@@ -345,7 +358,11 @@ def test_mark_duplicate_blocks_duplicate_batch_from_move(db) -> None:
     assert duplicate is not None
     assert duplicate.status == "duplicate_review"
     assert (duplicate.metadata_json or {}).get("blocked_from_move") is True
-    assert duplicate_fragment_summary_for_batch(db, duplicate)["requires_duplicate_review"] is True
+    duplicate_summary = duplicate_fragment_summary_for_batch(db, duplicate)
+    assert duplicate_summary["requires_duplicate_review"] is False
+    assert duplicate_summary["possible_duplicate_count"] == 0
+    assert batch_duplicate_fragment_review(duplicate.id, db)["active_cluster"] is False
+
 def test_same_destination_creates_duplicate_conflict(db) -> None:
     destination = str(PROJECT_ROOT / ".tmp" / "Library" / "Kanye West" / "2007 - Graduation")
     first = add_music_batch(db, artist="Kanye West", album="Graduation", year="2007", track_count=13, destination=destination)

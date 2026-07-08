@@ -344,6 +344,8 @@ class DuplicateFragmentClusterOut(BaseModel):
 
 
 class DuplicateFragmentReviewOut(BaseModel):
+    active_cluster: bool = False
+    message: str | None = None
     clusters: list[DuplicateFragmentClusterOut] = Field(default_factory=list)
 
 
