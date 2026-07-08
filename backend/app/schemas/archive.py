@@ -321,6 +321,7 @@ class DuplicateFragmentBatchOut(BaseModel):
     creator: str | None = None
     year: str | None = None
     item_count: int = 0
+    file_count: int = 0
     suggested_destination: str | None = None
     source_path: str | None = None
     status: str

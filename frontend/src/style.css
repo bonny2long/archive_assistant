@@ -2556,7 +2556,7 @@ button:focus-visible, input:focus-visible {
   .suite-brand__logo { width: 31px; height: 31px; }
 }
 .scan-status {
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--bg-surface);
   box-shadow: var(--shadow-soft);
@@ -4170,7 +4170,7 @@ button:focus-visible, input:focus-visible {
   justify-content: space-between;
   gap: 0.75rem;
   padding: 0.7rem 1rem;
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border);
   background: rgba(16, 185, 129, 0.1);
   color: var(--text-primary);
   font-size: 12px;
@@ -4188,3 +4188,157 @@ button:focus-visible, input:focus-visible {
 }
 
 /* End AA-QA1-FIX2 */
+
+/* AA-QA1-FIX3.1 - Duplicate Fragment Group Review Workspace */
+.duplicate-review-workspace__header {
+  align-items: flex-start;
+}
+
+.duplicate-review-workspace__reason {
+  margin: 0.45rem 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.duplicate-review-workspace__body {
+  display: grid;
+  grid-template-columns: minmax(420px, 1fr) minmax(320px, 380px);
+  min-height: 0;
+  height: calc(100vh - 136px);
+  border-top: 1px solid var(--border);
+}
+
+.duplicate-review-workspace__main {
+  min-width: 0;
+  overflow: auto;
+  padding: 1rem;
+}
+
+.duplicate-review-workspace__notice {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.85rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 8px;
+  color: var(--accent-amber);
+  background: rgba(245, 158, 11, 0.08);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.duplicate-review-workspace__batch-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.duplicate-review-card {
+  display: grid;
+  gap: 0.45rem;
+  width: 100%;
+  padding: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.duplicate-review-card.is-active {
+  border-color: var(--accent-blue);
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.duplicate-review-card__topline,
+.duplicate-review-card__facts,
+.duplicate-review-workspace__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.duplicate-review-card__topline {
+  justify-content: space-between;
+  color: var(--accent-amber);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.duplicate-review-card__facts span,
+.duplicate-review-workspace__chips span {
+  padding: 0.16rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.duplicate-review-card dl {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.duplicate-review-card dt {
+  color: var(--text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.duplicate-review-card dd {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.duplicate-review-workspace__inspector {
+  min-width: 0;
+  overflow: auto;
+  padding: 1rem;
+  border-left: 1px solid var(--border);
+  background: var(--bg-raised);
+}
+
+.duplicate-review-workspace__decision-section p {
+  margin: 0 0 0.7rem;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.duplicate-review-workspace__decision-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.duplicate-review-workspace__technical {
+  max-height: 280px;
+  overflow: auto;
+  margin: 0.65rem 0 0;
+  padding: 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+@media (max-width: 980px) {
+  .duplicate-review-workspace__body {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+
+  .duplicate-review-workspace__inspector {
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+}
+
+/* End AA-QA1-FIX3.1 */

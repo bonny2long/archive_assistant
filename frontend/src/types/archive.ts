@@ -286,6 +286,7 @@ export type DuplicateFragmentBatch = {
   creator?: string | null;
   year?: string | null;
   item_count: number;
+  file_count?: number;
   suggested_destination?: string | null;
   source_path?: string | null;
   status: string;

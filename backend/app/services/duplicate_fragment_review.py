@@ -183,6 +183,7 @@ def _batch_row(batch: IngestBatch) -> dict[str, Any]:
         "creator": _display_creator(metadata),
         "year": year_value(metadata) or None,
         "item_count": _item_count(batch, metadata),
+        "file_count": len(batch.files or []),
         "suggested_destination": batch.suggested_destination,
         "source_path": batch.source_path,
         "status": batch.status,

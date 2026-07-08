@@ -246,11 +246,11 @@ export default function BatchRow({
           {canOpenWorkspace && (
             <button
               className="btn-sm"
-              title="Open Review Workspace"
+              title={batch.requires_duplicate_review ? "Open Duplicate / Fragment Review" : "Open Review Workspace"}
               style={{ color: "var(--accent-blue)" }}
               onClick={(event) => { event.stopPropagation(); onOpenWorkspace(batch); }}
             >
-              <i className="ti ti-layout-sidebar" />
+              <i className={`ti ${batch.requires_duplicate_review ? "ti-layers-intersect" : "ti-layout-sidebar"}`} />
             </button>
           )}
           <button

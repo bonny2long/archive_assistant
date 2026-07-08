@@ -23,7 +23,7 @@ from app.services.duplicate_fragment_review import (  # noqa: E402
     duplicate_fragment_summary_for_batch,
 )
 from app.services.mover import move_approved_batches  # noqa: E402
-from app.api.routes import approve_batch, _batch_to_summary  # noqa: E402
+from app.api.routes import approve_batch, batch_duplicate_fragment_review, _batch_to_summary  # noqa: E402
 
 
 def add_music_batch(
@@ -105,6 +105,12 @@ def test_fragment_cluster_blocks_approval_and_move(db) -> None:
     rendered = _batch_to_summary(donda3, db=db)
     assert rendered.requires_duplicate_review is True
     assert rendered.duplicate_fragment_review_state == "possible_fragment"
+
+    scoped_review = batch_duplicate_fragment_review(donda3.id, db)
+    assert len(scoped_review["clusters"]) == 1
+    scoped_ids = {row["batch_id"] for row in scoped_review["clusters"][0]["batches"]}
+    assert scoped_ids == {donda10.id, donda3.id, donda9.id}
+    assert all("file_count" in row for row in scoped_review["clusters"][0]["batches"])
 
     response = approve_batch(donda3.id, db)
     assert response.status == "pending_review"

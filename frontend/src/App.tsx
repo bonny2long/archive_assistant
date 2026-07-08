@@ -8,6 +8,7 @@ import type {
   BookCollectionReviewUpdate,
   BookMetadataUpdate,
   DiscographyMetadataUpdate,
+  DuplicateFragmentReview,
   IngestBatch,
   LibrarySummary as LibrarySummaryData,
   MovieCollectionReviewUpdate,
@@ -29,6 +30,7 @@ import LibrarySummary from "./components/LibrarySummary";
 import BulkApproveModal from "./components/BulkApproveModal";
 import MediaReviewRouter from "./components/MediaReviewRouter";
 import ReviewWorkspace from "./components/ReviewWorkspace";
+import DuplicateFragmentReviewWorkspace from "./components/DuplicateFragmentReviewWorkspace";
 import {
   archiveTimezone,
   configureArchiveTimezone,
@@ -75,6 +77,9 @@ export default function App() {
   const [workspaceBatch, setWorkspaceBatch] = useState<BatchSummary | null>(null);
   const [workspaceDetail, setWorkspaceDetail] = useState<IngestBatch | null>(null);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  const [duplicateReviewBatch, setDuplicateReviewBatch] = useState<BatchSummary | null>(null);
+  const [duplicateReview, setDuplicateReview] = useState<DuplicateFragmentReview | null>(null);
+  const [duplicateReviewError, setDuplicateReviewError] = useState<string | null>(null);
   const [savingMetadata, setSavingMetadata] = useState(false);
   const [devToolsEnabled, setDevToolsEnabled] = useState(false);
   const [librarySummary, setLibrarySummary] = useState<LibrarySummaryData>(EMPTY_LIBRARY_SUMMARY);
@@ -268,6 +273,27 @@ export default function App() {
     }
   };
   const handleOpenWorkspace = async (batch: BatchSummary) => {
+    if (batch.requires_duplicate_review) {
+      setWorkspaceBatch(null);
+      setWorkspaceDetail(null);
+      setWorkspaceError(null);
+      setDuplicateReviewBatch(batch);
+      setDuplicateReview(null);
+      setDuplicateReviewError(null);
+      try {
+        const review = await api.getBatchDuplicateFragmentReview(batch.id);
+        setDuplicateReview(review);
+      } catch (openError: unknown) {
+        const message = openError instanceof Error ? openError.message : "Unable to open Duplicate / Fragment Review";
+        setDuplicateReviewError(message);
+        showToast(message, "error");
+      }
+      return;
+    }
+
+    setDuplicateReviewBatch(null);
+    setDuplicateReview(null);
+    setDuplicateReviewError(null);
     setWorkspaceBatch(batch);
     setWorkspaceDetail(null);
     setWorkspaceError(null);
@@ -822,6 +848,34 @@ export default function App() {
           type={toast.type}
           visible
           onHide={() => setToast(null)}
+        />
+      )}
+      {duplicateReviewBatch && !duplicateReview && (
+        <div className="review-workspace" role="dialog" aria-modal="true" aria-label="Duplicate Fragment Review loading">
+          <div className="review-workspace__state">
+            {duplicateReviewError ? (
+              <>
+                <i className="ti ti-alert-triangle" /> {duplicateReviewError}
+                <button
+                  className="btn-sm"
+                  onClick={() => { setDuplicateReviewBatch(null); setDuplicateReview(null); setDuplicateReviewError(null); }}
+                >
+                  Close
+                </button>
+              </>
+            ) : (
+              <>
+                <i className="ti ti-loader-2 spinner" /> Loading Duplicate / Fragment Review...
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      {duplicateReviewBatch && duplicateReview && (
+        <DuplicateFragmentReviewWorkspace
+          review={duplicateReview}
+          selectedBatchId={duplicateReviewBatch.id}
+          onClose={() => { setDuplicateReviewBatch(null); setDuplicateReview(null); setDuplicateReviewError(null); }}
         />
       )}
       {workspaceBatch && !workspaceDetail && (
