@@ -348,6 +348,15 @@ def build_duplicate_fragment_review(db: Session, batch_id: int | None = None) ->
 def duplicate_fragment_summary_for_batch(db: Session, batch: IngestBatch) -> dict[str, Any]:
     metadata = batch.metadata_json or {}
     reviewed_state = metadata.get("duplicate_fragment_review_state")
+    if _destination_sync_problem(batch):
+        return {
+            "possible_duplicate_group_id": None,
+            "possible_duplicate_count": 0,
+            "possible_fragment_group_id": None,
+            "possible_fragment_count": 0,
+            "duplicate_fragment_review_state": "reviewed_merge_required",
+            "requires_duplicate_review": True,
+        }
     if reviewed_state in {"reviewed_keep_separate", "reviewed_merged"} and not _has_missing_file_ownership(batch):
         return {
             "possible_duplicate_group_id": None,
@@ -501,6 +510,47 @@ def _validate_music_destination(format_bucket: str, destination: str) -> None:
         raise DuplicateFragmentResolutionError("Destination does not match file format. Rebuild required before move.")
 
 
+def _destination_sync_error(batch: IngestBatch, format_bucket: str) -> str | None:
+    expected = f"Music/Library/{format_bucket}"
+    metadata = batch.metadata_json or {}
+    destinations = {
+        "batch.suggested_destination": batch.suggested_destination,
+        "metadata_json.suggested_destination": metadata.get("suggested_destination"),
+        "suggested_metadata.suggested_destination": (batch.suggested_metadata or {}).get("suggested_destination"),
+    }
+    normalized_values = {
+        key: str(value or "").replace("\\", "/")
+        for key, value in destinations.items()
+    }
+    missing = [key for key, value in normalized_values.items() if not value]
+    if missing:
+        return f"Missing destination sync field(s): {', '.join(missing)}."
+    unique_values = set(normalized_values.values())
+    if len(unique_values) != 1:
+        return "Canonical batch destination fields are not synchronized."
+    destination = next(iter(unique_values))
+    if expected not in destination:
+        return "Destination does not match file format. Rebuild required before move."
+    return None
+
+
+def _destination_sync_problem(batch: IngestBatch) -> str | None:
+    if not (batch.detected_type or "").startswith("music"):
+        return None
+    metadata = batch.metadata_json or {}
+    audit = metadata.get("duplicate_fragment_resolution_audit") or []
+    has_merge_audit = any(isinstance(item, dict) and item.get("action") == "merge_into_one_batch" for item in audit)
+    if metadata.get("duplicate_fragment_review_state") != "reviewed_merged" and not has_merge_audit:
+        return None
+    format_bucket = str(metadata.get("format") or "").upper().strip()
+    if format_bucket not in {"FLAC", "MP3"}:
+        return None
+    return _destination_sync_error(batch, format_bucket)
+
+def batch_has_destination_sync_problem(batch: IngestBatch) -> bool:
+    return _destination_sync_problem(batch) is not None
+
+
 def _plan_music_merge_rebuild(canonical: IngestBatch, batches: list[IngestBatch]) -> tuple[str | None, str | None]:
     if not (canonical.detected_type or "").startswith("music"):
         return None, None
@@ -552,19 +602,23 @@ def _rebuild_canonical_metadata(
         metadata["disc_count"] = max(1, len(discs))
         if rebuilt_format is None or rebuilt_destination is None:
             rebuilt_format, rebuilt_destination = _plan_music_merge_rebuild(canonical, [canonical])
+        destination_text = str(rebuilt_destination)
         metadata["format"] = rebuilt_format
-        metadata["suggested_destination"] = rebuilt_destination
-        canonical.suggested_destination = rebuilt_destination
+        metadata["suggested_destination"] = destination_text
+        canonical.suggested_destination = destination_text
         suggested = dict(canonical.suggested_metadata or {})
         suggested["format"] = rebuilt_format
-        suggested["suggested_destination"] = rebuilt_destination
+        suggested["suggested_destination"] = destination_text
         canonical.suggested_metadata = suggested
-        _validate_music_destination(rebuilt_format, rebuilt_destination)
+        _validate_music_destination(rebuilt_format, destination_text)
     warnings = list(metadata.get("metadata_warnings") or [])
     warnings.append(f"duplicate_fragment_resolution_{action}")
     metadata["metadata_warnings"] = list(dict.fromkeys(warnings))
     metadata["merged_batch_ids"] = sorted({*(metadata.get("merged_batch_ids") or []), *[batch.id for batch in source_batches]})
     canonical.metadata_json = metadata
+    sync_problem = _destination_sync_error(canonical, str(rebuilt_format))
+    if sync_problem:
+        raise DuplicateFragmentResolutionError(sync_problem)
     canonical.status = "pending_review"
     canonical.approved_at = None
     canonical.approved_by = None

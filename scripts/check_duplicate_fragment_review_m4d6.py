@@ -223,6 +223,7 @@ def test_merge_resolution_reassigns_scoped_files_without_deleting_sources(db) ->
     assert metadata.get("format") == "FLAC"
     assert "Music/Library/FLAC" in destination
     assert metadata.get("suggested_destination") == canonical.suggested_destination
+    assert (canonical.suggested_metadata or {}).get("suggested_destination") == canonical.suggested_destination
     assert metadata.get("file_count") == 13
     assert metadata.get("track_count") == 13
     assert len(metadata.get("tracks") or []) == 13
@@ -243,10 +244,29 @@ def test_merge_resolution_rebuilds_mp3_destination(db) -> None:
     destination = str(canonical.suggested_destination or "").replace("\\", "/")
     assert metadata.get("format") == "MP3"
     assert "Music/Library/MP3" in destination
+    assert metadata.get("suggested_destination") == canonical.suggested_destination
+    assert (canonical.suggested_metadata or {}).get("suggested_destination") == canonical.suggested_destination
     assert metadata.get("file_count") == 9
     assert metadata.get("track_count") == 9
     assert db.query(MoveAction).count() == 0
 
+
+def test_stale_top_level_destination_blocks_approval(db) -> None:
+    first = add_music_batch(db, artist="Kanye West", album="Yeezus", year="2013", track_count=5, extension=".flac")
+    second = add_music_batch(db, artist="Kanye West", album="Yeezus", year="2013", track_count=4, extension=".flac")
+
+    resolve_duplicate_fragment_group(db, second.id, "merge_into_one_batch", canonical_batch_id=first.id)
+    canonical = db.get(IngestBatch, first.id)
+    assert canonical is not None
+    canonical.suggested_destination = str(PROJECT_ROOT / ".tmp" / "Music" / "Library" / "MP3" / "Kanye West" / "2013 - Yeezus")
+    db.commit()
+
+    summary = duplicate_fragment_summary_for_batch(db, canonical)
+    assert summary["requires_duplicate_review"] is True
+    assert summary["duplicate_fragment_review_state"] == "reviewed_merge_required"
+    response = approve_batch(canonical.id, db)
+    assert response.status == "pending_review"
+    assert "duplicate/fragment review" in response.message
 
 def test_mixed_format_merge_is_blocked_before_collapse(db) -> None:
     flac = add_music_batch(db, artist="Kanye West", album="Donda", year="2021", track_count=10, extension=".flac")
