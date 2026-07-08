@@ -322,6 +322,8 @@ class DuplicateFragmentBatchOut(BaseModel):
     year: str | None = None
     item_count: int = 0
     file_count: int = 0
+    file_ownership_status: str = "verified"
+    file_ownership_warning: str | None = None
     suggested_destination: str | None = None
     source_path: str | None = None
     status: str
@@ -334,6 +336,7 @@ class DuplicateFragmentClusterOut(BaseModel):
     media_type: str
     confidence: str
     reason: str
+    has_file_ownership_warnings: bool = False
     batches: list[DuplicateFragmentBatchOut] = Field(default_factory=list)
 
 

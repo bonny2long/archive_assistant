@@ -4275,6 +4275,33 @@ button:focus-visible, input:focus-visible {
   text-transform: uppercase;
 }
 
+.duplicate-review-workspace__ownership-ok {
+  color: var(--accent-green) !important;
+  border-color: rgba(16, 185, 129, 0.35) !important;
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.duplicate-review-workspace__ownership-warning {
+  color: var(--accent-amber) !important;
+  border-color: rgba(245, 158, 11, 0.45) !important;
+  background: rgba(245, 158, 11, 0.1);
+  font-weight: 800;
+}
+
+.duplicate-review-workspace__file-warning {
+  display: flex;
+  gap: 0.45rem;
+  align-items: flex-start;
+  margin-bottom: 0.65rem;
+  padding: 0.65rem;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.08);
+  color: var(--accent-amber);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+}
 .duplicate-review-card__facts span,
 .duplicate-review-workspace__chips span {
   padding: 0.16rem 0.45rem;

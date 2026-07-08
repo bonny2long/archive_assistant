@@ -175,15 +175,24 @@ def _destination_key(batch: IngestBatch) -> str | None:
     return normalize_identity_value(str(batch.suggested_destination).replace("\\", "/"))
 
 
+def _has_missing_file_ownership(batch: IngestBatch) -> bool:
+    metadata = batch.metadata_json or {}
+    return _item_count(batch, metadata) > 0 and len(batch.files or []) == 0
+
 def _batch_row(batch: IngestBatch) -> dict[str, Any]:
     metadata = batch.metadata_json or {}
+    item_count = _item_count(batch, metadata)
+    file_count = len(batch.files or [])
+    missing_files = item_count > 0 and file_count == 0
     return {
         "batch_id": batch.id,
         "title": _display_title(batch, metadata),
         "creator": _display_creator(metadata),
         "year": year_value(metadata) or None,
-        "item_count": _item_count(batch, metadata),
-        "file_count": len(batch.files or []),
+        "item_count": item_count,
+        "file_count": file_count,
+        "file_ownership_status": "missing_files" if missing_files else "verified",
+        "file_ownership_warning": "Batch has media item metadata but no attached scoped files." if missing_files else None,
         "suggested_destination": batch.suggested_destination,
         "source_path": batch.source_path,
         "status": batch.status,
@@ -215,13 +224,15 @@ def _cluster_reason(review_type: str, same_destination: bool) -> str:
 def _cluster_for(cluster_id: str, batches: list[IngestBatch], *, same_destination: bool) -> dict[str, Any]:
     metadata = batches[0].metadata_json or {}
     review_type = _review_type_for(batches, same_destination=same_destination)
+    rows = [_batch_row(batch) for batch in sorted(batches, key=lambda item: item.id)]
     return {
         "cluster_id": cluster_id,
         "review_type": review_type,
         "media_type": _media_type(batches[0], metadata),
         "confidence": "high" if same_destination else "medium",
         "reason": _cluster_reason(review_type, same_destination),
-        "batches": [_batch_row(batch) for batch in sorted(batches, key=lambda item: item.id)],
+        "has_file_ownership_warnings": any(row["file_ownership_status"] == "missing_files" for row in rows),
+        "batches": rows,
     }
 
 
@@ -305,7 +316,7 @@ def build_duplicate_fragment_review(db: Session, batch_id: int | None = None) ->
 def duplicate_fragment_summary_for_batch(db: Session, batch: IngestBatch) -> dict[str, Any]:
     metadata = batch.metadata_json or {}
     reviewed_state = metadata.get("duplicate_fragment_review_state")
-    if reviewed_state in DUPLICATE_REVIEWED_STATES and reviewed_state == "reviewed_keep_separate":
+    if reviewed_state in DUPLICATE_REVIEWED_STATES and reviewed_state == "reviewed_keep_separate" and not _has_missing_file_ownership(batch):
         return {
             "possible_duplicate_group_id": None,
             "possible_duplicate_count": 0,

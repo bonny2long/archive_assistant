@@ -80,6 +80,15 @@ function displayFileCount(batch: DuplicateFragmentBatch, detail: IngestBatch | n
   return detailCount;
 }
 
+function hasMissingFileOwnership(batch: DuplicateFragmentBatch, detail: IngestBatch | null = null): boolean {
+  if (batch.file_ownership_status === "missing_files") return true;
+  return batch.item_count > 0 && displayFileCount(batch, detail) === 0;
+}
+
+function ownershipLabel(batch: DuplicateFragmentBatch, detail: IngestBatch | null = null): string {
+  return hasMissingFileOwnership(batch, detail) ? "Missing scoped files" : "Verified files";
+}
+
 export default function DuplicateFragmentReviewWorkspace({ review, selectedBatchId, onClose }: Props) {
   const cluster = useMemo(() => selectedCluster(review, selectedBatchId), [review, selectedBatchId]);
   const [activeBatchId, setActiveBatchId] = useState<number | null>(selectedBatchId);
@@ -129,6 +138,8 @@ export default function DuplicateFragmentReviewWorkspace({ review, selectedBatch
   const destination = selected?.suggested_destination ?? detail?.suggested_destination ?? null;
   const files = detail?.files ?? [];
   const selectedFileCount = selected ? displayFileCount(selected, detail) : 0;
+  const selectedMissingFileOwnership = selected ? hasMissingFileOwnership(selected, detail) : false;
+  const groupHasFileOwnershipWarnings = Boolean(cluster?.has_file_ownership_warnings || cluster?.batches.some((batch) => hasMissingFileOwnership(batch)));
 
   return (
     <div className="review-workspace duplicate-review-workspace" role="dialog" aria-modal="true" aria-label="Duplicate Fragment Review">
@@ -148,13 +159,14 @@ export default function DuplicateFragmentReviewWorkspace({ review, selectedBatch
         <section className="duplicate-review-workspace__main" aria-label="Matching batches">
           <div className="duplicate-review-workspace__notice">
             <i className="ti ti-alert-triangle" />
-            <span>Resolution actions are coming next. This group is blocked from move approval until it is resolved.</span>
+            <span>{groupHasFileOwnershipWarnings ? "This group has missing scoped files and is blocked from move approval until file ownership is repaired." : "Resolution actions are coming next. This group is blocked from move approval until it is resolved."}</span>
           </div>
 
           <div className="duplicate-review-workspace__batch-list">
             {cluster?.batches.map((batch) => {
               const isSelected = batch.batch_id === selected?.batch_id;
               const fileCount = isSelected ? displayFileCount(batch, detail) : batch.file_count;
+              const missingFileOwnership = isSelected ? hasMissingFileOwnership(batch, detail) : hasMissingFileOwnership(batch);
               return (
                 <button
                   key={batch.batch_id}
@@ -171,6 +183,7 @@ export default function DuplicateFragmentReviewWorkspace({ review, selectedBatch
                   <div className="duplicate-review-card__facts">
                     <span>{itemLabel(batch.item_count)}</span>
                     <span>{fileLabel(fileCount)}</span>
+                    <span className={missingFileOwnership ? "duplicate-review-workspace__ownership-warning" : "duplicate-review-workspace__ownership-ok"}>{ownershipLabel(batch, isSelected ? detail : null)}</span>
                     <span>{batch.year ?? "No year"}</span>
                   </div>
                   <dl>
@@ -199,6 +212,7 @@ export default function DuplicateFragmentReviewWorkspace({ review, selectedBatch
                 <div className="duplicate-review-workspace__chips">
                   <span>{itemLabel(selected.item_count)}</span>
                   <span>{fileLabel(selectedFileCount)}</span>
+                  <span className={selectedMissingFileOwnership ? "duplicate-review-workspace__ownership-warning" : "duplicate-review-workspace__ownership-ok"}>{ownershipLabel(selected, detail)}</span>
                   <span>Status: {statusLabel(selected.status)}</span>
                 </div>
               </section>
@@ -215,7 +229,7 @@ export default function DuplicateFragmentReviewWorkspace({ review, selectedBatch
 
               <section className="workspace-inspector__section duplicate-review-workspace__decision-section">
                 <h3>Group decision</h3>
-                <p>Resolution actions are coming next. This group is blocked from move approval until it is resolved.</p>
+                <p>{groupHasFileOwnershipWarnings ? "Resolution actions remain disabled because one or more batches are missing scoped files." : "Resolution actions are coming next. This group is blocked from move approval until it is resolved."}</p>
                 <div className="duplicate-review-workspace__decision-grid">
                   <button className="btn-sm" disabled><i className="ti ti-copy-check" /> Keep separate</button>
                   <button className="btn-sm" disabled><i className="ti ti-git-merge" /> Merge into one batch</button>
@@ -227,6 +241,11 @@ export default function DuplicateFragmentReviewWorkspace({ review, selectedBatch
 
               <section className="workspace-inspector__section">
                 <h3>Files</h3>
+                {selectedMissingFileOwnership && !loadingDetail && !detailError && (
+                  <div className="duplicate-review-workspace__file-warning">
+                    <i className="ti ti-alert-triangle" /> This batch has metadata but no attached files. It cannot be moved or merged until file ownership is repaired.
+                  </div>
+                )}
                 {loadingDetail && <small><i className="ti ti-loader-2 spinner" /> Loading files...</small>}
                 {detailError && <small className="error-text">{detailError}</small>}
                 {!loadingDetail && !detailError && (

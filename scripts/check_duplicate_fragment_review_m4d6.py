@@ -35,6 +35,7 @@ def add_music_batch(
     track_count: int,
     destination: str | None = None,
     edition: str | None = None,
+    attach_files: bool = True,
 ) -> IngestBatch:
     batch = IngestBatch(
         source_kind="manual-drop",
@@ -62,24 +63,25 @@ def add_music_batch(
     )
     db.add(batch)
     db.flush()
-    for index in range(1, track_count + 1):
-        db.add(IngestFile(
-            batch_id=batch.id,
-            file_path=str(Path(batch.source_path) / f"{index:02d} - Track {index}.flac"),
-            file_name=f"{index:02d} - Track {index}.flac",
-            extension=".flac",
-            size_bytes=4096,
-            checksum=f"{artist}:{album}:{track_count}:{index}",
-            detected_role="music_audio",
-            metadata_json={
-                "artist": artist,
-                "albumartist": artist,
-                "album": album,
-                "title": f"Track {index}",
-                "tracknumber": str(index),
-                "date": year,
-            },
-        ))
+    if attach_files:
+        for index in range(1, track_count + 1):
+            db.add(IngestFile(
+                batch_id=batch.id,
+                file_path=str(Path(batch.source_path) / f"{index:02d} - Track {index}.flac"),
+                file_name=f"{index:02d} - Track {index}.flac",
+                extension=".flac",
+                size_bytes=4096,
+                checksum=f"{artist}:{album}:{track_count}:{index}",
+                detected_role="music_audio",
+                metadata_json={
+                    "artist": artist,
+                    "albumartist": artist,
+                    "album": album,
+                    "title": f"Track {index}",
+                    "tracknumber": str(index),
+                    "date": year,
+                },
+            ))
     db.commit()
     db.refresh(batch)
     return batch
@@ -122,12 +124,16 @@ def test_fragment_cluster_blocks_approval_and_move(db) -> None:
         "source_path",
         "status",
         "detected_type",
+        "file_ownership_status",
+        "file_ownership_warning",
     }
     assert all(required_fields.issubset(row) for row in rows_by_id.values())
     assert rows_by_id[donda10.id]["file_count"] == 10
     assert rows_by_id[donda3.id]["file_count"] == 3
     assert rows_by_id[donda9.id]["file_count"] == 9
+    assert scoped_review["clusters"][0]["has_file_ownership_warnings"] is False
     assert all(row["file_count"] > 0 for row in rows_by_id.values())
+    assert all(row["file_ownership_status"] == "verified" for row in rows_by_id.values())
 
     response = approve_batch(donda3.id, db)
     assert response.status == "pending_review"
@@ -138,6 +144,34 @@ def test_fragment_cluster_blocks_approval_and_move(db) -> None:
     moved, errors = move_approved_batches(db)
     assert moved == 0
     assert any("duplicate/fragment review" in error for error in errors)
+
+def test_missing_file_ownership_is_flagged_and_blocked(db) -> None:
+    complete = add_music_batch(db, artist="Kanye West", album="Donda", year="2021", track_count=10)
+    missing = add_music_batch(db, artist="Kanye West", album="Donda", year="2021", track_count=3, attach_files=False)
+
+    scoped_review = batch_duplicate_fragment_review(missing.id, db)
+    assert len(scoped_review["clusters"]) == 1
+    cluster = scoped_review["clusters"][0]
+    assert cluster["review_type"] == "possible_fragment"
+    assert cluster["has_file_ownership_warnings"] is True
+
+    rows_by_id = {row["batch_id"]: row for row in cluster["batches"]}
+    assert rows_by_id[complete.id]["file_count"] == 10
+    assert rows_by_id[complete.id]["file_ownership_status"] == "verified"
+    assert rows_by_id[missing.id]["item_count"] == 3
+    assert rows_by_id[missing.id]["file_count"] == 0
+    assert rows_by_id[missing.id]["file_ownership_status"] == "missing_files"
+    assert rows_by_id[missing.id]["file_ownership_warning"] == "Batch has media item metadata but no attached scoped files."
+
+    response = approve_batch(missing.id, db)
+    assert response.status == "pending_review"
+    assert "duplicate/fragment review" in response.message
+
+    metadata = dict(missing.metadata_json or {})
+    metadata["duplicate_fragment_review_state"] = "reviewed_keep_separate"
+    missing.metadata_json = metadata
+    db.commit()
+    assert duplicate_fragment_summary_for_batch(db, missing)["requires_duplicate_review"] is True
 
 
 def test_same_destination_creates_duplicate_conflict(db) -> None:
@@ -187,6 +221,7 @@ def main() -> None:
     tests = [
         test_fragment_cluster_blocks_approval_and_move,
         test_same_destination_creates_duplicate_conflict,
+        test_missing_file_ownership_is_flagged_and_blocked,
         test_singletons_are_not_flagged,
         test_edition_conflicts_are_grouped_not_fragmented,
     ]

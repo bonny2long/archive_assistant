@@ -287,6 +287,8 @@ export type DuplicateFragmentBatch = {
   year?: string | null;
   item_count: number;
   file_count?: number;
+  file_ownership_status?: "verified" | "missing_files" | string;
+  file_ownership_warning?: string | null;
   suggested_destination?: string | null;
   source_path?: string | null;
   status: string;
@@ -299,6 +301,7 @@ export type DuplicateFragmentCluster = {
   media_type: string;
   confidence: string;
   reason: string;
+  has_file_ownership_warnings?: boolean;
   batches: DuplicateFragmentBatch[];
 };
 
