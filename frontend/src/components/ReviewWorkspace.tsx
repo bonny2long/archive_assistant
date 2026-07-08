@@ -358,16 +358,24 @@ export default function ReviewWorkspace({
       setMaterializeMessage(null);
       try {
         const result = await onMaterializeApprovedCandidates(batch.id);
-        await loadWorkspace();
-        setWorkspaceRefreshKey((key) => key + 1);
         setMaterializeMessage(result.message);
+        setMaterializing(false);
+        setWorkspaceRefreshKey((key) => key + 1);
+        try {
+          await loadWorkspace();
+        } catch (refreshFailure) {
+          const detail = refreshFailure instanceof Error ? refreshFailure.message : "Refresh the dashboard to see the created child batches.";
+          setMaterializeError(detail);
+        }
       } catch (materializeFailure: unknown) {
         const detail = materializeFailure instanceof Error ? materializeFailure.message : "Unable to create child batches";
         const friendly = detail.includes("no scoped files")
           ? "Could not create child batches because one approved candidate has no scoped files. Open Technical for details."
-          : detail.includes("could not be materialized")
-            ? "Some approved candidates could not be materialized. Refresh and retry; child batches may already exist."
-            : detail;
+          : detail.includes("No approved current candidate") || detail.includes("All candidate groups must be approved")
+            ? "This workspace changed. Refresh it and approve the current candidate groups before creating child batches."
+            : detail.includes("could not be materialized")
+              ? "Some approved candidates could not be materialized. Refresh and retry; child batches may already exist."
+              : detail;
         setMaterializeError(friendly);
       } finally {
         setMaterializing(false);

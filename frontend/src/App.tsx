@@ -73,6 +73,8 @@ export default function App() {
   const [loadingAction, setLoadingAction] = useState<ActionKey | null>(null);
   const [editingBatch, setEditingBatch] = useState<BatchSummary | null>(null);
   const [workspaceBatch, setWorkspaceBatch] = useState<BatchSummary | null>(null);
+  const [workspaceDetail, setWorkspaceDetail] = useState<IngestBatch | null>(null);
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [savingMetadata, setSavingMetadata] = useState(false);
   const [devToolsEnabled, setDevToolsEnabled] = useState(false);
   const [librarySummary, setLibrarySummary] = useState<LibrarySummaryData>(EMPTY_LIBRARY_SUMMARY);
@@ -233,7 +235,7 @@ export default function App() {
   };
 
   const selectedBatches = batches.filter((batch) => selected.has(batch.id));
-  const workspaceDetail = workspaceBatch ? details[workspaceBatch.id] : null;
+  const workspaceErrorMessage = workspaceBatch ? workspaceError ?? detailErrors[workspaceBatch.id] ?? null : null;
 
   const handleLoadDetail = async (id: number) => {
     if (details[id] || detailLoading.has(id)) return;
@@ -267,7 +269,18 @@ export default function App() {
   };
   const handleOpenWorkspace = async (batch: BatchSummary) => {
     setWorkspaceBatch(batch);
-    await handleLoadDetail(batch.id);
+    setWorkspaceDetail(null);
+    setWorkspaceError(null);
+    try {
+      const detail = details[batch.id] ?? await api.getBatch(batch.id);
+      setDetails((previous) => ({ ...previous, [batch.id]: detail }));
+      setWorkspaceDetail(detail);
+      void handleLoadDetail(batch.id);
+    } catch (openError: unknown) {
+      const message = openError instanceof Error ? openError.message : "Unable to open Review Workspace";
+      setWorkspaceError(message);
+      showToast(message, "error");
+    }
   };
 
   const handleWorkspaceAction = async (batchId: number, update: UniversalReviewActionUpdate) => {
@@ -814,14 +827,28 @@ export default function App() {
       {workspaceBatch && !workspaceDetail && (
         <div className="review-workspace" role="dialog" aria-modal="true" aria-label="Review Workspace loading">
           <div className="review-workspace__state">
-            <i className="ti ti-loader-2 spinner" /> Loading Review Workspace...
+            {workspaceErrorMessage ? (
+              <>
+                <i className="ti ti-alert-triangle" /> {workspaceErrorMessage}
+                <button
+                  className="btn-sm"
+                  onClick={() => { setWorkspaceBatch(null); setWorkspaceDetail(null); setWorkspaceError(null); }}
+                >
+                  Close
+                </button>
+              </>
+            ) : (
+              <>
+                <i className="ti ti-loader-2 spinner" /> Loading Review Workspace...
+              </>
+            )}
           </div>
         </div>
       )}
       {workspaceBatch && workspaceDetail && (
         <ReviewWorkspace
           batch={workspaceDetail}
-          onClose={() => setWorkspaceBatch(null)}
+          onClose={() => { setWorkspaceBatch(null); setWorkspaceDetail(null); setWorkspaceError(null); }}
           onSaveAction={handleWorkspaceAction}
           onClearAction={handleWorkspaceClearAction}
           onSplitCandidate={workspaceDetail.detected_type === "music_discography" ? handleWorkspaceSplitCandidate : undefined}
@@ -829,10 +856,14 @@ export default function App() {
           onApprove={async (batchId) => {
             await handleApprove(batchId);
             setWorkspaceBatch(null);
+            setWorkspaceDetail(null);
+            setWorkspaceError(null);
           }}
           onOpenFullEditor={() => {
             if (workspaceBatch) setEditingBatch(workspaceBatch);
             setWorkspaceBatch(null);
+            setWorkspaceDetail(null);
+            setWorkspaceError(null);
           }}
         />
       )}

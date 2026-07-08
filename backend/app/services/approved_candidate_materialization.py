@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
@@ -27,7 +27,7 @@ class MaterializationError(ValueError):
     pass
 
 
-def _active_candidate_decisions(db: Session, batch_id: int) -> dict[int, str]:
+def _active_candidate_decisions(db: Session, batch_id: int, candidate_ids: set[int] | None = None) -> dict[int, str]:
     decisions: dict[int, str] = {}
     actions = (
         db.query(UniversalIngestionReviewAction)
@@ -44,7 +44,10 @@ def _active_candidate_decisions(db: Session, batch_id: int) -> dict[int, str]:
         .all()
     )
     for action in actions:
-        decisions[int(action.candidate_id)] = action.action_type
+        candidate_id = int(action.candidate_id)
+        if candidate_ids is not None and candidate_id not in candidate_ids:
+            continue
+        decisions[candidate_id] = action.action_type
     return decisions
 
 
@@ -339,16 +342,21 @@ def materialize_approved_candidates(db: Session, batch_id: int) -> dict[str, Any
     if parent_summary["remaining_candidate_count"] > 0:
         raise ValueError("All candidate groups must be approved or excluded before child batches can be created")
 
-    decisions = _active_candidate_decisions(db, batch_id)
-    approved_candidate_ids = [candidate_id for candidate_id, action_type in decisions.items() if action_type == "approve_candidate"]
-    if not approved_candidate_ids:
-        raise ValueError("No approved candidate groups are available to materialize")
-
-    candidates = {
+    current_candidates = {
         candidate.id: candidate
         for candidate in db.query(MediaIdentityCandidate)
-        .filter(MediaIdentityCandidate.batch_id == batch_id, MediaIdentityCandidate.id.in_(approved_candidate_ids))
+        .filter(MediaIdentityCandidate.batch_id == batch_id)
         .all()
+    }
+    decisions = _active_candidate_decisions(db, batch_id, set(current_candidates))
+    approved_candidate_ids = [candidate_id for candidate_id, action_type in decisions.items() if action_type == "approve_candidate"]
+    if not approved_candidate_ids:
+        raise ValueError("No approved current candidate groups are available to materialize. Refresh the workspace and approve the current candidates.")
+
+    candidates = {
+        candidate_id: current_candidates[candidate_id]
+        for candidate_id in approved_candidate_ids
+        if candidate_id in current_candidates
     }
 
     child_batch_ids: list[int] = []

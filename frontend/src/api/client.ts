@@ -68,12 +68,27 @@ export function formatApiError(errorBody: unknown, fallback: string): string {
   return fallback;
 }
 
-async function request<T>(path: string, method = "GET", body?: unknown): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+async function request<T>(path: string, method = "GET", body?: unknown, timeoutMs?: number): Promise<T> {
+  const controller = timeoutMs ? new AbortController() : undefined;
+  const timeoutId = timeoutMs
+    ? window.setTimeout(() => controller?.abort(), timeoutMs)
+    : undefined;
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      method,
+      headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: controller?.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error(`${method} ${path} timed out. Refresh and check whether child batches were created.`);
+    }
+    throw error;
+  } finally {
+    if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+  }
   if (!res.ok) {
     const errorBody = await res.json().catch(() => null);
     throw new Error(
@@ -110,7 +125,7 @@ export const api = {
   splitCandidate: (id: number, candidateId: number) =>
     request<SplitCandidateResult>(`/batches/${id}/split-candidate`, "POST", { candidate_id: candidateId }),
   materializeApprovedCandidates: (id: number) =>
-    request<MaterializeApprovedCandidatesResult>(`/batches/${id}/materialize-approved-candidates`, "POST"),
+    request<MaterializeApprovedCandidatesResult>(`/batches/${id}/materialize-approved-candidates`, "POST", undefined, 180000),
   getBatchMoves: (id: number) => request<BatchMoveSummary>(`/batches/${id}/moves`),
   updateBatchMetadata: (id: number, update: BatchMetadataUpdate) =>
     request<BatchSummary>(`/batches/${id}/metadata`, "PATCH", update),
