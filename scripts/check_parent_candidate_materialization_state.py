@@ -190,6 +190,46 @@ def test_materializes_approved_candidates_once(db) -> None:
     assert db.query(IngestBatch).filter(IngestBatch.detected_type == "music_album").count() == 4
 
 
+
+def test_split_complete_parent_without_candidates_stays_container(db) -> None:
+    parent = IngestBatch(
+        source_kind="manual-drop",
+        source_path=str(PROJECT_ROOT / ".tmp" / "drive-download-20260628T012539Z-3-010"),
+        detected_type="music_discography",
+        status="split_complete",
+        confidence=1.0,
+        metadata_json={
+            "type": "music_discography",
+            "artist": "drive-download-20260628T012539Z-3-010",
+            "release_count": 3,
+            "album_count": 3,
+            "track_count": 63,
+            "materialization_history": [
+                {"candidate_id": 101, "child_batch_id": 201},
+                {"candidate_id": 102, "child_batch_id": 202},
+                {"candidate_id": 103, "child_batch_id": 203},
+            ],
+        },
+    )
+    db.add(parent)
+    db.commit()
+    db.refresh(parent)
+
+    summary = build_parent_candidate_summary(db, parent)
+    assert summary["is_parent_review_container"] is True
+    assert summary["parent_review_state"] == "split_complete"
+    assert summary["candidate_group_count"] == 3
+    assert summary["approved_candidate_count"] == 3
+    assert summary["remaining_candidate_count"] == 0
+    assert summary["needs_materialization"] is False
+
+    display = build_batch_display_fields(parent, summary)
+    assert display["media_label"] == "Discography Source"
+    assert display["secondary_name"] == "3 child batches created, split complete"
+    assert display["item_label"] == "candidate groups"
+    assert display["item_count"] == 3
+    assert display["item_count"] != 63
+
 def test_failed_materialization_does_not_complete_parent(db) -> None:
     good_release = album_row("Good Candidate", "2024")
     broken_release = album_row("Broken Candidate", "2024")
@@ -281,6 +321,7 @@ def main() -> None:
     try:
         test_multi_candidate_parent_is_container(db)
         test_materializes_approved_candidates_once(db)
+        test_split_complete_parent_without_candidates_stays_container(db)
         test_failed_materialization_does_not_complete_parent(db)
         test_single_item_batch_stays_normal(db)
         print("PASS - AA-QA1-FIX2.2 candidate-member-first materialization verified")

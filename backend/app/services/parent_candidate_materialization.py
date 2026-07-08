@@ -42,6 +42,29 @@ def build_parent_candidate_summary(db: Session | None, batch: IngestBatch) -> di
         .all()
     ]
     candidate_group_count = len(candidate_ids)
+    metadata = batch.metadata_json or {}
+    if batch.status == PARENT_SPLIT_COMPLETE:
+        history = metadata.get("materialization_history")
+        materialized_count = len([
+            item for item in history or []
+            if isinstance(item, dict) and (item.get("child_batch_id") or item.get("candidate_id"))
+        ]) if isinstance(history, list) else 0
+        fallback_count = int(
+            metadata.get("release_count")
+            or metadata.get("album_count")
+            or metadata.get("candidate_group_count")
+            or 0
+        )
+        split_count = candidate_group_count or materialized_count or fallback_count
+        return {
+            "candidate_group_count": split_count,
+            "approved_candidate_count": split_count,
+            "excluded_candidate_count": 0,
+            "remaining_candidate_count": 0,
+            "needs_materialization": False,
+            "parent_review_state": PARENT_SPLIT_COMPLETE,
+            "is_parent_review_container": True,
+        }
     if candidate_group_count <= 1:
         return empty_parent_candidate_summary() | {
             "candidate_group_count": candidate_group_count,

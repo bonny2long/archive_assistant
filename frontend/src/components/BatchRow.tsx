@@ -141,8 +141,9 @@ export default function BatchRow({
   const editKind = getBatchEditKind(batch);
   const year = batch.year ?? "-";
   const percent = Math.round((batch.confidence ?? 0) * 100);
-  const canOpenWorkspace = batch.status !== "moved" && !quarantineReview;
   const parentReviewContainer = isParentReviewContainer(batch);
+  const splitCompleteParent = parentReviewContainer && batch.parent_review_state === "split_complete";
+  const canOpenWorkspace = batch.status !== "moved" && !quarantineReview && !splitCompleteParent;
   const duplicateLabel = duplicateFragmentLabel(batch);
   const activeDuplicateReview = hasActiveDuplicateFragmentReview(batch);
   const duplicateMatchCount = duplicateFragmentMatchCount(batch);
@@ -174,7 +175,7 @@ export default function BatchRow({
           {secondaryName}
           {quarantineReview && (
             <small className="row-artwork">
-              {batch.file_count} file(s) Â· {batch.folder_count} folder(s)
+              {batch.file_count} file(s) Ãƒâ€šÃ‚Â· {batch.folder_count} folder(s)
             </small>
           )}
           {!quarantineReview && batch.artwork_count > 0 && (
