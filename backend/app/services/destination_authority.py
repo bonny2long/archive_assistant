@@ -18,6 +18,8 @@ STRICT_MUSIC_FORMATS = {"FLAC", "MP3"}
 _SAFE_PART_PATTERN = re.compile(r'[<>:"/\\|?*]+')
 MIXED_FORMAT_WARNING = "mixed_audio_formats_destination_review_required"
 UNKNOWN_FORMAT_WARNING = "audio_format_destination_review_required"
+MUSIC_FLAC_DESTINATION_BUCKET = "Music/Library/FLAC"
+MUSIC_MP3_DESTINATION_BUCKET = "Music/Library/MP3"
 
 
 def safe_path_part(value: object, fallback: str = "Unknown") -> str:
@@ -79,6 +81,14 @@ def build_music_library_destination(
     return str(Path(root) / artist_part / album_folder)
 
 
+def classify_music_destination_bucket(destination: str | None) -> str | None:
+    normalized = str(destination or "").replace("\\", "/")
+    if MUSIC_FLAC_DESTINATION_BUCKET in normalized:
+        return "FLAC"
+    if MUSIC_MP3_DESTINATION_BUCKET in normalized:
+        return "MP3"
+    return None
+
 def sync_batch_destination_fields(batch: IngestBatch, destination: str) -> None:
     destination_text = str(destination)
     batch.suggested_destination = destination_text
@@ -114,8 +124,8 @@ def validate_music_format_destination(batch: IngestBatch) -> list[str]:
     normalized = {key: value.replace("\\", "/") for key, value in values.items()}
     if len(set(normalized.values())) != 1:
         errors.append("Music destination fields are not synchronized.")
-    expected = f"Music/Library/{format_bucket}"
-    wrong = "Music/Library/MP3" if format_bucket == "FLAC" else "Music/Library/FLAC"
+    expected = MUSIC_FLAC_DESTINATION_BUCKET if format_bucket == "FLAC" else MUSIC_MP3_DESTINATION_BUCKET
+    wrong = MUSIC_MP3_DESTINATION_BUCKET if format_bucket == "FLAC" else MUSIC_FLAC_DESTINATION_BUCKET
     for key, value in normalized.items():
         if expected not in value or wrong in value:
             errors.append(f"{key} does not match {format_bucket} destination authority.")
