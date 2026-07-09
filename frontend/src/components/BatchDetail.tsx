@@ -30,6 +30,43 @@ function BatchReviewShell({ batch, children }: { batch: IngestBatch; children: R
   );
 }
 
+function hasSplitChildHistory(metadata: Record<string, unknown>): boolean {
+  return Number(metadata.materialized_child_count ?? metadata.child_candidate_count ?? 0) > 0
+    || Array.isArray(metadata.materialization_history)
+    || Array.isArray(metadata.split_history)
+    || Array.isArray(metadata.discography_split_audit);
+}
+
+function isDrainedParentBatch(batch: IngestBatch): boolean {
+  const metadata = batch.metadata_json ?? {};
+  const parentReviewState = typeof metadata.parent_review_state === "string"
+    ? metadata.parent_review_state
+    : batch.status === "split_complete" ? "split_complete" : null;
+  const activeFileCount = batch.files?.length ?? Number(metadata.remaining_parent_file_count ?? 0);
+  return batch.detected_type === "music_discography"
+    && activeFileCount === 0
+    && (parentReviewState === "split_complete" || hasSplitChildHistory(metadata));
+}
+
+function DrainedParentDetail({ batch, moveSummary }: { batch: IngestBatch; moveSummary?: BatchMoveSummary }) {
+  return (
+    <div className="batch-detail batch-detail--drained-parent">
+      <section className="library-card drained-parent-card">
+        <div className="library-status__icon"><i className="ti ti-folders" /></div>
+        <div>
+          <div className="library-status__eyebrow">Processed intake container</div>
+          <h2>{getBatchDisplayTitle(batch)}</h2>
+          <p>This intake folder has been split into child batches.</p>
+          <p>0 active files remain on this parent.</p>
+          <p>Review the child batches from the dashboard.</p>
+          <p>Physical source cleanup will be handled later by Cleaner.</p>
+        </div>
+      </section>
+      <DebugDetails batch={batch} moveSummary={moveSummary} />
+    </div>
+  );
+}
+
 function metadataValue(batch: IngestBatch, key: string): string {
   const value = batch.metadata_json?.[key];
   return value === null || value === undefined || value === "" ? "-" : String(value);
@@ -1163,22 +1200,7 @@ function DiscographyBatchDetail({ batch, moveSummary, onEditBatch }: Props) {
   const isDrainedParent = isSplitParent && remainingParentFileCount === 0 && (materializedChildCount > 0 || hasChildBatchHistory);
 
   if (isDrainedParent) {
-    return (
-      <div className="batch-detail batch-detail--drained-parent">
-        <section className="library-card drained-parent-card">
-          <div className="library-status__icon"><i className="ti ti-folders" /></div>
-          <div>
-            <div className="library-status__eyebrow">Processed intake container</div>
-            <h2>{getBatchDisplayTitle(batch)}</h2>
-            <p>This intake folder has been split into child batches.</p>
-            <p>0 active files remain on this parent.</p>
-            <p>Review the child batches from the dashboard.</p>
-            <p>Physical source cleanup will be handled later by Cleaner.</p>
-          </div>
-        </section>
-        <DebugDetails batch={batch} moveSummary={moveSummary} />
-      </div>
-    );
+    return <DrainedParentDetail batch={batch} moveSummary={moveSummary} />;
   }
 
   return (
@@ -1498,6 +1520,9 @@ function DiscographyEditorGate({ batch, moveSummary, onEditBatch }: Props) {
 export default function BatchDetail({ batch, moveSummary, review, onEditBatch }: Props) {
   if (batch.status === "needs_quarantine_review" || batch.status === "quarantined") {
     return <QuarantineReviewDetail batch={batch} moveSummary={moveSummary} />;
+  }
+  if (isDrainedParentBatch(batch)) {
+    return <DrainedParentDetail batch={batch} moveSummary={moveSummary} />;
   }
   if (batch.detected_type === "music_discography") {
     return (
