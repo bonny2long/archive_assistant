@@ -178,6 +178,22 @@ function isMetadataConfirmed(batch: IngestBatch): boolean {
   );
 }
 
+function duplicateFragmentMatchCount(batch: BatchSummary): number {
+  return Math.max(batch.possible_fragment_count ?? 0, batch.possible_duplicate_count ?? 0);
+}
+
+function childApproveDisabledReason(child: BatchSummary): string | null {
+  if (!child.id) return "Unavailable";
+  if (child.status === "approved" || child.status === "moved") return "Already approved";
+  if (child.requires_duplicate_review && duplicateFragmentMatchCount(child) > 0) {
+    return "Resolve duplicate/fragment review first";
+  }
+  if ((child.blocking_review_items ?? []).length > 0) return "Blocking review items remain";
+  if (child.status === "needs_metadata_review") return "Review metadata first";
+  if (child.status !== "pending_review") return "Unavailable";
+  return null;
+}
+
 function CreatedChildBatchesPanel({ batchId, onEditBatch, onApproveBatch }: { batchId: number; onEditBatch?: (batch: BatchSummary) => void; onApproveBatch?: (id: number) => void }) {
   const [children, setChildren] = useState<BatchSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -228,28 +244,44 @@ function CreatedChildBatchesPanel({ batchId, onEditBatch, onApproveBatch }: { ba
         <span>{children.length} child batch{children.length === 1 ? "" : "es"}</span>
       </div>
       <div className="created-child-batches__list">
-        {children.map((child) => (
-          <article key={child.id} className="created-child-batches__item">
-            <div>
-              <strong>#{child.id} ? {child.primary_name ?? child.artist ?? "Unknown Artist"}</strong>
-              <span>{child.secondary_name ?? child.album ?? "Unknown Album"}</span>
-            </div>
-            <div className="created-child-batches__facts">
-              <span>{child.status.replace(/_/g, " ")}</span>
-              <span>{child.item_count} {child.item_label}</span>
-              <span>{child.file_count} file{child.file_count === 1 ? "" : "s"}</span>
-            </div>
-            <code title={child.suggested_destination ?? ""}>{readableLibraryPath(child.suggested_destination)}</code>
-            <div className="created-child-batches__actions">
-              <button type="button" className="btn-sm" disabled={!onEditBatch} onClick={() => onEditBatch?.(child)}>
-                <i className="ti ti-pencil" /> Review
-              </button>
-              <button type="button" className="btn-sm" disabled={!onApproveBatch || child.status !== "pending_review"} onClick={() => onApproveBatch?.(child.id)}>
-                <i className="ti ti-check" /> Approve
-              </button>
-            </div>
-          </article>
-        ))}
+        {children.map((child) => {
+          const canReview = Boolean(child.id && onEditBatch);
+          const approveDisabledReason = onApproveBatch ? childApproveDisabledReason(child) : "Unavailable";
+          return (
+            <article key={child.id} className="created-child-batches__item">
+              <div>
+                <strong>#{child.id} - {child.primary_name ?? child.artist ?? "Unknown Artist"}</strong>
+                <span>{child.secondary_name ?? child.album ?? "Unknown Album"}</span>
+              </div>
+              <div className="created-child-batches__facts">
+                <span>{child.status.replace(/_/g, " ")}</span>
+                <span>{child.item_count} {child.item_label}</span>
+                <span>{child.file_count} file{child.file_count === 1 ? "" : "s"}</span>
+              </div>
+              <code title={child.suggested_destination ?? ""}>{readableLibraryPath(child.suggested_destination)}</code>
+              <div className="created-child-batches__actions">
+                <button
+                  type="button"
+                  className="btn-sm"
+                  disabled={!canReview}
+                  title={canReview ? "Review child batch" : "Unavailable"}
+                  onClick={() => onEditBatch?.(child)}
+                >
+                  <i className="ti ti-pencil" /> Review
+                </button>
+                <button
+                  type="button"
+                  className="btn-sm"
+                  disabled={Boolean(approveDisabledReason)}
+                  title={approveDisabledReason ?? "Approve child batch"}
+                  onClick={() => onApproveBatch?.(child.id)}
+                >
+                  <i className="ti ti-check" /> Approve
+                </button>
+              </div>
+            </article>
+          );
+        })}
       </div>
     </section>
   );
@@ -1384,7 +1416,7 @@ function MovedBatchDetail({ batch, moveSummary }: Props) {
 }
 
 
-function DiscographyEditorGate({ batch, moveSummary }: Props) {
+function DiscographyEditorGate({ batch, moveSummary, onEditBatch, onApproveBatch }: Props) {
   const [routing, setRouting] = useState<RoutingDecision | null>(null);
   const [routingError, setRoutingError] = useState<string | null>(null);
   const [routingLoading, setRoutingLoading] = useState(true);
@@ -1408,7 +1440,7 @@ function DiscographyEditorGate({ batch, moveSummary }: Props) {
           <i className="ti ti-alert-triangle" />
           Could not verify media candidates. Editor shown but review the Universal Ingestion panel above.
         </div>
-        <DiscographyBatchDetail batch={batch} moveSummary={moveSummary} />
+        <DiscographyBatchDetail batch={batch} moveSummary={moveSummary} onEditBatch={onEditBatch} onApproveBatch={onApproveBatch} />
       </>
     );
   }
@@ -1420,7 +1452,7 @@ function DiscographyEditorGate({ batch, moveSummary }: Props) {
           <i className="ti ti-info-circle" />
           Universal ingestion analysis not yet run for this batch.
         </div>
-        <DiscographyBatchDetail batch={batch} moveSummary={moveSummary} />
+        <DiscographyBatchDetail batch={batch} moveSummary={moveSummary} onEditBatch={onEditBatch} onApproveBatch={onApproveBatch} />
       </>
     );
   }
@@ -1461,12 +1493,12 @@ function DiscographyEditorGate({ batch, moveSummary }: Props) {
           <i className="ti ti-alert-circle" />
           <span>Source fragments were detected. Review the Universal Ingestion panel above before saving discography corrections.</span>
         </div>
-        <DiscographyBatchDetail batch={batch} moveSummary={moveSummary} />
+        <DiscographyBatchDetail batch={batch} moveSummary={moveSummary} onEditBatch={onEditBatch} onApproveBatch={onApproveBatch} />
       </>
     );
   }
 
-  return <DiscographyBatchDetail batch={batch} moveSummary={moveSummary} />;
+  return <DiscographyBatchDetail batch={batch} moveSummary={moveSummary} onEditBatch={onEditBatch} onApproveBatch={onApproveBatch} />;
 }
 export default function BatchDetail({ batch, moveSummary, review, onEditBatch, onApproveBatch }: Props) {
   if (batch.status === "needs_quarantine_review" || batch.status === "quarantined") {
@@ -1475,7 +1507,7 @@ export default function BatchDetail({ batch, moveSummary, review, onEditBatch, o
   if (batch.detected_type === "music_discography") {
     return (
       <BatchReviewShell batch={batch}>
-        <DiscographyEditorGate batch={batch} moveSummary={moveSummary} />
+        <DiscographyEditorGate batch={batch} moveSummary={moveSummary} onEditBatch={onEditBatch} onApproveBatch={onApproveBatch} />
       </BatchReviewShell>
     );
   }

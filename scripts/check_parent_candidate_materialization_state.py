@@ -16,6 +16,7 @@ os.environ["DEBUG"] = "true"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
+from app.api.routes import _batch_to_summary  # noqa: E402
 from app.db.session import Base  # noqa: E402
 from app.models.archive import IngestBatch, IngestFile  # noqa: E402
 from app.models.media_metadata import CandidateMember, MediaIdentityCandidate, UniversalIngestionReviewAction  # noqa: E402
@@ -188,6 +189,14 @@ def test_materializes_approved_candidates_once(db) -> None:
     assert all(child.metadata_json["track_count"] == 1 for child in children)
     assert all(child.metadata_json["source_candidate_id"] for child in children)
     assert all(db.query(IngestFile).filter(IngestFile.batch_id == child.id).count() == 1 for child in children)
+    child_summaries = [_batch_to_summary(child, db=db) for child in children]
+    assert all(summary.id == child.id for summary, child in zip(child_summaries, children))
+    assert all(summary.status == "pending_review" for summary in child_summaries)
+    assert all(summary.detected_type == "music_album" for summary in child_summaries)
+    assert all(summary.edit_kind == "music_album" for summary in child_summaries)
+    assert all(summary.requires_duplicate_review is False for summary in child_summaries)
+    assert all(isinstance(summary.blocking_review_items, list) for summary in child_summaries)
+    assert all(isinstance(summary.review_confirmed, bool) for summary in child_summaries)
 
     second = materialize_approved_candidates(db, parent.id)
     assert second["created_count"] == 0
