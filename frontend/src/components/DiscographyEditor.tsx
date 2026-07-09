@@ -493,7 +493,7 @@ export default function DiscographyEditor({
                 onClick={() => void onCreateChildBatches(buildUpdate())}
               >
                 <i className={`ti ti-${saving ? "loader-2 spinner" : "git-branch"}`} />
-                Create safe child batches
+                Save and create child batches
               </button>
             )}
             <button type="submit" className="btn btn--green" disabled={saving || !valid}>

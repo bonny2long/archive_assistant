@@ -49,6 +49,20 @@ type QaSummary = {
   errors?: string[];
 };
 
+function isProcessedContainerBatch(batch: BatchSummary): boolean {
+  return Boolean(batch.parent_is_drained || batch.parent_container_state === "drained_parent" || batch.display_state === "drained_parent");
+}
+
+function isPendingReviewBatch(batch: BatchSummary): boolean {
+  return !isProcessedContainerBatch(batch) && batch.status === "pending_review";
+}
+
+function isNeedsMetadataBatch(batch: BatchSummary): boolean {
+  return !isProcessedContainerBatch(batch) && (
+    batch.status === "needs_metadata_review"
+    || (batch.status === "pending_review" && batch.confidence < 0.6)
+  );
+}
 const EMPTY_LIBRARY_SUMMARY: LibrarySummaryData = {
   moved_albums: 0,
   moved_tracks: 0,
@@ -202,11 +216,8 @@ export default function App() {
 
   const filtered = batches.filter((batch) => {
     if (tab === "all") return true;
-    if (tab === "pending") return !batch.parent_is_drained && batch.status === "pending_review";
-    if (tab === "needs_metadata") {
-      return batch.status === "needs_metadata_review"
-        || (batch.status === "pending_review" && batch.confidence < 0.6);
-    }
+    if (tab === "pending") return isPendingReviewBatch(batch);
+    if (tab === "needs_metadata") return isNeedsMetadataBatch(batch);
     if (tab === "quarantine") {
       return ["needs_quarantine_review", "quarantined"].includes(batch.status);
     }
@@ -215,11 +226,8 @@ export default function App() {
 
   const counts: Record<TabKey, number> = {
     all: batches.length,
-    pending: batches.filter((batch) => !batch.parent_is_drained && batch.status === "pending_review").length,
-    needs_metadata: batches.filter((batch) => (
-      batch.status === "needs_metadata_review"
-      || (!batch.parent_is_drained && batch.status === "pending_review" && batch.confidence < 0.6)
-    )).length,
+    pending: batches.filter(isPendingReviewBatch).length,
+    needs_metadata: batches.filter(isNeedsMetadataBatch).length,
     quarantine: batches.filter(
       (batch) => ["needs_quarantine_review", "quarantined"].includes(batch.status),
     ).length,

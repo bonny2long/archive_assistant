@@ -1195,12 +1195,6 @@ function DiscographyBatchDetail({ batch, moveSummary, onEditBatch }: Props) {
   const isSplitParent = Boolean(parentContainerState) || hasChildBatchHistory;
   const remainingParentFileCount = Number(metadata.active_parent_file_count ?? batch.files.length ?? 0);
   const remainingAlbums = albums.filter((album) => album.release_decision !== "extract_as_child");
-  const childBatchCount = Number(metadata.child_batch_count ?? 0);
-  const isDrainedParent = metadata.parent_is_drained === true || parentContainerState === "drained_parent" || (isSplitParent && remainingParentFileCount === 0 && (childBatchCount > 0 || hasChildBatchHistory));
-
-  if (isDrainedParent) {
-    return <DrainedParentDetail batch={batch} moveSummary={moveSummary} />;
-  }
 
   return (
     <div className={`batch-detail ${moved ? "batch-detail--moved" : "batch-detail--review"}`}>
@@ -1517,11 +1511,11 @@ function DiscographyEditorGate({ batch, moveSummary, onEditBatch }: Props) {
   return <DiscographyBatchDetail batch={batch} moveSummary={moveSummary} onEditBatch={onEditBatch} />;
 }
 export default function BatchDetail({ batch, moveSummary, review, onEditBatch }: Props) {
-  if (batch.status === "needs_quarantine_review" || batch.status === "quarantined") {
-    return <QuarantineReviewDetail batch={batch} moveSummary={moveSummary} />;
-  }
   if (isDrainedParentBatch(batch)) {
     return <DrainedParentDetail batch={batch} moveSummary={moveSummary} />;
+  }
+  if (batch.status === "needs_quarantine_review" || batch.status === "quarantined") {
+    return <QuarantineReviewDetail batch={batch} moveSummary={moveSummary} />;
   }
   if (batch.detected_type === "music_discography") {
     return (

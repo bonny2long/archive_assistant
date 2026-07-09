@@ -443,17 +443,20 @@ export type BatchSummary = {
   metadata_confirmed: boolean;
   music_review_summary?: MusicReviewSummary | null;
   action_message?: string | null;
+  // Parent/container review summary.
   candidate_group_count?: number;
   approved_candidate_count?: number;
   excluded_candidate_count?: number;
   blocked_candidate_count?: number;
   review_later_candidate_count?: number;
   unresolved_candidate_count?: number;
+  // Legacy compatibility fields. UI should prefer current parent/container state fields below.
   materialized_child_count?: number;
   child_candidate_count?: number;
   remaining_candidate_count?: number;
   needs_materialization?: boolean;
   parent_review_state?: "review_in_progress" | "candidates_approved_waiting_materialization" | "parent_partially_materialized" | "split_complete" | string | null;
+  // Current parent/container state fields.
   parent_container_state?: "active_parent_container" | "partial_parent_container" | "drained_parent" | string | null;
   is_parent_review_container?: boolean;
   parent_is_drained?: boolean;

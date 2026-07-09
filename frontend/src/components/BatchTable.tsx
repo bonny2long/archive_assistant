@@ -13,6 +13,9 @@ const BLOCKING_APPROVAL_WARNINGS = new Set([
   "tv_destination_exists",
 ]);
 
+function isProcessedContainerBatch(batch: BatchSummary): boolean {
+  return Boolean(batch.parent_is_drained || batch.parent_container_state === "drained_parent" || batch.display_state === "drained_parent");
+}
 type Props = {
   batches: BatchSummary[];
   selected: Set<number>;
@@ -66,7 +69,7 @@ export default function BatchTable({
   const allChecked = batches.length > 0 && batches.every((batch) => selected.has(batch.id));
   const selectedBatches = batches.filter((batch) => selected.has(batch.id));
   const approvableCount = selectedBatches.filter(
-    (batch) => !batch.parent_is_drained && batch.status === "pending_review"
+    (batch) => !isProcessedContainerBatch(batch) && batch.status === "pending_review"
       && !batch.metadata_warnings.some(
         (warning) => BLOCKING_APPROVAL_WARNINGS.has(warning),
       ),

@@ -286,7 +286,7 @@ export default function UniversalIngestionPanel({ batchId }: { batchId: number }
                   </button>
                   <button
                     type="button"
-                    onClick={() => submitAction(candidate, { action_type: "split_candidate", reason: "Candidate will create a child batch during parent materialization." })}
+                    onClick={() => submitAction(candidate, { action_type: "split_candidate", reason: "Candidate will create a child batch during parent split." })}
                     disabled={savingAction === candidate.id || !hasCandidateAction(candidate, "approve_candidate") || hasAppliedCandidateAction(candidate, "approve_candidate") || hasAppliedCandidateAction(candidate, "split_candidate")}
                   >
                     {childBatchActionLabel(candidate)}

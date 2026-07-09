@@ -39,7 +39,7 @@ export default function WorkspaceHeader({
   const candidates = ingestion?.candidates ?? [];
   const isParentReviewContainer = candidateCount > 1;
   const approvedCount = candidates.filter((candidate) => hasPendingAction(candidate.active_actions ?? [], "approve_candidate")).length;
-  const materializedCount = candidates.filter((candidate) => hasActiveAction(candidate.active_actions ?? [], "approve_candidate") && !hasPendingAction(candidate.active_actions ?? [], "approve_candidate")).length;
+  const createdChildCount = candidates.filter((candidate) => hasActiveAction(candidate.active_actions ?? [], "approve_candidate") && !hasPendingAction(candidate.active_actions ?? [], "approve_candidate")).length;
   const excludedCount = candidates.filter((candidate) => hasActiveAction(candidate.active_actions ?? [], "exclude_from_move_plan")).length;
   const blockedCount = candidates.filter((candidate) => hasActiveAction(candidate.active_actions ?? [], "block_candidate")).length;
   const reviewLaterCount = candidates.filter((candidate) => hasActiveAction(candidate.active_actions ?? [], "mark_review_later")).length;
@@ -53,12 +53,12 @@ export default function WorkspaceHeader({
   const canMaterialize = isParentReviewContainer && approvedCount > 0 && !!onMaterializeApprovedCandidates;
   const approveDisabled = isParentReviewContainer || !canApprove;
   const approveTitle = isParentReviewContainer
-    ? "Approved candidate groups must be materialized into child batches before this parent can move."
+    ? "Approved candidate groups must be created as child batches before this parent can move."
     : "Approves groups the backend currently considers safe. Individual candidate decisions remain visible in the workspace.";
   const approveLabel = isParentReviewContainer
-    ? "Create safe child batches"
+    ? "Create child batches"
     : "Approve backend-safe groups";
-  const materializeLabel = `Create ${approvedCount} safe child batch${approvedCount === 1 ? "" : "es"}`;
+  const materializeLabel = `Create ${approvedCount} child batch${approvedCount === 1 ? "" : "es"}`;
 
   return (
     <header className="review-workspace__header">
@@ -72,9 +72,9 @@ export default function WorkspaceHeader({
               <i className="ti ti-circle-check" /> {approvedCount} {isParentReviewContainer ? "approved candidate groups" : "approved"}
             </span>
           )}
-          {materializedCount > 0 && (
+          {createdChildCount > 0 && (
             <span className="review-workspace__badge--approved">
-              <i className="ti ti-git-branch" /> {materializedCount} child batches created
+              <i className="ti ti-git-branch" /> {createdChildCount} child batches created
             </span>
           )}
           {excludedCount > 0 && (
@@ -93,7 +93,7 @@ export default function WorkspaceHeader({
             <span className="review-workspace__badge--warn">chunk identity risk</span>
           ) : null}
           {canMaterialize && (
-            <span className="review-workspace__badge--warn">Next: create safe child batches</span>
+            <span className="review-workspace__badge--warn">Next: create child batches</span>
           )}
         </div>
         {routing && routing.decision !== "music_editor_allowed" && (

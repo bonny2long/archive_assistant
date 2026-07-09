@@ -374,7 +374,7 @@ export default function ReviewWorkspace({
           : detail.includes("No approved current candidate")
             ? "This workspace changed. Refresh it and approve the current candidate groups before creating child batches."
             : detail.includes("could not be materialized")
-              ? "Some approved candidates could not be materialized. Refresh and retry; child batches may already exist."
+              ? "Some approved candidates could not become child batches. Refresh and retry; child batches may already exist."
               : detail;
         setMaterializeError(friendly);
       } finally {

@@ -47,6 +47,10 @@ function isParentReviewContainer(batch: BatchSummary): boolean {
   return Boolean(batch.is_parent_review_container || batch.parent_container_state);
 }
 
+function isProcessedContainerRow(batch: BatchSummary): boolean {
+  return Boolean(batch.parent_is_drained || batch.parent_container_state === "drained_parent" || batch.display_state === "drained_parent");
+}
+
 function duplicateFragmentMatchCount(batch: BatchSummary): number {
   return Math.max(batch.possible_fragment_count ?? 0, batch.possible_duplicate_count ?? 0);
 }
@@ -63,10 +67,8 @@ function duplicateFragmentLabel(batch: BatchSummary): string | null {
   return "Possible duplicate";
 }
 
-function batchStatusLabel(batch: BatchSummary): string {
-  if (batch.parent_is_drained || batch.parent_container_state === "drained_parent" || batch.display_state === "drained_parent") {
-    return "Drained intake container";
-  }
+function getBatchStatusLabel(batch: BatchSummary): string {
+  if (isProcessedContainerRow(batch)) return "Processed container";
   const duplicateLabel = duplicateFragmentLabel(batch);
   if (duplicateLabel) return duplicateLabel;
   if (!isParentReviewContainer(batch)) return statusLabel(batch.status);
@@ -78,6 +80,16 @@ function batchStatusLabel(batch: BatchSummary): string {
   return "Review in progress";
 }
 
+function getBatchStatusTone(batch: BatchSummary): string {
+  if (isProcessedContainerRow(batch)) return "moved";
+  if (hasActiveDuplicateFragmentReview(batch)) return "needs_metadata_review";
+  if (batch.parent_container_state === "partial_parent_container") return "pending_review";
+  return batch.status;
+}
+
+function getBatchItemCountLabel(batch: BatchSummary): string {
+  return getBatchItemText(batch);
+}
 function MoveManifestProof({
   batch,
   moveSummary,
@@ -137,14 +149,13 @@ export default function BatchRow({
   const mediaLabel = getBatchMediaLabel(batch);
   const primaryName = getBatchPrimaryName(batch);
   const secondaryName = getBatchSecondaryName(batch);
-  const itemText = getBatchItemText(batch);
+  const itemText = getBatchItemCountLabel(batch);
   const editKind = getBatchEditKind(batch);
   const year = batch.year ?? "-";
   const percent = Math.round((batch.confidence ?? 0) * 100);
   const parentReviewContainer = isParentReviewContainer(batch);
-  const drainedParent = Boolean(batch.parent_is_drained || batch.parent_container_state === "drained_parent" || batch.display_state === "drained_parent");
-  const hasDiscographyRemainderReview = batch.parent_container_state === "partial_parent_container";
-  const splitCompleteParent = drainedParent && !hasDiscographyRemainderReview;
+  const drainedParent = isProcessedContainerRow(batch);
+  const splitCompleteParent = drainedParent;
   const isDiscographySplitChild =
     batch.detected_type === "music_album"
     && batch.review_origin === "multi_artist_discography_split";
@@ -202,7 +213,7 @@ export default function BatchRow({
         </td>
         <td>{year}</td>
         <td>{itemText}</td>
-        <td><span className={pillClass(batch.status)}>{batchStatusLabel(batch)}</span></td>
+        <td><span className={pillClass(getBatchStatusTone(batch))}>{getBatchStatusLabel(batch)}</span></td>
         <td>
           <div className="conf-bar">
             <div className="conf-bar__track">
