@@ -12,6 +12,7 @@ from app.core.time import now_utc
 from app.models.archive import IngestBatch, IngestFile
 from app.services.destination_authority import (
     build_music_library_destination,
+    classify_music_destination_bucket,
     infer_audio_format_from_files,
     sync_batch_destination_fields,
     validate_music_format_destination,
@@ -315,11 +316,10 @@ def _format_class(batch: IngestBatch) -> str:
     value = str(metadata.get("format") or "").upper().strip()
     if value in {"FLAC", "MP3"}:
         return value
-    destination = str(batch.suggested_destination or metadata.get("suggested_destination") or "").replace("\\", "/")
-    if "Music/Library/FLAC" in destination:
-        return "FLAC"
-    if "Music/Library/MP3" in destination:
-        return "MP3"
+    destination = str(batch.suggested_destination or metadata.get("suggested_destination") or "")
+    bucket = classify_music_destination_bucket(destination)
+    if bucket:
+        return bucket
     formats = _file_formats(batch)
     if len(formats) == 1 and formats[0].upper() in {"FLAC", "MP3"}:
         return formats[0].upper()
