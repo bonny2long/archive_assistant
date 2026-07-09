@@ -350,6 +350,25 @@ def get_batch(batch_id: int, db: Session = Depends(get_db)):
     return batch
 
 
+@router.get("/batches/{batch_id}/child-batches", response_model=list[BatchSummary])
+def list_child_batches(batch_id: int, db: Session = Depends(get_db)):
+    parent = db.get(IngestBatch, batch_id)
+    if not parent:
+        raise HTTPException(status_code=404, detail="Batch not found")
+
+    children = []
+    for child in db.query(IngestBatch).options(selectinload(IngestBatch.files)).filter(IngestBatch.id != batch_id, IngestBatch.status != "merged").all():
+        metadata = child.metadata_json or {}
+        if not isinstance(metadata, dict):
+            continue
+        source_parent_id = int(metadata.get("split_from_batch_id") or metadata.get("source_parent_batch_id") or 0)
+        if source_parent_id == batch_id:
+            children.append(child)
+
+    children.sort(key=lambda item: item.created_at, reverse=True)
+    return [_batch_to_summary(child, db=db) for child in children]
+
+
 @router.get("/batches/{batch_id}/review", response_model=BatchReview)
 def get_batch_review(batch_id: int, db: Session = Depends(get_db)):
     batch = (
@@ -2276,6 +2295,11 @@ def _batch_to_summary(
         "requires_duplicate_review": False,
     }
     display = build_batch_display_fields(batch, parent_summary)
+    actual_file_count = (
+        db.query(IngestFile).filter(IngestFile.batch_id == batch.id).count()
+        if db is not None
+        else len(batch.files or [])
+    )
     return BatchSummary(
         id=batch.id,
         detected_type=batch.detected_type,
@@ -2313,7 +2337,7 @@ def _batch_to_summary(
         ignored_corrupt_video_files=meta.get("ignored_corrupt_video_files", []),
         name=meta.get("name"),
         reason=meta.get("reason"),
-        file_count=meta.get("file_count", 0),
+        file_count=meta.get("file_count") if meta.get("file_count") is not None else actual_file_count,
         folder_count=meta.get("folder_count", 0),
         size_bytes=meta.get("size_bytes", 0),
         recommended_action=meta.get("recommended_action"),

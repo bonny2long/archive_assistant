@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState, type ReactNode } from "react";
-import type { BatchMoveSummary, BatchReview, IngestBatch, RoutingDecision } from "../types/archive";
+import type { BatchMoveSummary, BatchReview, BatchSummary, IngestBatch, RoutingDecision } from "../types/archive";
 import { api } from "../api/client";
 import MetadataQualityPanel from "./MetadataQualityPanel";
 import UniversalIngestionPanel from "./UniversalIngestionPanel";
@@ -175,6 +175,76 @@ function isMetadataConfirmed(batch: IngestBatch): boolean {
     || metadata.metadata_locked_for_move
   );
 }
+
+function CreatedChildBatchesPanel({ batchId }: { batchId: number }) {
+  const [children, setChildren] = useState<BatchSummary[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setChildren(null);
+    setError(null);
+    void api.getBatchChildBatches(batchId)
+      .then((items) => {
+        if (!cancelled) setChildren(items);
+      })
+      .catch((loadError: unknown) => {
+        if (!cancelled) setError(loadError instanceof Error ? loadError.message : "Unable to load child batches");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [batchId]);
+
+  if (error) {
+    return (
+      <section className="created-child-batches created-child-batches--error">
+        <h3>Created child batches</h3>
+        <p>{error}</p>
+      </section>
+    );
+  }
+
+  if (children === null) {
+    return (
+      <section className="created-child-batches">
+        <h3>Created child batches</h3>
+        <p><i className="ti ti-loader-2 spinner" /> Loading child batches...</p>
+      </section>
+    );
+  }
+
+  if (children.length === 0) return null;
+
+  return (
+    <section className="created-child-batches">
+      <div className="created-child-batches__header">
+        <div>
+          <h3>Created child batches</h3>
+          <p>These are the extracted review batches. Approve and move these rows, not the parent container.</p>
+        </div>
+        <span>{children.length} child batch{children.length === 1 ? "" : "es"}</span>
+      </div>
+      <div className="created-child-batches__list">
+        {children.map((child) => (
+          <article key={child.id} className="created-child-batches__item">
+            <div>
+              <strong>#{child.id} ? {child.primary_name ?? child.artist ?? "Unknown Artist"}</strong>
+              <span>{child.secondary_name ?? child.album ?? "Unknown Album"}</span>
+            </div>
+            <div className="created-child-batches__facts">
+              <span>{child.status.replace(/_/g, " ")}</span>
+              <span>{child.item_count} {child.item_label}</span>
+              <span>{child.file_count} file{child.file_count === 1 ? "" : "s"}</span>
+            </div>
+            <code title={child.suggested_destination ?? ""}>{readableLibraryPath(child.suggested_destination)}</code>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 
 function ReviewStateCard({ batch }: { batch: IngestBatch }) {
   const metadata = batch.metadata_json ?? {};
@@ -1087,6 +1157,8 @@ function DiscographyBatchDetail({ batch, moveSummary }: Props) {
         <span>{moved ? "Final destination" : "Destination preview"}</span>
         <strong>{readableLibraryPath(batch.suggested_destination)}</strong>
       </section>
+
+      {batch.status === "split_complete" && <CreatedChildBatchesPanel batchId={batch.id} />}
 
       {(removedTokens.length > 0 || Boolean(cleanup?.year_range) || Boolean(artistSource)) && (
         <section className="library-card discography-cleanup">

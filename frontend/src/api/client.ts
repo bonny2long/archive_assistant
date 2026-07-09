@@ -113,6 +113,7 @@ export const api = {
   listBatches: () => request<PaginatedResponse<BatchSummary>>("/batches?page_size=100"),
   listPending: () => request<PaginatedResponse<BatchSummary>>("/batches/pending?page_size=100"),
   getBatch: (id: number) => request<IngestBatch>(`/batches/${id}`),
+  getBatchChildBatches: (id: number) => request<BatchSummary[]>(`/batches/${id}/child-batches`),
   getBatchReview: (id: number) => request<BatchReview>(`/batches/${id}/review`),
   getBatchMetadataQuality: (id: number) =>
     request<BatchMetadataQuality>(`/batches/${id}/metadata-quality`),
