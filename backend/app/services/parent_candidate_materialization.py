@@ -8,6 +8,7 @@ from app.models.archive import IngestBatch, IngestFile
 from app.models.media_metadata import MediaIdentityCandidate, UniversalIngestionReviewAction
 
 
+# Legacy parent_review_state values kept for response/history compatibility; current workflow uses parent_container_state.
 PARENT_REVIEW_IN_PROGRESS = "review_in_progress"
 PARENT_CANDIDATES_APPROVED_WAITING_MATERIALIZATION = "candidates_approved_waiting_materialization"
 PARENT_PARTIALLY_MATERIALIZED = "parent_partially_materialized"
@@ -159,7 +160,7 @@ def build_parent_candidate_summary(db: Session | None, batch: IngestBatch) -> di
     metadata_parent_state = metadata.get("parent_review_state")
 
     if metadata_parent_state in {PARENT_PARTIALLY_MATERIALIZED, PARENT_SPLIT_COMPLETE}:
-        materialized_child_count = actual_child_count
+        historical_child_batch_count = actual_child_count
         extractable_count = int(metadata.get("extractable_candidate_count") or 0)
         review_later_count = int(metadata.get("review_later_candidate_count") or 0)
         excluded_count = int(metadata.get("excluded_candidate_count") or 0)
@@ -167,17 +168,17 @@ def build_parent_candidate_summary(db: Session | None, batch: IngestBatch) -> di
         unresolved_count = int(metadata.get("unresolved_candidate_count") or 0)
         explicit_remaining = extractable_count + review_later_count + excluded_count + blocked_count + unresolved_count
         remaining_candidate_count = explicit_remaining or (1 if remaining_parent_file_count > 0 else 0)
-        parent_review_state = PARENT_PARTIALLY_MATERIALIZED if remaining_parent_file_count > 0 else PARENT_SPLIT_COMPLETE
+        parent_review_state = PARENT_REVIEW_IN_PROGRESS if remaining_parent_file_count > 0 else PARENT_SPLIT_COMPLETE
         state = parent_container_state or (PARENT_CONTAINER_PARTIAL if remaining_parent_file_count > 0 else None)
         return {
-            "candidate_group_count": materialized_child_count + remaining_candidate_count,
+            "candidate_group_count": historical_child_batch_count + remaining_candidate_count,
             "approved_candidate_count": 0,
             "excluded_candidate_count": excluded_count,
             "blocked_candidate_count": blocked_count,
             "review_later_candidate_count": review_later_count,
             "unresolved_candidate_count": unresolved_count or (1 if remaining_parent_file_count > 0 and explicit_remaining == 0 else 0),
-            "materialized_child_count": materialized_child_count,
-            "child_candidate_count": materialized_child_count,
+            "materialized_child_count": historical_child_batch_count,
+            "child_candidate_count": historical_child_batch_count,
             "remaining_candidate_count": remaining_candidate_count,
             "needs_materialization": False,
             "parent_review_state": parent_review_state,
@@ -185,6 +186,36 @@ def build_parent_candidate_summary(db: Session | None, batch: IngestBatch) -> di
             **_parent_container_flags(state, remaining_parent_file_count, actual_child_count),
         }
 
+    if parent_container_state and (actual_child_count > 0 or candidate_group_count == 0):
+        extractable_count = int(metadata.get("extractable_candidate_count") or 0)
+        review_later_count = int(metadata.get("review_later_candidate_count") or 0)
+        excluded_count = int(metadata.get("excluded_candidate_count") or 0)
+        blocked_count = int(metadata.get("blocked_candidate_count") or 0)
+        unresolved_count = int(metadata.get("unresolved_candidate_count") or 0)
+        explicit_remaining = extractable_count + review_later_count + excluded_count + blocked_count + unresolved_count
+        remaining_candidate_count = explicit_remaining or (1 if remaining_parent_file_count > 0 else 0)
+        fallback_count = int(
+            metadata.get("release_count")
+            or metadata.get("album_count")
+            or metadata.get("candidate_group_count")
+            or 0
+        )
+        parent_review_state = PARENT_SPLIT_COMPLETE if parent_container_state == PARENT_CONTAINER_DRAINED else PARENT_REVIEW_IN_PROGRESS
+        return {
+            "candidate_group_count": max(candidate_group_count, actual_child_count + remaining_candidate_count, fallback_count),
+            "approved_candidate_count": 0,
+            "excluded_candidate_count": excluded_count,
+            "blocked_candidate_count": blocked_count,
+            "review_later_candidate_count": review_later_count,
+            "unresolved_candidate_count": unresolved_count or (1 if remaining_parent_file_count > 0 and explicit_remaining == 0 else 0),
+            "materialized_child_count": actual_child_count,
+            "child_candidate_count": actual_child_count,
+            "remaining_candidate_count": remaining_candidate_count,
+            "needs_materialization": False,
+            "parent_review_state": parent_review_state,
+            "is_parent_review_container": True,
+            **_parent_container_flags(parent_container_state, remaining_parent_file_count, actual_child_count),
+        }
     if batch.status == PARENT_SPLIT_COMPLETE:
         history_entries: list[dict[str, Any]] = []
         for key in ("materialization_history", "split_history"):
@@ -209,7 +240,7 @@ def build_parent_candidate_summary(db: Session | None, batch: IngestBatch) -> di
             else candidate_group_count or completed_child_count or fallback_count
         )
         unresolved_remainder_count = 1 if has_remaining_parent_files else 0
-        parent_review_state = PARENT_PARTIALLY_MATERIALIZED if has_remaining_parent_files else PARENT_SPLIT_COMPLETE
+        parent_review_state = PARENT_REVIEW_IN_PROGRESS if has_remaining_parent_files else PARENT_SPLIT_COMPLETE
         displayed_materialized_count = completed_child_count or (0 if has_remaining_parent_files else split_count)
         return {
             "candidate_group_count": max(split_count, displayed_materialized_count + unresolved_remainder_count),
@@ -259,7 +290,7 @@ def build_parent_candidate_summary(db: Session | None, batch: IngestBatch) -> di
         for item in history or []
         if isinstance(item, dict) and item.get("candidate_id")
     } if isinstance(history, list) else set()
-    materialized_child_count = len(materialized_candidate_ids & candidate_id_set)
+    materialized_history_count = len(materialized_candidate_ids & candidate_id_set)
 
     approved_candidate_count = sum(
         1
@@ -286,8 +317,8 @@ def build_parent_candidate_summary(db: Session | None, batch: IngestBatch) -> di
     unresolved_candidate_count = max(0, candidate_group_count - len(resolved_candidate_ids & candidate_id_set))
     remaining_candidate_count = unresolved_candidate_count
 
-    if materialized_child_count > 0:
-        parent_review_state = PARENT_PARTIALLY_MATERIALIZED
+    if materialized_history_count > 0:
+        parent_review_state = PARENT_REVIEW_IN_PROGRESS
     elif approved_candidate_count > 0:
         parent_review_state = PARENT_CANDIDATES_APPROVED_WAITING_MATERIALIZATION
     else:
@@ -302,8 +333,8 @@ def build_parent_candidate_summary(db: Session | None, batch: IngestBatch) -> di
         "blocked_candidate_count": blocked_candidate_count,
         "review_later_candidate_count": review_later_candidate_count,
         "unresolved_candidate_count": unresolved_candidate_count,
-        "materialized_child_count": materialized_child_count,
-        "child_candidate_count": materialized_child_count,
+        "materialized_child_count": materialized_history_count,
+        "child_candidate_count": materialized_history_count,
         "remaining_candidate_count": remaining_candidate_count,
         "needs_materialization": needs_materialization,
         "parent_review_state": parent_review_state,

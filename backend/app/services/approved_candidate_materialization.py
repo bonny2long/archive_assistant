@@ -17,7 +17,7 @@ from app.services.batch_split import (
 from app.services.destination_authority import rebuild_music_batch_destination_from_attached_files
 from app.services.parent_candidate_materialization import (
     PARENT_CONTAINER_DRAINED,
-    PARENT_PARTIALLY_MATERIALIZED,
+    PARENT_REVIEW_IN_PROGRESS,
     PARENT_SPLIT_COMPLETE,
     build_parent_candidate_summary,
     get_active_parent_file_count,
@@ -411,12 +411,16 @@ def materialize_approved_candidates(db: Session, batch_id: int) -> dict[str, Any
         metadata["excluded_candidate_count"] = len(excluded_candidate_ids)
         metadata["review_later_candidate_count"] = len(review_later_candidate_ids)
         metadata["remaining_parent_file_count"] = active_parent_file_count
+        metadata["active_parent_file_count"] = active_parent_file_count
+        metadata["parent_container_state"] = parent_container_state
+        metadata["parent_has_remaining_files"] = active_parent_file_count > 0
+        metadata["parent_is_drained"] = parent_container_state == PARENT_CONTAINER_DRAINED
         metadata["unresolved_candidate_count"] = len(unresolved_candidate_ids)
         if active_parent_file_count > 0 and metadata["unresolved_candidate_count"] == 0:
             metadata["unresolved_candidate_count"] = 1
         parent_complete = parent_container_state == PARENT_CONTAINER_DRAINED
         parent_batch.status = PARENT_SPLIT_COMPLETE if parent_complete else "pending_review"
-        metadata["parent_review_state"] = PARENT_SPLIT_COMPLETE if parent_complete else PARENT_PARTIALLY_MATERIALIZED
+        metadata["parent_review_state"] = PARENT_SPLIT_COMPLETE if parent_complete else PARENT_REVIEW_IN_PROGRESS
         parent_batch.metadata_json = metadata
         parent_batch.updated_at = timestamp
         db.commit()

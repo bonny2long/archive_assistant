@@ -18,6 +18,12 @@ from app.services.destination_authority import (
     safe_path_part as destination_safe_path_part,
     sync_batch_destination_fields,
 )
+from app.services.parent_candidate_materialization import (
+    PARENT_CONTAINER_DRAINED,
+    get_active_parent_file_count,
+    get_child_batch_count,
+    get_parent_container_display_state,
+)
 
 _SAFE_PART_PATTERN = re.compile(r'[<>:"/\\|?*]+')
 
@@ -32,6 +38,22 @@ ARTWORK_EXTENSIONS = {
 SIDECAR_EXTENSIONS = {
     ".txt", ".log", ".cue", ".m3u", ".m3u8", ".nfo", ".sfv", ".md5", ".ffp"
 }
+
+
+def _sync_parent_container_metadata(db: Session, parent_batch: IngestBatch, metadata: dict[str, Any]) -> tuple[int, int, str | None]:
+    child_batch_count = get_child_batch_count(parent_batch, db)
+    active_parent_file_count = get_active_parent_file_count(parent_batch, db)
+    parent_container_state = get_parent_container_display_state(parent_batch, db)
+    metadata["child_batch_count"] = child_batch_count
+    metadata["active_parent_file_count"] = active_parent_file_count
+    metadata["parent_container_state"] = parent_container_state
+    metadata["parent_has_remaining_files"] = active_parent_file_count > 0
+    metadata["parent_is_drained"] = parent_container_state == PARENT_CONTAINER_DRAINED
+    metadata["remaining_parent_file_count"] = active_parent_file_count
+    metadata["materialized_child_count"] = child_batch_count
+    metadata["child_candidate_count"] = child_batch_count
+    metadata["parent_review_state"] = "split_complete" if parent_container_state == PARENT_CONTAINER_DRAINED else "review_in_progress"
+    return child_batch_count, active_parent_file_count, parent_container_state
 
 
 def safe_path_part(value: object, fallback: str = "Unknown") -> str:
@@ -764,15 +786,17 @@ def execute_split_discography_releases(db: Session, batch_id: int) -> dict[str, 
     if not extract_albums:
         existing_children = recover_split_child_batches(db, parent_batch)
         if existing_children:
+            _, active_parent_file_count, parent_container_state = _sync_parent_container_metadata(db, parent_batch, batch_metadata)
+            parent_batch.status = "split_complete" if parent_container_state == PARENT_CONTAINER_DRAINED else "pending_review"
+            parent_batch.metadata_json = batch_metadata
             db.commit()
-            remaining_parent_file_count = db.query(IngestFile).filter(IngestFile.batch_id == parent_batch.id).count()
             return {
                 "parent_batch_id": parent_batch.id,
                 "created_child_batch_ids": [],
                 "existing_child_batch_ids": [child.id for child in existing_children],
                 "created_count": 0,
                 "skipped_count": len(existing_children),
-                "remaining_parent_file_count": remaining_parent_file_count,
+                "remaining_parent_file_count": active_parent_file_count,
                 "parent_status": parent_batch.status,
                 "parent_review_state": batch_metadata.get("parent_review_state") or parent_batch.status,
                 "message": "Child batches already exist.",
@@ -847,20 +871,20 @@ def execute_split_discography_releases(db: Session, batch_id: int) -> dict[str, 
         split_sources.add(_norm_match(source_folder))
         extracted_source_folders.append(source_folder)
 
-    remaining_parent_file_count = db.query(IngestFile).filter(IngestFile.batch_id == parent_batch.id).count()
-
     if not created_child_batch_ids and not skipped_child_batch_ids and extract_albums:
         existing_children = recover_split_child_batches(db, parent_batch)
         if existing_children:
+            _, active_parent_file_count, parent_container_state = _sync_parent_container_metadata(db, parent_batch, batch_metadata)
+            parent_batch.status = "split_complete" if parent_container_state == PARENT_CONTAINER_DRAINED else "pending_review"
+            parent_batch.metadata_json = batch_metadata
             db.commit()
-            remaining_parent_file_count = db.query(IngestFile).filter(IngestFile.batch_id == parent_batch.id).count()
             return {
                 "parent_batch_id": parent_batch.id,
                 "created_child_batch_ids": [],
                 "existing_child_batch_ids": [child.id for child in existing_children],
                 "created_count": 0,
                 "skipped_count": len(existing_children),
-                "remaining_parent_file_count": remaining_parent_file_count,
+                "remaining_parent_file_count": active_parent_file_count,
                 "parent_status": parent_batch.status,
                 "parent_review_state": batch_metadata.get("parent_review_state") or parent_batch.status,
                 "message": "Child batches already exist.",
@@ -898,27 +922,14 @@ def execute_split_discography_releases(db: Session, batch_id: int) -> dict[str, 
     batch_metadata["split_history"] = split_history
     batch_metadata["discography_split_audit"] = audit
     db.flush()
-    materialized_child_count = len([
-        item for item in split_history
-        if isinstance(item, dict) and item.get("child_batch_id")
-    ])
-    batch_metadata["materialized_child_count"] = materialized_child_count
-    batch_metadata["child_candidate_count"] = materialized_child_count
-    batch_metadata["remaining_parent_file_count"] = remaining_parent_file_count
+    child_batch_count, active_parent_file_count, parent_container_state = _sync_parent_container_metadata(db, parent_batch, batch_metadata)
     batch_metadata["extractable_candidate_count"] = remaining_decision_counts["extract_as_child"]
     batch_metadata["review_later_candidate_count"] = remaining_decision_counts["review_later"]
     batch_metadata["excluded_candidate_count"] = remaining_decision_counts["exclude"]
     batch_metadata["blocked_candidate_count"] = remaining_decision_counts["blocked"]
     batch_metadata["unresolved_candidate_count"] = remaining_decision_counts["unresolved"]
 
-    if materialized_child_count and remaining_parent_file_count == 0:
-        batch_metadata["parent_review_state"] = "split_complete"
-    elif materialized_child_count and remaining_parent_file_count > 0:
-        batch_metadata["parent_review_state"] = "parent_partially_materialized"
-    else:
-        batch_metadata["parent_review_state"] = batch_metadata.get("parent_review_state") or "review_in_progress"
-
-    parent_batch.status = "split_complete" if batch_metadata["parent_review_state"] == "split_complete" else "pending_review"
+    parent_batch.status = "split_complete" if parent_container_state == PARENT_CONTAINER_DRAINED else "pending_review"
     parent_batch.metadata_json = batch_metadata
     parent_batch.updated_at = timestamp
     recover_split_child_batches(db, parent_batch)
@@ -933,8 +944,8 @@ def execute_split_discography_releases(db: Session, batch_id: int) -> dict[str, 
         message = "Release child batches already exist."
     else:
         message = "No releases were marked Extract as child; parent decisions were saved."
-    if remaining_parent_file_count:
-        message += f" {remaining_parent_file_count} file{'s' if remaining_parent_file_count != 1 else ''} remain attached to the parent."
+    if active_parent_file_count:
+        message += f" {active_parent_file_count} file{'s' if active_parent_file_count != 1 else ''} remain attached to the parent."
 
     return {
         "parent_batch_id": parent_batch.id,

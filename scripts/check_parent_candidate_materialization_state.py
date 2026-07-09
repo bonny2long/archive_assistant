@@ -292,10 +292,10 @@ def test_split_complete_parent_with_remaining_files_requires_remainder_review(db
 
     summary = build_parent_candidate_summary(db, parent)
     assert summary["is_parent_review_container"] is True
-    assert summary["parent_review_state"] == "parent_partially_materialized"
+    assert summary["parent_review_state"] == "review_in_progress"
     assert summary["candidate_group_count"] == 3
-    assert summary["materialized_child_count"] == 1
-    assert summary["child_candidate_count"] == 1
+    assert summary["materialized_child_count"] == 0
+    assert summary["child_candidate_count"] == 0
     assert summary["child_batch_count"] == 0
     assert summary["parent_container_state"] == "active_parent_container"
     assert summary["parent_is_drained"] is False
@@ -355,7 +355,7 @@ def test_partial_materialization_keeps_unresolved_parent_remainder(db) -> None:
     result = materialize_approved_candidates(db, parent.id)
     assert result["created_count"] == 1
     assert result["skipped_count"] == 0
-    assert result["parent_review_state"] == "parent_partially_materialized"
+    assert result["parent_review_state"] == "review_in_progress"
     assert result["unresolved_candidate_count"] == 1
     assert result["blocked_candidate_count"] == 1
     assert result["excluded_candidate_count"] == 1
@@ -365,7 +365,7 @@ def test_partial_materialization_keeps_unresolved_parent_remainder(db) -> None:
     assert parent.status == "pending_review"
     summary = build_parent_candidate_summary(db, parent)
     assert summary["is_parent_review_container"] is True
-    assert summary["parent_review_state"] == "parent_partially_materialized"
+    assert summary["parent_review_state"] == "review_in_progress"
     assert summary["materialized_child_count"] == 1
     assert summary["unresolved_candidate_count"] == 1
     assert summary["blocked_candidate_count"] == 1
@@ -619,9 +619,12 @@ def test_discography_release_decisions_leave_remainder_on_parent(db) -> None:
 
     result = execute_split_discography_releases(db, parent.id)
     assert result["created_count"] == 1
-    assert result["parent_review_state"] == "parent_partially_materialized"
+    assert result["parent_review_state"] == "review_in_progress"
     db.refresh(parent)
     assert parent.status == "pending_review"
+    assert parent.metadata_json["parent_container_state"] == "partial_parent_container"
+    assert parent.metadata_json["child_batch_count"] == 1
+    assert parent.metadata_json["active_parent_file_count"] == 3
     assert parent.metadata_json["materialized_child_count"] == 1
     assert parent.metadata_json["remaining_parent_file_count"] == 3
     assert parent.metadata_json["review_later_candidate_count"] == 1
@@ -642,7 +645,10 @@ def test_discography_release_decisions_leave_remainder_on_parent(db) -> None:
 
     summary = build_parent_candidate_summary(db, parent)
     assert summary["is_parent_review_container"] is True
-    assert summary["parent_review_state"] == "parent_partially_materialized"
+    assert summary["parent_review_state"] == "review_in_progress"
+    assert summary["parent_container_state"] == "partial_parent_container"
+    assert summary["child_batch_count"] == 1
+    assert summary["active_parent_file_count"] == 3
     assert summary["materialized_child_count"] == 1
     assert summary["remaining_candidate_count"] == 3
 
