@@ -3,6 +3,7 @@ import type {
   BatchSummary,
   DiscographyAlbumUpdate,
   DiscographyMetadataUpdate,
+  DiscographyReleaseDecision,
   DiscographyReleaseType,
 } from "../types/archive";
 import ReviewIssuesPanel from "./ReviewIssuesPanel";
@@ -25,9 +26,16 @@ const RELEASE_TYPES: Array<{ value: DiscographyReleaseType; label: string }> = [
   { value: "compilation", label: "Compilation" },
   { value: "live", label: "Live" },
   { value: "other", label: "Other" },
-  { value: "exclude", label: "Exclude" },
 ];
 
+
+const RELEASE_DECISIONS: Array<{ value: DiscographyReleaseDecision; label: string; description: string }> = [
+  { value: "extract_as_child", label: "Extract as child", description: "Creates a separate review batch for this release." },
+  { value: "review_later", label: "Review later", description: "Leaves files attached to the parent for later review." },
+  { value: "exclude", label: "Exclude from library", description: "Leaves files on the parent and keeps them out of child creation." },
+  { value: "blocked", label: "Block", description: "Leaves files on the parent and blocks move approval." },
+  { value: "unresolved", label: "Unresolved", description: "Needs a decision before it can be extracted." },
+];
 const GENRE_CHIPS = [
   "Hip-Hop",
   "R&B",
@@ -50,6 +58,21 @@ const RELEASE_BUCKETS: Record<Exclude<DiscographyReleaseType, "exclude">, string
   other: "Other",
 };
 
+
+function releaseDecisionFor(album: { release_decision?: DiscographyReleaseDecision | null; release_type?: DiscographyReleaseType | null; include?: boolean | null; lookup_later?: boolean | null }): DiscographyReleaseDecision {
+  if (album.release_decision) return album.release_decision;
+  if (album.release_type === "exclude" || album.include === false) return "exclude";
+  if (album.lookup_later) return "review_later";
+  return "extract_as_child";
+}
+
+function includeForDecision(decision: DiscographyReleaseDecision): boolean {
+  return decision === "extract_as_child";
+}
+
+function decisionLabel(decision: DiscographyReleaseDecision): string {
+  return RELEASE_DECISIONS.find((option) => option.value === decision)?.label ?? decision.replace(/_/g, " ");
+}
 function sanitizePathPart(value: string): string {
   return value.replace(/[<>:"/\\|?*]/g, "_").trim();
 }
@@ -60,19 +83,22 @@ function batchAlbums(batch: BatchSummary) {
 
 function initialAlbums(batch: BatchSummary): DiscographyAlbumUpdate[] {
   return batchAlbums(batch).map((album) => {
-    const releaseType = album.release_type
-      ?? (album.track_count === 1 ? "single" : "album");
+    const releaseType = album.release_type === "exclude"
+      ? "album"
+      : album.release_type ?? (album.track_count === 1 ? "single" : "album");
+    const releaseDecision = releaseDecisionFor(album);
     return {
       source_folder: album.source_folder,
       album: album.album,
       year: album.year ?? null,
       genre: album.genre ?? null,
       release_type: releaseType,
-      include: album.include !== false && releaseType !== "exclude",
+      release_decision: releaseDecision,
+      include: includeForDecision(releaseDecision),
       accepted_unknown_album_artist: album.accepted_unknown_album_artist ?? false,
       accepted_unknown_album_title: album.accepted_unknown_album_title ?? false,
       accepted_unknown_year: album.accepted_unknown_year ?? false,
-      lookup_later: album.lookup_later ?? false,
+      lookup_later: album.lookup_later ?? releaseDecision === "review_later",
     };
   });
 }
@@ -81,8 +107,17 @@ function albumDestination(
   artist: string,
   album: DiscographyAlbumUpdate,
 ): string {
-  if (!album.include || album.release_type === "exclude") {
-    return `data/_QUARANTINE/music/discography-excluded/${sanitizePathPart(artist)}/${sanitizePathPart(album.source_folder)}`;
+  if (album.release_decision === "exclude") {
+    return `Parent remainder / excluded from library / ${sanitizePathPart(album.source_folder)}`;
+  }
+  if (album.release_decision === "review_later") {
+    return `Parent remainder / review later / ${sanitizePathPart(album.source_folder)}`;
+  }
+  if (album.release_decision === "blocked") {
+    return `Parent remainder / blocked / ${sanitizePathPart(album.source_folder)}`;
+  }
+  if (album.release_decision === "unresolved") {
+    return `Parent remainder / unresolved / ${sanitizePathPart(album.source_folder)}`;
   }
   const releaseType = album.release_type as Exclude<DiscographyReleaseType, "exclude">;
   const title = sanitizePathPart(album.album);
@@ -112,7 +147,7 @@ export default function DiscographyEditor({
     Boolean(batch.accepted_unknown_discography_artist),
   );
   const [lookupLater, setLookupLater] = useState(Boolean(batch.lookup_later));
-  const [filter, setFilter] = useState<"repair" | "included" | "excluded" | "all">("repair");
+  const [filter, setFilter] = useState<"repair" | "extract" | "deferred" | "excluded" | "all">("repair");
   const collectionDestination = useMemo(
     () => `Music/Discographies/${sanitizePathPart(artist)}`,
     [artist],
@@ -126,10 +161,11 @@ export default function DiscographyEditor({
     [batch],
   );
   const visibleAlbums = albums.filter((album) => {
-    if (filter === "included") return album.include;
-    if (filter === "excluded") return !album.include;
+    if (filter === "extract") return album.release_decision === "extract_as_child";
+    if (filter === "deferred") return ["review_later", "blocked", "unresolved"].includes(album.release_decision);
+    if (filter === "excluded") return album.release_decision === "exclude";
     if (filter === "repair") {
-      return album.include && (!album.album.trim() || !album.year || album.lookup_later);
+      return album.release_decision === "extract_as_child" && (!album.album.trim() || !album.year || album.lookup_later);
     }
     return true;
   });
@@ -138,7 +174,17 @@ export default function DiscographyEditor({
       (!album.include || album.album.trim().length > 0 || album.accepted_unknown_album_title)
       && (!album.year || /^(19|20)\d{2}$/.test(album.year))
     ));
-  const includedAlbumCount = albums.filter((album) => album.include && album.release_type !== "exclude").length;
+  const releaseDecisionCounts = useMemo(() => albums.reduce<Record<DiscographyReleaseDecision, number>>((counts, album) => {
+    counts[album.release_decision] += 1;
+    return counts;
+  }, {
+    extract_as_child: 0,
+    review_later: 0,
+    exclude: 0,
+    blocked: 0,
+    unresolved: 0,
+  }), [albums]);
+  const extractableAlbumCount = releaseDecisionCounts.extract_as_child;
 
   const buildUpdate = (): DiscographyMetadataUpdate => ({
     artist: artist.trim() || "Unknown Artist",
@@ -173,7 +219,7 @@ export default function DiscographyEditor({
           <div className="discography-editor__header-title">
             <span className="discography-editor__header-eyebrow">Music · Discography</span>
             <h2>Correct discography</h2>
-            <p>Edit collection metadata, release genres, and the move plan without changing audio tags.</p>
+            <p>Edit collection metadata, release decisions, and the move plan without changing audio tags.</p>
           </div>
           <button type="button" className="btn-sm" disabled={saving} onClick={onClose}>
             <i className="ti ti-x" />
@@ -227,7 +273,7 @@ export default function DiscographyEditor({
           <section className="acceptance-controls discography-editor__decisions">
             <div>
               <strong>Discography decisions</strong>
-              <p>Accepted unknowns and lookup-later choices remain in the move manifest.</p>
+              <p>Release decisions control what becomes a child batch. Deferred and excluded files stay attached to the parent.</p>
             </div>
             <div className="acceptance-controls__buttons">
               <button type="button" className={`btn-sm${acceptedUnknownArtist ? " btn-sm--active" : ""}`} onClick={() => setAcceptedUnknownArtist((value) => !value)}>
@@ -241,14 +287,21 @@ export default function DiscographyEditor({
 
           <div className="discography-editor__release-summary">
             <span className="discography-editor__release-label">Releases</span>
-            <span className="discography-editor__release-count">{albums.length} releases · {trackCount} tracks</span>
+            <span className="discography-editor__release-count">{albums.length} releases - {trackCount} tracks</span>
+          </div>
+
+          <div className="discography-editor__split-summary" aria-label="Release split decision counts">
+            <span><strong>{releaseDecisionCounts.extract_as_child}</strong> will become child batches</span>
+            <span><strong>{releaseDecisionCounts.review_later}</strong> will stay for review later</span>
+            <span><strong>{releaseDecisionCounts.exclude}</strong> excluded</span>
+            <span><strong>{releaseDecisionCounts.blocked + releaseDecisionCounts.unresolved}</strong> blocked/unresolved</span>
           </div>
 
           <div className="discography-editor__controls">
             <div className="discography-editor__filter-tabs">
-              {(["repair", "included", "excluded", "all"] as const).map((value) => (
+              {(["repair", "extract", "deferred", "excluded", "all"] as const).map((value) => (
                 <button type="button" className={`btn-sm${filter === value ? " btn-sm--active" : ""}`} key={value} onClick={() => setFilter(value)}>
-                  {value === "repair" ? "Needs repair" : value[0].toUpperCase() + value.slice(1)}
+                  {value === "repair" ? "Needs repair" : value === "extract" ? "Extract" : value === "deferred" ? "Deferred" : value[0].toUpperCase() + value.slice(1)}
                 </button>
               ))}
             </div>
@@ -262,15 +315,15 @@ export default function DiscographyEditor({
               <button type="button" className="btn-sm" onClick={() => {
                 const visible = new Set(visibleAlbums.map((album) => album.source_folder));
                 setAlbums((current) => current.map((album) => visible.has(album.source_folder)
-                  ? { ...album, lookup_later: true }
+                  ? { ...album, release_decision: "review_later", include: false, lookup_later: true }
                   : album));
-              }}>Mark visible lookup later</button>
+              }}>Mark visible review later</button>
               <button type="button" className="btn-sm" onClick={() => {
                 const visible = new Set(visibleAlbums.map((album) => album.source_folder));
                 setAlbums((current) => current.map((album) => visible.has(album.source_folder)
-                  ? { ...album, include: false, release_type: "exclude" }
+                  ? { ...album, release_decision: "exclude", include: false }
                   : album));
-              }}>Exclude visible</button>
+              }}>Exclude visible from library</button>
               <button type="button" className="btn-sm" disabled={!primaryGenre.trim()} onClick={() => {
                 const visible = new Set(visibleAlbums.map((album) => album.source_folder));
                 const genre = primaryGenre.trim();
@@ -289,7 +342,7 @@ export default function DiscographyEditor({
 
           <div className="discography-editor__releases">
             <div className="album-edit-row album-edit-header" aria-hidden="true">
-              <span>Include</span>
+              <span>Decision</span>
               <span>Year</span>
               <span>Album title</span>
               <span>Release type</span>
@@ -302,18 +355,25 @@ export default function DiscographyEditor({
               const destination = albumDestination(artist, album);
               return (
                 <div className="album-edit-row" key={album.source_folder}>
-                  <div className="album-edit-row__include">
-                    <input
-                      aria-label={`Include ${album.album}`}
-                      type="checkbox"
-                      checked={album.include && album.release_type !== "exclude"}
-                      onChange={(event) => updateAlbum(album.source_folder, {
-                        include: event.target.checked,
-                        release_type: event.target.checked && album.release_type === "exclude"
-                          ? "album"
-                          : album.release_type,
-                      })}
-                    />
+                  <div className="album-edit-row__include album-edit-row__decision">
+                    <select
+                      aria-label={`Decision for ${album.album}`}
+                      value={album.release_decision}
+                      title={RELEASE_DECISIONS.find((option) => option.value === album.release_decision)?.description}
+                      onChange={(event) => {
+                        const releaseDecision = event.target.value as DiscographyReleaseDecision;
+                        updateAlbum(album.source_folder, {
+                          release_decision: releaseDecision,
+                          include: includeForDecision(releaseDecision),
+                          lookup_later: releaseDecision === "review_later" ? true : album.lookup_later,
+                        });
+                      }}
+                    >
+                      {RELEASE_DECISIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                    <small>{decisionLabel(album.release_decision)}</small>
                   </div>
                   <div>
                     <input
@@ -358,8 +418,9 @@ export default function DiscographyEditor({
                       onChange={(event) => {
                         const releaseType = event.target.value as DiscographyReleaseType;
                         updateAlbum(album.source_folder, {
-                          release_type: releaseType,
-                          include: releaseType !== "exclude",
+                          release_type: releaseType === "exclude" ? "album" : releaseType,
+                          release_decision: releaseType === "exclude" ? "exclude" : album.release_decision,
+                          include: releaseType === "exclude" ? false : album.include,
                         });
                       }}
                     >
@@ -405,7 +466,7 @@ export default function DiscographyEditor({
                       <button type="button" className={`btn-sm${album.accepted_unknown_year ? " btn-sm--active" : ""}`} onClick={() => updateAlbum(album.source_folder, { accepted_unknown_year: !album.accepted_unknown_year })}>
                         Unknown year
                       </button>
-                      <button type="button" className={`btn-sm${album.lookup_later ? " btn-sm--active" : ""}`} onClick={() => updateAlbum(album.source_folder, { lookup_later: !album.lookup_later })}>
+                      <button type="button" className={`btn-sm${album.lookup_later ? " btn-sm--active" : ""}`} onClick={() => updateAlbum(album.source_folder, { lookup_later: !album.lookup_later, release_decision: !album.lookup_later ? "review_later" : album.release_decision, include: !album.lookup_later ? false : album.include })}>
                         Lookup later
                       </button>
                     </div>
@@ -427,12 +488,12 @@ export default function DiscographyEditor({
               <button
                 type="button"
                 className="btn"
-                disabled={saving || !valid || includedAlbumCount === 0}
-                title="Saves these corrections, then creates separate review batches from the included releases. Files are not moved to the final library."
+                disabled={saving || !valid || extractableAlbumCount === 0}
+                title="Saves these corrections, then creates separate review batches only from releases marked Extract as child. Files are not moved to the final library."
                 onClick={() => void onCreateChildBatches(buildUpdate())}
               >
                 <i className={`ti ti-${saving ? "loader-2 spinner" : "git-branch"}`} />
-                Save and create child batches
+                Create safe child batches
               </button>
             )}
             <button type="submit" className="btn btn--green" disabled={saving || !valid}>

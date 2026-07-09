@@ -4468,3 +4468,57 @@ button:focus-visible, input:focus-visible {
   }
 }
 /* End parent child batch visibility */
+
+/* AA-QA1-FIX3.3.3 - Discography release decisions */
+.discography-editor__split-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+}
+
+.discography-editor__split-summary span {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.discography-editor__split-summary strong {
+  color: var(--text-primary);
+}
+
+.album-edit-row__decision {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.album-edit-row__decision small {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.discography-parent-state p {
+  margin: 0.35rem 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.discography-parent-state__remainders {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+}
+
+.discography-parent-state__remainders span {
+  padding: 0.22rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+/* End AA-QA1-FIX3.3.3 */

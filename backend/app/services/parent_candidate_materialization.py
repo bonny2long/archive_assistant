@@ -63,6 +63,32 @@ def build_parent_candidate_summary(db: Session | None, batch: IngestBatch) -> di
     ]
     candidate_group_count = len(candidate_ids)
     metadata = batch.metadata_json or {}
+    metadata_parent_state = metadata.get("parent_review_state")
+    if metadata_parent_state in {PARENT_PARTIALLY_MATERIALIZED, PARENT_SPLIT_COMPLETE}:
+        actual_child_count = _actual_child_batch_count(db, batch.id)
+        materialized_child_count = int(metadata.get("materialized_child_count") or actual_child_count or 0)
+        extractable_count = int(metadata.get("extractable_candidate_count") or 0)
+        review_later_count = int(metadata.get("review_later_candidate_count") or 0)
+        excluded_count = int(metadata.get("excluded_candidate_count") or 0)
+        blocked_count = int(metadata.get("blocked_candidate_count") or 0)
+        unresolved_count = int(metadata.get("unresolved_candidate_count") or 0)
+        explicit_remaining = extractable_count + review_later_count + excluded_count + blocked_count + unresolved_count
+        remaining_candidate_count = explicit_remaining or (1 if remaining_parent_file_count > 0 else 0)
+        parent_review_state = PARENT_PARTIALLY_MATERIALIZED if remaining_parent_file_count > 0 else PARENT_SPLIT_COMPLETE
+        return {
+            "candidate_group_count": materialized_child_count + remaining_candidate_count,
+            "approved_candidate_count": 0,
+            "excluded_candidate_count": excluded_count,
+            "blocked_candidate_count": blocked_count,
+            "review_later_candidate_count": review_later_count,
+            "unresolved_candidate_count": unresolved_count or (1 if remaining_parent_file_count > 0 and explicit_remaining == 0 else 0),
+            "materialized_child_count": materialized_child_count,
+            "child_candidate_count": materialized_child_count,
+            "remaining_candidate_count": remaining_candidate_count,
+            "needs_materialization": False,
+            "parent_review_state": parent_review_state,
+            "is_parent_review_container": True,
+        }
     if batch.status == PARENT_SPLIT_COMPLETE:
         history_entries: list[dict[str, Any]] = []
         for key in ("materialization_history", "split_history"):

@@ -137,19 +137,26 @@ def _discography_child_batch_blocker(batch: IngestBatch) -> str | None:
     if batch.detected_type != "music_discography":
         return None
     metadata = batch.metadata_json or {}
+    parent_state = metadata.get("parent_review_state")
+    if parent_state in {"split_complete", "parent_partially_materialized"}:
+        return "Review and move the created child batches, not the parent discography container."
     albums = [item for item in metadata.get("albums", []) if isinstance(item, dict)]
-    included = [item for item in albums if item.get("include", True) is not False and item.get("release_type") != "exclude"]
-    if len(included) <= 1:
+    extractable = [
+        item for item in albums
+        if str(item.get("release_decision") or "extract_as_child") == "extract_as_child"
+        and item.get("include", True) is not False
+        and item.get("release_type") != "exclude"
+    ]
+    if len(extractable) <= 1:
         return None
     source_name = Path(batch.source_path or "").name.casefold()
     artist = str(metadata.get("artist") or "").strip().casefold()
     has_source_identity = artist.startswith("drive-download-") or source_name.startswith("drive-download-")
-    has_mismatch = any("folder_artist_mismatch" in (item.get("warnings") or []) for item in included)
+    has_mismatch = any("folder_artist_mismatch" in (item.get("warnings") or []) for item in extractable)
     has_partial_split = bool(metadata.get("split_history") or metadata.get("materialization_history"))
     if has_source_identity or has_mismatch or has_partial_split:
-        return "Create child batches from included discography releases before approving this parent."
+        return "Create safe child batches from extractable discography releases before approving this parent."
     return None
-
 @router.get("/health")
 def health():
     return {
@@ -1503,10 +1510,14 @@ def update_discography_metadata(
             str(album_copy.get("source_folder") or "")
         )
         if correction:
-            included = correction.include and correction.release_type != "exclude"
+            release_decision = correction.release_decision
+            if correction.release_type == "exclude":
+                release_decision = "exclude"
+            included = release_decision == "extract_as_child"
             album_copy["album"] = correction.album.strip()
             album_copy["year"] = correction.year
-            album_copy["release_type"] = correction.release_type
+            album_copy["release_type"] = "album" if correction.release_type == "exclude" else correction.release_type
+            album_copy["release_decision"] = release_decision
             album_copy["include"] = included
             album_copy["accepted_unknown_album_artist"] = (
                 correction.accepted_unknown_album_artist
@@ -1517,7 +1528,7 @@ def update_discography_metadata(
             album_copy["accepted_unknown_year"] = (
                 correction.accepted_unknown_year
             )
-            album_copy["lookup_later"] = correction.lookup_later
+            album_copy["lookup_later"] = correction.lookup_later or release_decision == "review_later"
             release_genre = (correction.genre or "").strip()
             existing_album_genre = str(album_copy.get("genre") or "").strip()
             effective_genre = release_genre or primary_genre or existing_album_genre or "Unknown"
@@ -1548,7 +1559,13 @@ def update_discography_metadata(
             album_copy["warnings"] = list(dict.fromkeys(album_warnings))
             album_copy["status"] = (
                 "excluded"
-                if not included
+                if release_decision == "exclude"
+                else "review_later"
+                if release_decision == "review_later"
+                else "blocked"
+                if release_decision == "blocked"
+                else "unresolved"
+                if release_decision == "unresolved"
                 else "needs_review"
                 if "album_missing_year" in album_copy["warnings"]
                 else "warning"
@@ -1557,11 +1574,31 @@ def update_discography_metadata(
             )
         albums.append(album_copy)
     metadata["albums"] = albums
-    metadata["album_count"] = sum(
-        bool(album.get("include", True))
-        for album in albums
-    )
-    metadata["release_count"] = metadata["album_count"]
+    decision_counts = {
+        "extract_as_child": 0,
+        "review_later": 0,
+        "exclude": 0,
+        "blocked": 0,
+        "unresolved": 0,
+    }
+    for album in albums:
+        decision = str(album.get("release_decision") or "").strip() or (
+            "exclude"
+            if album.get("release_type") == "exclude" or album.get("include") is False
+            else "review_later"
+            if album.get("lookup_later")
+            else "extract_as_child"
+        )
+        if decision not in decision_counts:
+            decision = "unresolved"
+        decision_counts[decision] += 1
+    metadata["album_count"] = len(albums)
+    metadata["release_count"] = len(albums)
+    metadata["extractable_candidate_count"] = decision_counts["extract_as_child"]
+    metadata["review_later_candidate_count"] = decision_counts["review_later"]
+    metadata["excluded_candidate_count"] = decision_counts["exclude"]
+    metadata["blocked_candidate_count"] = decision_counts["blocked"]
+    metadata["unresolved_candidate_count"] = decision_counts["unresolved"]
     metadata["artist_source"] = "manual correction"
     for ingest_file in batch.files:
         track_metadata = dict(ingest_file.metadata_json or {})
@@ -1571,10 +1608,14 @@ def update_discography_metadata(
         )
         if not correction:
             continue
-        included = correction.include and correction.release_type != "exclude"
+        release_decision = correction.release_decision
+        if correction.release_type == "exclude":
+            release_decision = "exclude"
+        included = release_decision == "extract_as_child"
         album_metadata["album"] = correction.album.strip()
         album_metadata["year"] = correction.year
-        album_metadata["release_type"] = correction.release_type
+        album_metadata["release_type"] = "album" if correction.release_type == "exclude" else correction.release_type
+        album_metadata["release_decision"] = release_decision
         album_metadata["include"] = included
         album_metadata["accepted_unknown_album_artist"] = (
             correction.accepted_unknown_album_artist
@@ -1585,7 +1626,7 @@ def update_discography_metadata(
         album_metadata["accepted_unknown_year"] = (
             correction.accepted_unknown_year
         )
-        album_metadata["lookup_later"] = correction.lookup_later
+        album_metadata["lookup_later"] = correction.lookup_later or release_decision == "review_later"
         effective_genre, genre_source = genre_by_source.get(
             str(album_metadata.get("source_folder") or ""),
             (

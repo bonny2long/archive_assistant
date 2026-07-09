@@ -607,6 +607,33 @@ def _existing_split_child_id(db: Session, split_history: list[dict[str, Any]], s
     return None
 
 
+DISCOGRAPHY_RELEASE_DECISIONS = {
+    "extract_as_child",
+    "review_later",
+    "exclude",
+    "blocked",
+    "unresolved",
+}
+
+
+def _discography_release_decision(album: dict[str, Any]) -> str:
+    decision = str(album.get("release_decision") or "").strip()
+    if decision in DISCOGRAPHY_RELEASE_DECISIONS:
+        return decision
+    if album.get("release_type") == "exclude" or album.get("include") is False:
+        return "exclude"
+    if album.get("lookup_later"):
+        return "review_later"
+    return "extract_as_child"
+
+
+def _source_folders_for_decision(albums: list[dict[str, Any]], decision: str) -> list[str]:
+    return [
+        str(_album_source_folder(album) or album.get("album") or album.get("title") or "Unknown release")
+        for album in albums
+        if _discography_release_decision(album) == decision
+    ]
+
 def execute_split_discography_releases(db: Session, batch_id: int) -> dict[str, Any]:
     parent_batch = db.query(IngestBatch).options(selectinload(IngestBatch.files)).filter(IngestBatch.id == batch_id).first()
     if parent_batch is None:
@@ -619,16 +646,33 @@ def execute_split_discography_releases(db: Session, batch_id: int) -> dict[str, 
     timestamp = now_utc()
     batch_metadata = deepcopy(parent_batch.metadata_json or {})
     albums = [item for item in batch_metadata.get("albums", []) if isinstance(item, dict)]
-    included_albums = [
-        album for album in albums
-        if album.get("include", True) is not False and album.get("release_type") != "exclude"
-    ]
+    for album in albums:
+        decision = _discography_release_decision(album)
+        album["release_decision"] = decision
+        album["include"] = decision == "extract_as_child"
+        if album.get("release_type") == "exclude":
+            album["release_type"] = "album"
+        if decision == "review_later":
+            album["lookup_later"] = True
+        album["status"] = (
+            "ready"
+            if decision == "extract_as_child"
+            else "review_later"
+            if decision == "review_later"
+            else "excluded"
+            if decision == "exclude"
+            else decision
+        )
+
+    extract_albums = [album for album in albums if _discography_release_decision(album) == "extract_as_child"]
     split_history = batch_metadata.get("split_history") if isinstance(batch_metadata.get("split_history"), list) else []
-    if not included_albums:
+    if not extract_albums and split_history:
         existing_child_ids = [
             int(item.get("child_batch_id") or 0)
             for item in split_history
-            if isinstance(item, dict) and item.get("child_batch_id") and db.get(IngestBatch, int(item.get("child_batch_id") or 0)) is not None
+            if isinstance(item, dict)
+            and item.get("child_batch_id")
+            and db.get(IngestBatch, int(item.get("child_batch_id") or 0)) is not None
         ]
         if existing_child_ids:
             remaining_parent_file_count = db.query(IngestFile).filter(IngestFile.batch_id == parent_batch.id).count()
@@ -641,16 +685,16 @@ def execute_split_discography_releases(db: Session, batch_id: int) -> dict[str, 
                 "remaining_parent_file_count": remaining_parent_file_count,
                 "parent_status": parent_batch.status,
                 "parent_review_state": batch_metadata.get("parent_review_state") or parent_batch.status,
-                "message": "Included release child batches already exist.",
+                "message": "Release child batches already exist.",
             }
-        raise ValueError("No included discography releases are available to create child batches.")
 
     created_child_batch_ids: list[int] = []
     skipped_child_batch_ids: list[int] = []
     skipped_sources: list[str] = []
     split_sources: set[str] = set()
+    extracted_source_folders: list[str] = []
 
-    for album in included_albums:
+    for album in extract_albums:
         source_folder = _album_source_folder(album)
         if not source_folder:
             skipped_sources.append(str(album.get("album") or album.get("title") or "Unknown release"))
@@ -660,6 +704,7 @@ def execute_split_discography_releases(db: Session, batch_id: int) -> dict[str, 
         if existing_child_id is not None:
             skipped_child_batch_ids.append(existing_child_id)
             split_sources.add(_norm_match(source_folder))
+            extracted_source_folders.append(source_folder)
             continue
 
         files_to_move = _files_for_source_folder(parent_batch.files, source_folder)
@@ -675,6 +720,7 @@ def execute_split_discography_releases(db: Session, batch_id: int) -> dict[str, 
             candidate=None,
             identity_override=None,
         )
+        album_metadata["release_decision"] = "extract_as_child"
         child_batch = IngestBatch(
             source_kind=parent_batch.source_kind,
             source_path=parent_batch.source_path,
@@ -703,35 +749,68 @@ def execute_split_discography_releases(db: Session, batch_id: int) -> dict[str, 
             "moved_file_count": len(files_to_move),
             "split_at": timestamp.isoformat(),
             "source": "discography_editor_release_split",
+            "release_decision": "extract_as_child",
         })
         created_child_batch_ids.append(child_batch.id)
         split_sources.add(_norm_match(source_folder))
+        extracted_source_folders.append(source_folder)
 
     remaining_parent_file_count = db.query(IngestFile).filter(IngestFile.batch_id == parent_batch.id).count()
 
-    if not created_child_batch_ids and not skipped_child_batch_ids and remaining_parent_file_count > 0:
+    if not created_child_batch_ids and not skipped_child_batch_ids and extract_albums:
         raise ValueError(
-            "No child batches were created. Make sure each included release has a source folder with attached files."
+            "No child batches were created. Make sure releases marked Extract as child have source folders with attached files."
         )
 
     remaining_albums = [
         album for album in albums
         if _norm_match(_album_source_folder(album)) not in split_sources
     ]
+    remaining_decision_counts = {decision: 0 for decision in DISCOGRAPHY_RELEASE_DECISIONS}
+    for album in remaining_albums:
+        remaining_decision_counts[_discography_release_decision(album)] += 1
+
+    audit = batch_metadata.get("discography_split_audit")
+    if not isinstance(audit, list):
+        audit = []
+    audit.append({
+        "created_child_batch_ids": created_child_batch_ids,
+        "existing_child_batch_ids": skipped_child_batch_ids,
+        "extracted_source_folders": extracted_source_folders,
+        "review_later_source_folders": _source_folders_for_decision(remaining_albums, "review_later"),
+        "excluded_source_folders": _source_folders_for_decision(remaining_albums, "exclude"),
+        "blocked_source_folders": _source_folders_for_decision(remaining_albums, "blocked"),
+        "unresolved_source_folders": _source_folders_for_decision(remaining_albums, "unresolved"),
+        "skipped_source_folders": skipped_sources,
+        "split_at": timestamp.isoformat(),
+    })
+
     batch_metadata["albums"] = remaining_albums
     batch_metadata["album_count"] = len(remaining_albums)
     batch_metadata["release_count"] = len(remaining_albums)
     batch_metadata["split_history"] = split_history
+    batch_metadata["discography_split_audit"] = audit
     db.flush()
-    batch_metadata["materialized_child_count"] = len(split_history)
-    batch_metadata["child_candidate_count"] = len(split_history)
+    materialized_child_count = len([
+        item for item in split_history
+        if isinstance(item, dict) and item.get("child_batch_id")
+    ])
+    batch_metadata["materialized_child_count"] = materialized_child_count
+    batch_metadata["child_candidate_count"] = materialized_child_count
     batch_metadata["remaining_parent_file_count"] = remaining_parent_file_count
-    
-    if remaining_parent_file_count == 0:
+    batch_metadata["extractable_candidate_count"] = remaining_decision_counts["extract_as_child"]
+    batch_metadata["review_later_candidate_count"] = remaining_decision_counts["review_later"]
+    batch_metadata["excluded_candidate_count"] = remaining_decision_counts["exclude"]
+    batch_metadata["blocked_candidate_count"] = remaining_decision_counts["blocked"]
+    batch_metadata["unresolved_candidate_count"] = remaining_decision_counts["unresolved"]
+
+    if materialized_child_count and remaining_parent_file_count == 0:
         batch_metadata["parent_review_state"] = "split_complete"
+    elif materialized_child_count and remaining_parent_file_count > 0:
+        batch_metadata["parent_review_state"] = "parent_partially_materialized"
     else:
-        batch_metadata["parent_review_state"] = "split_complete" if not remaining_albums else "parent_partially_materialized"
-        
+        batch_metadata["parent_review_state"] = batch_metadata.get("parent_review_state") or "review_in_progress"
+
     parent_batch.status = "split_complete" if batch_metadata["parent_review_state"] == "split_complete" else "pending_review"
     parent_batch.metadata_json = batch_metadata
     parent_batch.updated_at = timestamp
@@ -740,13 +819,14 @@ def execute_split_discography_releases(db: Session, batch_id: int) -> dict[str, 
 
     created_count = len(created_child_batch_ids)
     skipped_count = len(skipped_child_batch_ids) + len(skipped_sources)
-    message = (
-        f"Created {created_count} child batch{'es' if created_count != 1 else ''} from included releases."
-        if created_count
-        else "Included release child batches already exist."
-    )
-    if skipped_sources:
-        message += f" {len(skipped_sources)} release{'s' if len(skipped_sources) != 1 else ''} had no attached files and stayed on the parent."
+    if created_count:
+        message = f"Created {created_count} child batch{'es' if created_count != 1 else ''} from releases marked Extract as child."
+    elif skipped_child_batch_ids:
+        message = "Release child batches already exist."
+    else:
+        message = "No releases were marked Extract as child; parent decisions were saved."
+    if remaining_parent_file_count:
+        message += f" {remaining_parent_file_count} file{'s' if remaining_parent_file_count != 1 else ''} remain attached to the parent."
 
     return {
         "parent_batch_id": parent_batch.id,
@@ -759,7 +839,6 @@ def execute_split_discography_releases(db: Session, batch_id: int) -> dict[str, 
         "parent_review_state": batch_metadata["parent_review_state"],
         "message": message,
     }
-
 
 def execute_split_candidate(db: Session, batch_id: int, candidate_id: int) -> dict[str, Any]:
     parent_batch = db.query(IngestBatch).options(selectinload(IngestBatch.files)).filter(IngestBatch.id == batch_id).first()

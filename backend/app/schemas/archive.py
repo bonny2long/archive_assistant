@@ -672,6 +672,13 @@ class DiscographyAlbumUpdate(BaseModel):
         "other",
         "exclude",
     ] = "album"
+    release_decision: Literal[
+        "extract_as_child",
+        "review_later",
+        "exclude",
+        "blocked",
+        "unresolved",
+    ] = "extract_as_child"
     include: bool = True
     accepted_unknown_album_artist: bool = False
     accepted_unknown_album_title: bool = False

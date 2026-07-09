@@ -567,6 +567,13 @@ export type DiscographyReleaseType =
   | "other"
   | "exclude";
 
+export type DiscographyReleaseDecision =
+  | "extract_as_child"
+  | "review_later"
+  | "exclude"
+  | "blocked"
+  | "unresolved";
+
 export type DiscographyAlbum = {
   source_folder: string;
   artist?: string | null;
@@ -582,6 +589,7 @@ export type DiscographyAlbum = {
   status?: string;
   warnings?: string[];
   release_type?: DiscographyReleaseType;
+  release_decision?: DiscographyReleaseDecision;
   include?: boolean;
   metadata_candidates?: Record<string, MetadataCandidate[]>;
   track_candidates?: MetadataCandidate[];
@@ -597,6 +605,7 @@ export type DiscographyAlbumUpdate = {
   year: string | null;
   genre?: string | null;
   release_type: DiscographyReleaseType;
+  release_decision: DiscographyReleaseDecision;
   include: boolean;
   accepted_unknown_album_artist: boolean;
   accepted_unknown_album_title: boolean;

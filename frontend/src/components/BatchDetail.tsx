@@ -1105,12 +1105,14 @@ function AudiobookBatchDetail({ batch, moveSummary }: Props) {
 }
 
 type DiscographyAlbum = {
+  source_folder?: string | null;
   year?: string | null;
   album?: string | null;
   track_count?: number;
   format?: string;
   status?: string;
   warnings?: string[];
+  release_decision?: string;
 };
 
 type DiscographyParentCleanup = {
@@ -1136,6 +1138,10 @@ function DiscographyBatchDetail({ batch, moveSummary }: Props) {
   const warnings = metadataWarnings(batch);
   const moved = batch.status === "moved";
   const releaseCount = getReleaseCount(batch);
+  const parentReviewState = typeof metadata.parent_review_state === "string" ? metadata.parent_review_state : batch.status === "split_complete" ? "split_complete" : null;
+  const isSplitParent = parentReviewState === "split_complete" || parentReviewState === "parent_partially_materialized";
+  const remainingParentFileCount = Number(metadata.remaining_parent_file_count ?? batch.files.length ?? 0);
+  const remainingAlbums = albums.filter((album) => album.release_decision !== "extract_as_child");
 
   return (
     <div className={`batch-detail ${moved ? "batch-detail--moved" : "batch-detail--review"}`}>
@@ -1143,7 +1149,7 @@ function DiscographyBatchDetail({ batch, moveSummary }: Props) {
       <div className="library-status">
         <div className="library-status__icon"><i className="ti ti-folders" /></div>
         <div>
-          <div className="library-status__eyebrow">Discography detected</div>
+          <div className="library-status__eyebrow">{isSplitParent ? "Discography parent container" : "Discography detected"}</div>
           <h2>{getBatchDisplayTitle(batch)}</h2>
           <p>{releaseCount} releases · {String(metadata.track_count ?? batch.files.length)} tracks</p>
         </div>
@@ -1153,12 +1159,31 @@ function DiscographyBatchDetail({ batch, moveSummary }: Props) {
         </div>
       </div>
 
-      <section className="library-destination">
-        <span>{moved ? "Final destination" : "Destination preview"}</span>
-        <strong>{readableLibraryPath(batch.suggested_destination)}</strong>
-      </section>
+      {isSplitParent ? (
+        <section className="library-card discography-parent-state">
+          <h3>{parentReviewState === "split_complete" ? "Parent container split complete" : "Parent container partially split"}</h3>
+          <p>
+            This parent is not move-ready. Review, approve, and move the created child batches instead.
+            {remainingParentFileCount > 0 ? ` ${remainingParentFileCount} file${remainingParentFileCount === 1 ? "" : "s"} remain attached to the parent.` : ""}
+          </p>
+          {remainingAlbums.length > 0 && (
+            <div className="discography-parent-state__remainders">
+              {remainingAlbums.map((album) => (
+                <span key={album.source_folder ?? album.album ?? "unknown"}>
+                  {(album.release_decision ?? "unresolved").replace(/_/g, " ")}: {album.album ?? album.source_folder ?? "Unknown release"}
+                </span>
+              ))}
+            </div>
+          )}
+        </section>
+      ) : (
+        <section className="library-destination">
+          <span>{moved ? "Final destination" : "Destination preview"}</span>
+          <strong>{readableLibraryPath(batch.suggested_destination)}</strong>
+        </section>
+      )}
 
-      {batch.status === "split_complete" && <CreatedChildBatchesPanel batchId={batch.id} />}
+      {isSplitParent && <CreatedChildBatchesPanel batchId={batch.id} />}
 
       {(removedTokens.length > 0 || Boolean(cleanup?.year_range) || Boolean(artistSource)) && (
         <section className="library-card discography-cleanup">

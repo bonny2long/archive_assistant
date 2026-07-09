@@ -533,6 +533,71 @@ def test_failed_materialization_does_not_complete_parent(db) -> None:
         for batch in child_batches
     )
 
+
+def test_discography_release_decisions_leave_remainder_on_parent(db) -> None:
+    safe = album_row("Safe Release", "2020") | {"release_decision": "extract_as_child", "include": True}
+    review_later = album_row("Needs Later Review", "2021") | {"release_decision": "review_later", "include": False, "lookup_later": True}
+    excluded = album_row("Wrong Library", "2022") | {"release_decision": "exclude", "include": False}
+    blocked = album_row("Blocked Release", "2023") | {"release_decision": "blocked", "include": False}
+    releases = [safe, review_later, excluded, blocked]
+    parent = IngestBatch(
+        source_kind="manual-drop",
+        source_path=str(PROJECT_ROOT / ".tmp" / "mixed-discography"),
+        detected_type="music_discography",
+        status="pending_review",
+        confidence=0.82,
+        metadata_json={
+            "type": "music_discography",
+            "artist": "Mixed Artist",
+            "albums": releases,
+            "album_count": len(releases),
+            "release_count": len(releases),
+        },
+    )
+    db.add(parent)
+    db.flush()
+    safe_file = add_album_file(parent, safe, 1, role="discography_track")
+    review_file = add_album_file(parent, review_later, 2, role="discography_track")
+    excluded_file = add_album_file(parent, excluded, 3, role="discography_track")
+    blocked_file = add_album_file(parent, blocked, 4, role="discography_track")
+    db.commit()
+
+    result = execute_split_discography_releases(db, parent.id)
+    assert result["created_count"] == 1
+    assert result["parent_review_state"] == "parent_partially_materialized"
+    db.refresh(parent)
+    assert parent.status == "pending_review"
+    assert parent.metadata_json["materialized_child_count"] == 1
+    assert parent.metadata_json["remaining_parent_file_count"] == 3
+    assert parent.metadata_json["review_later_candidate_count"] == 1
+    assert parent.metadata_json["excluded_candidate_count"] == 1
+    assert parent.metadata_json["blocked_candidate_count"] == 1
+    assert parent.metadata_json["extractable_candidate_count"] == 0
+    assert parent.metadata_json["discography_split_audit"][-1]["extracted_source_folders"] == ["Safe Release"]
+    assert parent.metadata_json["discography_split_audit"][-1]["review_later_source_folders"] == ["Needs Later Review"]
+    assert parent.metadata_json["discography_split_audit"][-1]["excluded_source_folders"] == ["Wrong Library"]
+    assert parent.metadata_json["discography_split_audit"][-1]["blocked_source_folders"] == ["Blocked Release"]
+
+    child_id = result["created_child_batch_ids"][0]
+    child = db.get(IngestBatch, child_id)
+    assert child is not None
+    assert db.query(IngestFile).filter(IngestFile.batch_id == child.id).count() == 1
+    assert db.query(IngestFile).filter(IngestFile.batch_id == child.id, IngestFile.id == safe_file.id).count() == 1
+    assert db.query(IngestFile).filter(IngestFile.batch_id == parent.id, IngestFile.id.in_([review_file.id, excluded_file.id, blocked_file.id])).count() == 3
+
+    summary = build_parent_candidate_summary(db, parent)
+    assert summary["is_parent_review_container"] is True
+    assert summary["parent_review_state"] == "parent_partially_materialized"
+    assert summary["materialized_child_count"] == 1
+    assert summary["remaining_candidate_count"] == 3
+
+    parent.status = "approved"
+    db.commit()
+    moved, errors = move_approved_batches(db)
+    assert moved == 0
+    assert any("parent" in error.lower() and "container" in error.lower() for error in errors)
+    parent.status = "pending_review"
+    db.commit()
 def test_single_item_batch_stays_normal(db) -> None:
     batch = IngestBatch(
         source_kind="manual-drop",
@@ -573,6 +638,7 @@ def main() -> None:
         test_partial_materialization_keeps_unresolved_parent_remainder(db)
         test_split_complete_parent_counts_actual_children_without_history(db)
         test_discography_editor_rows_create_child_batches_without_candidates(db)
+        test_discography_release_decisions_leave_remainder_on_parent(db)
         test_failed_materialization_does_not_complete_parent(db)
         test_single_item_batch_stays_normal(db)
         print("PASS - AA-QA1-FIX2.2 candidate-member-first materialization verified")
