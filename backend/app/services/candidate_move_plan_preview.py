@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.models.archive import IngestBatch
+from app.services.destination_authority import validate_music_format_destination
 from app.models.media_metadata import (
     CandidateMember,
     FragmentReconstructionDecision,
@@ -132,20 +133,19 @@ def _batch_music_destination(batch: IngestBatch, media_type: str, weak_identity:
     destination = str(batch.suggested_destination or metadata.get("suggested_destination") or "").strip()
     if not destination:
         return None
-    normalized = destination.replace("\\", "/")
     format_bucket = str(metadata.get("format") or "").upper().strip()
     if format_bucket not in {"FLAC", "MP3"}:
-        parts = {part.upper() for part in Path(normalized).parts}
+        parts = {part.upper() for part in Path(destination.replace("\\", "/")).parts}
         if "FLAC" in parts:
             format_bucket = "FLAC"
         elif "MP3" in parts:
             format_bucket = "MP3"
     if format_bucket not in {"FLAC", "MP3"}:
         return None
-    expected = f"Music/Library/{format_bucket}"
-    if expected not in normalized:
+    if validate_music_format_destination(batch):
         return None
-    return expected, destination
+    return f"Music/Library/{format_bucket}", destination
+
 
 def _destination(media_type: str, title: str | None, creator: str | None, year: str | None, key: str, weak_identity: bool) -> tuple[str, str]:
     if weak_identity:

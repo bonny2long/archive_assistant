@@ -91,7 +91,7 @@ def main():
                 status="pending_review",
                 confidence=0.95,
                 suggested_destination=str(destination),
-                suggested_metadata={"artist": "Kanye West", "album": "Yeezus", "year": "2013", "format": "FLAC"},
+                suggested_metadata={"artist": "Kanye West", "album": "Yeezus", "year": "2013", "format": "FLAC", "suggested_destination": str(destination)},
                 metadata_json={
                     "artist": "Kanye West",
                     "albumartist": "Kanye West",
@@ -121,7 +121,7 @@ def main():
                 status="pending_review",
                 confidence=0.95,
                 suggested_destination=str(mp3_destination),
-                suggested_metadata={"artist": "Kanye West", "album": "808s & Heartbreak", "year": "2008", "format": "MP3"},
+                suggested_metadata={"artist": "Kanye West", "album": "808s & Heartbreak", "year": "2008", "format": "MP3", "suggested_destination": str(mp3_destination)},
                 metadata_json={
                     "artist": "Kanye West",
                     "albumartist": "Kanye West",

@@ -11,6 +11,13 @@ from app.core.config import settings
 from app.core.time import now_utc
 from app.models.archive import IngestBatch, IngestFile
 from app.models.media_metadata import CandidateMember, MediaIdentityCandidate, UniversalIngestionReviewAction
+from app.services.destination_authority import (
+    build_music_library_destination,
+    infer_audio_format_from_files,
+    rebuild_music_batch_destination_from_attached_files,
+    safe_path_part as destination_safe_path_part,
+    sync_batch_destination_fields,
+)
 
 _SAFE_PART_PATTERN = re.compile(r'[<>:"/\\|?*]+')
 
@@ -378,13 +385,15 @@ def _album_from_candidate_and_files(
 
 
 def _library_album_destination(album: dict[str, Any]) -> str:
-    artist = safe_path_part(album.get("artist") or album.get("album_artist") or "Unknown Artist", "Unknown Artist")
-    title = safe_path_part(album.get("album") or album.get("title") or "Unknown Album", "Unknown Album")
-    year = safe_path_part(album.get("year") or "", "").strip()
-    album_folder = f"{year} - {title}" if year else title
-    format_value = str(album.get("format") or "").strip().upper()
-    root = settings.music_flac_dir if format_value == "FLAC" else settings.music_mp3_dir
-    return str(Path(root) / artist / album_folder)
+    format_bucket = str(album.get("format") or "MP3").upper().strip()
+    if format_bucket not in {"FLAC", "MP3"}:
+        format_bucket = "MP3"
+    return build_music_library_destination(
+        artist=str(album.get("artist") or album.get("album_artist") or "Unknown Artist"),
+        album=str(album.get("album") or album.get("title") or "Unknown Album"),
+        year=album.get("year"),
+        audio_format=format_bucket,
+    )
 
 
 def _build_album_batch_metadata(
@@ -587,78 +596,37 @@ def split_child_batches_for_parent(db: Session, parent_batch: IngestBatch) -> li
 
 
 def _actual_audio_format(files: list[IngestFile]) -> str:
-    formats = {
-        _file_extension(file).lstrip(".").upper()
-        for file in files
-        if _is_audio_file(file) and _file_extension(file)
-    }
-    if formats == {"FLAC"}:
-        return "FLAC"
-    if formats == {"MP3"}:
-        return "MP3"
-    if len(formats) > 1:
-        return "MIXED"
-    return next(iter(formats), "Unknown")
+    return infer_audio_format_from_files(files)
 
 
-def rebuild_split_child_destination_authority(child: IngestBatch) -> bool:
+def rebuild_split_child_destination_authority(child: IngestBatch, db: Session | None = None) -> bool:
     if child.detected_type != "music_album":
         return False
-    metadata = deepcopy(child.metadata_json or {})
-    if not isinstance(metadata, dict):
-        metadata = {}
-    actual_format = _actual_audio_format(list(child.files))
-    changed = False
-    warnings = list(metadata.get("metadata_warnings") or [])
-    blocking = list(metadata.get("blocking_review_items") or [])
-
-    if actual_format in {"FLAC", "MP3"}:
-        metadata["format"] = actual_format
-        warning = "mixed_audio_formats_destination_review_required"
-        warnings = [item for item in warnings if item != warning]
-        blocking = [item for item in blocking if not (isinstance(item, dict) and item.get("type") == warning)]
-        destination = _library_album_destination(metadata)
-        stale_values = [
-            child.suggested_destination,
-            (child.suggested_metadata or {}).get("suggested_destination") if isinstance(child.suggested_metadata, dict) else None,
-            metadata.get("suggested_destination"),
-        ]
-        if any(value != destination for value in stale_values):
-            changed = True
-        child.suggested_destination = destination
-        suggested_metadata = dict(child.suggested_metadata or {})
-        suggested_metadata.update(_suggested_metadata(metadata))
-        suggested_metadata["suggested_destination"] = destination
-        child.suggested_metadata = suggested_metadata
-        metadata["suggested_destination"] = destination
-    elif actual_format == "MIXED":
-        metadata["format"] = "MIXED"
-        warning = "mixed_audio_formats_destination_review_required"
-        if warning not in warnings:
-            warnings.append(warning)
-            changed = True
-        if not any(isinstance(item, dict) and item.get("type") == warning for item in blocking):
-            blocking.append({"type": warning, "message": "Mixed audio formats require destination review before move."})
-            changed = True
-        child.metadata_confirmed = False
-        child.status = "needs_metadata_review"
-
-    metadata["file_count"] = len(child.files)
-    metadata["metadata_warnings"] = warnings
-    metadata["blocking_review_items"] = blocking
-    if metadata != (child.metadata_json or {}):
-        changed = True
-    if changed:
-        child.metadata_json = metadata
-        child.updated_at = now_utc()
-    return changed
+    before = (
+        child.suggested_destination,
+        (child.suggested_metadata or {}).get("suggested_destination") if isinstance(child.suggested_metadata, dict) else None,
+        (child.metadata_json or {}).get("suggested_destination") if isinstance(child.metadata_json, dict) else None,
+        (child.metadata_json or {}).get("format") if isinstance(child.metadata_json, dict) else None,
+        child.status,
+        child.metadata_confirmed,
+    )
+    rebuild_music_batch_destination_from_attached_files(child, db)
+    after = (
+        child.suggested_destination,
+        (child.suggested_metadata or {}).get("suggested_destination") if isinstance(child.suggested_metadata, dict) else None,
+        (child.metadata_json or {}).get("suggested_destination") if isinstance(child.metadata_json, dict) else None,
+        (child.metadata_json or {}).get("format") if isinstance(child.metadata_json, dict) else None,
+        child.status,
+        child.metadata_confirmed,
+    )
+    return before != after
 
 
 def recover_split_child_batches(db: Session, parent_batch: IngestBatch) -> list[IngestBatch]:
     children = split_child_batches_for_parent(db, parent_batch)
     changed = False
     for child in children:
-        changed = rebuild_split_child_destination_authority(child) or changed
+        changed = rebuild_split_child_destination_authority(child, db) or changed
     if changed:
         db.flush()
     return children
@@ -861,6 +829,8 @@ def execute_split_discography_releases(db: Session, batch_id: int) -> dict[str, 
 
         for ingest_file in files_to_move:
             ingest_file.batch_id = child_batch.id
+        child_batch.files = list(files_to_move)
+        rebuild_split_child_destination_authority(child_batch, db)
 
         split_history.append({
             "candidate_id": None,
@@ -1033,6 +1003,8 @@ def execute_split_candidate(db: Session, batch_id: int, candidate_id: int) -> di
     original_file_count = len(parent_batch.files)
     for ingest_file in files_to_move:
         ingest_file.batch_id = child_batch.id
+    child_batch.files = list(files_to_move)
+    rebuild_split_child_destination_authority(child_batch, db)
 
     albums = [item for item in batch_metadata.get("albums", []) if isinstance(item, dict)]
     remaining_albums = [item for item in albums if _norm_match(_album_source_folder(item)) != _norm_match(source_folder)]

@@ -14,6 +14,7 @@ from app.services.batch_split import (
     _library_album_destination,
     _suggested_metadata as _music_suggested_metadata,
 )
+from app.services.destination_authority import rebuild_music_batch_destination_from_attached_files
 from app.services.parent_candidate_materialization import (
     PARENT_PARTIALLY_MATERIALIZED,
     PARENT_SPLIT_COMPLETE,
@@ -302,6 +303,9 @@ def _create_child_batch(db: Session, parent_batch: IngestBatch, candidate: Media
     db.flush()
     for ingest_file in files:
         ingest_file.batch_id = child_batch.id
+    child_batch.files = list(files)
+    if detected_type == "music_album":
+        rebuild_music_batch_destination_from_attached_files(child_batch, db)
     _append_materialization_history(parent_batch, candidate, child_batch, len(files))
     _mark_candidate_materialized(db, parent_batch.id, candidate.id)
     parent_batch.updated_at = timestamp

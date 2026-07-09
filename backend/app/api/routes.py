@@ -72,7 +72,6 @@ from app.services.music_metadata import (
     music_track_numbers,
     normalize_track_title_for_destination,
     sort_music_tracks,
-    suggest_music_destination,
 )
 from app.services.scan_runtime import get_scan_status, start_scan_job
 from app.services.mover import _lock_metadata_for_move, move_approved_batches
@@ -90,6 +89,7 @@ from app.services.book_metadata import (
 from app.services.title_display import clean_display_title, destination_title
 from app.services.metadata_quality_gate import get_batch_metadata_quality
 from app.services.candidate_move_plan_preview import build_candidate_move_plan_preview
+from app.services.destination_authority import rebuild_music_batch_destination_from_attached_files
 from app.services.batch_split import execute_split_candidate, execute_split_discography_releases, recover_split_child_batches
 from app.services.approved_candidate_materialization import materialize_approved_candidates
 from app.services.universal_review_routing import get_batch_routing_decision
@@ -710,18 +710,6 @@ def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Sessio
         warnings.extend(["compilation_detected", "compilation_prefix_removed"])
         meta["metadata_warnings"] = list(dict.fromkeys(warnings))
 
-    file_format = str(meta.get("format", "MP3")).lower()
-    new_dest = suggest_music_destination(
-        {
-            "albumartist": meta["artist"],
-            "album": meta["album"],
-            "date": meta["year"],
-            "extension": file_format,
-        },
-        settings.music_flac_dir,
-        settings.music_mp3_dir
-    )
-
     meta["review_confirmed"] = True
     meta = rehydrate_music_review_metadata_after_manual_save(
         meta,
@@ -733,7 +721,6 @@ def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Sessio
     )
     meta = build_review_state(batch.detected_type, meta)
     batch.metadata_json = meta
-    batch.suggested_destination = str(new_dest)
     batch.suggested_metadata = {
         "artist": meta["artist"],
         "album": meta["album"],
@@ -746,6 +733,8 @@ def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Sessio
             "genre": "manual correction",
         },
     }
+    rebuild_music_batch_destination_from_attached_files(batch, db)
+    meta = batch.metadata_json or {}
     batch.confidence = meta["confidence"]
     batch.metadata_confirmed = not bool(meta["blocking_review_items"])
 

@@ -10,6 +10,12 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.config import settings
 from app.core.time import now_utc
 from app.models.archive import IngestBatch, IngestFile
+from app.services.destination_authority import (
+    build_music_library_destination,
+    infer_audio_format_from_files,
+    sync_batch_destination_fields,
+    validate_music_format_destination,
+)
 from app.services.parent_candidate_materialization import build_parent_candidate_summary
 
 DUPLICATE_STATE_NONE = "none"
@@ -701,35 +707,6 @@ def _first_text(*values: object, fallback: str = "") -> str:
     return fallback
 
 
-def _music_destination_for_format(canonical: IngestBatch, audio_files: list[IngestFile], format_bucket: str) -> str:
-    metadata = canonical.metadata_json or {}
-    first_meta = audio_files[0].metadata_json or {} if audio_files else {}
-    artist = _safe_path_part(
-        _first_text(
-            metadata.get("artist"),
-            metadata.get("albumartist"),
-            metadata.get("album_artist"),
-            first_meta.get("artist"),
-            first_meta.get("albumartist"),
-            fallback="Unknown Artist",
-        ),
-        "Unknown Artist",
-    )
-    album = _safe_path_part(
-        _first_text(
-            metadata.get("album"),
-            metadata.get("title"),
-            first_meta.get("album"),
-            fallback=Path(canonical.source_path or "").name or "Unknown Album",
-        ),
-        "Unknown Album",
-    )
-    year = _safe_path_part(year_value(metadata) or year_value(first_meta), "").strip()
-    album_folder = f"{year} - {album}" if year else album
-    root = settings.music_flac_dir if format_bucket == "FLAC" else settings.music_mp3_dir
-    return str(Path(root) / artist / album_folder)
-
-
 def _validate_music_destination(format_bucket: str, destination: str) -> None:
     normalized = destination.replace("\\", "/")
     expected = f"Music/Library/{format_bucket}"
@@ -738,28 +715,8 @@ def _validate_music_destination(format_bucket: str, destination: str) -> None:
 
 
 def _destination_sync_error(batch: IngestBatch, format_bucket: str) -> str | None:
-    expected = f"Music/Library/{format_bucket}"
-    metadata = batch.metadata_json or {}
-    destinations = {
-        "batch.suggested_destination": batch.suggested_destination,
-        "metadata_json.suggested_destination": metadata.get("suggested_destination"),
-        "suggested_metadata.suggested_destination": (batch.suggested_metadata or {}).get("suggested_destination"),
-    }
-    normalized_values = {
-        key: str(value or "").replace("\\", "/")
-        for key, value in destinations.items()
-    }
-    missing = [key for key, value in normalized_values.items() if not value]
-    if missing:
-        return f"Missing destination sync field(s): {', '.join(missing)}."
-    unique_values = set(normalized_values.values())
-    if len(unique_values) != 1:
-        return "Canonical batch destination fields are not synchronized."
-    destination = next(iter(unique_values))
-    if expected not in destination:
-        return "Destination does not match file format. Rebuild required before move."
-    return None
-
+    errors = validate_music_format_destination(batch)
+    return " ".join(errors) if errors else None
 
 def _destination_sync_problem(batch: IngestBatch) -> str | None:
     if not (batch.detected_type or "").startswith("music"):
@@ -784,17 +741,31 @@ def _plan_music_merge_rebuild(canonical: IngestBatch, batches: list[IngestBatch]
     audio_files = [ingest_file for batch in batches for ingest_file in (batch.files or []) if _is_music_audio_file(ingest_file)]
     if not audio_files:
         raise DuplicateFragmentResolutionError("Music merge requires attached scoped audio files.")
-    raw_formats = {_music_file_format(ingest_file) for ingest_file in audio_files}
-    if any(value is None for value in raw_formats):
+    format_bucket = infer_audio_format_from_files(audio_files)
+    if format_bucket == "UNKNOWN":
         raise DuplicateFragmentResolutionError("Unsupported audio formats require format review before merge.")
-    formats = sorted(str(value) for value in raw_formats)
-    if len(formats) != 1:
+    if format_bucket == "MIXED" or format_bucket not in {"FLAC", "MP3"}:
         raise DuplicateFragmentResolutionError("Mixed audio formats require format review before merge.")
-    format_bucket = formats[0]
-    destination = _music_destination_for_format(canonical, audio_files, format_bucket)
+    metadata = canonical.metadata_json or {}
+    first_meta = audio_files[0].metadata_json or {} if audio_files else {}
+    artist = _first_text(
+        metadata.get("artist"),
+        metadata.get("albumartist"),
+        metadata.get("album_artist"),
+        first_meta.get("artist"),
+        first_meta.get("albumartist"),
+        fallback="Unknown Artist",
+    )
+    album = _first_text(
+        metadata.get("album"),
+        metadata.get("title"),
+        first_meta.get("album"),
+        fallback=Path(canonical.source_path or "").name or "Unknown Album",
+    )
+    year = year_value(metadata) or year_value(first_meta)
+    destination = build_music_library_destination(artist=artist, album=album, year=year, audio_format=format_bucket)
     _validate_music_destination(format_bucket, destination)
     return format_bucket, destination
-
 
 
 def _track_int(value: object) -> int | None:
@@ -900,21 +871,23 @@ def _rebuild_canonical_metadata(
             rebuilt_format, rebuilt_destination = _plan_music_merge_rebuild(canonical, [canonical])
         destination_text = str(rebuilt_destination)
         metadata["format"] = rebuilt_format
-        metadata["suggested_destination"] = destination_text
-        canonical.suggested_destination = destination_text
+        canonical.metadata_json = metadata
         suggested = dict(canonical.suggested_metadata or {})
         suggested["format"] = rebuilt_format
-        suggested["suggested_destination"] = destination_text
         canonical.suggested_metadata = suggested
+        sync_batch_destination_fields(canonical, destination_text)
+        metadata = dict(canonical.metadata_json or {})
+        metadata["format"] = rebuilt_format
+        canonical.metadata_json = metadata
         _validate_music_destination(rebuilt_format, destination_text)
     warnings = list(metadata.get("metadata_warnings") or [])
     warnings.append(f"duplicate_fragment_resolution_{action}")
     metadata["metadata_warnings"] = list(dict.fromkeys(warnings))
     metadata["merged_batch_ids"] = sorted({*(metadata.get("merged_batch_ids") or []), *[batch.id for batch in source_batches]})
     canonical.metadata_json = metadata
-    sync_problem = _destination_sync_error(canonical, str(rebuilt_format))
-    if sync_problem:
-        raise DuplicateFragmentResolutionError(sync_problem)
+    sync_errors = validate_music_format_destination(canonical)
+    if sync_errors:
+        raise DuplicateFragmentResolutionError(" ".join(sync_errors))
     canonical.status = "pending_review"
     canonical.approved_at = None
     canonical.approved_by = None
