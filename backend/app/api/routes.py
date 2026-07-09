@@ -2407,6 +2407,7 @@ def _batch_to_summary(
         possible_fragment_count=duplicate_summary["possible_fragment_count"],
         duplicate_fragment_review_state=duplicate_summary["duplicate_fragment_review_state"],
         requires_duplicate_review=duplicate_summary["requires_duplicate_review"],
+        review_origin=meta.get("review_origin"),
         **display,
         created_at=batch.created_at,
     )

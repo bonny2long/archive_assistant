@@ -149,7 +149,11 @@ export default function BatchRow({
   const splitCompleteParent = parentReviewContainer
     && batch.parent_review_state === "split_complete"
     && !hasDiscographyRemainderReview;
-  const canOpenWorkspace = batch.status !== "moved" && !quarantineReview && !splitCompleteParent;
+  const isDiscographySplitChild =
+    batch.detected_type === "music_album"
+    && batch.review_origin === "multi_artist_discography_split";
+  const canOpenWorkspace = batch.status !== "moved" && !quarantineReview && !splitCompleteParent && !isDiscographySplitChild;
+  const shouldOpenEditorFromWorkspaceButton = isDiscographySplitChild && batch.status !== "moved" && !quarantineReview;
   const duplicateLabel = duplicateFragmentLabel(batch);
   const activeDuplicateReview = hasActiveDuplicateFragmentReview(batch);
   const duplicateMatchCount = duplicateFragmentMatchCount(batch);
@@ -269,6 +273,16 @@ export default function BatchRow({
               onClick={(event) => { event.stopPropagation(); onOpenWorkspace(batch); }}
             >
               <i className={`ti ${activeDuplicateReview ? "ti-layers-intersect" : "ti-layout-sidebar"}`} />
+            </button>
+          )}
+          {shouldOpenEditorFromWorkspaceButton && (
+            <button
+              className="btn-sm"
+              title="Open Metadata Editor"
+              style={{ color: "var(--accent-blue)" }}
+              onClick={(event) => { event.stopPropagation(); onEdit(batch); }}
+            >
+              <i className="ti ti-layout-sidebar" />
             </button>
           )}
           <button

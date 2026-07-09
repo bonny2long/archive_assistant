@@ -501,6 +501,7 @@ class BatchSummary(BaseModel):
     item_label: str | None = None
     item_count: int = 0
     edit_kind: str | None = None
+    review_origin: str | None = None
     created_at: datetime
 
     @field_serializer("created_at")

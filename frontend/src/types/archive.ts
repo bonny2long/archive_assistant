@@ -468,6 +468,7 @@ export type BatchSummary = {
   item_label?: string | null;
   item_count: number;
   edit_kind?: string | null;
+  review_origin?: string | null;
   created_at: string;
 };
 
