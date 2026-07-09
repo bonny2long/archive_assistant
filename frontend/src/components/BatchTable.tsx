@@ -66,7 +66,7 @@ export default function BatchTable({
   const allChecked = batches.length > 0 && batches.every((batch) => selected.has(batch.id));
   const selectedBatches = batches.filter((batch) => selected.has(batch.id));
   const approvableCount = selectedBatches.filter(
-    (batch) => batch.status === "pending_review"
+    (batch) => !batch.parent_is_drained && batch.status === "pending_review"
       && !batch.metadata_warnings.some(
         (warning) => BLOCKING_APPROVAL_WARNINGS.has(warning),
       ),

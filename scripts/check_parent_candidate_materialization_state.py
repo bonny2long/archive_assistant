@@ -204,6 +204,21 @@ def test_materializes_approved_candidates_once(db) -> None:
     assert set(second["created_child_batch_ids"]) == set(first["created_child_batch_ids"])
     assert db.query(IngestBatch).filter(IngestBatch.detected_type == "music_album").count() == 4
 
+    drained_summary = build_parent_candidate_summary(db, parent)
+    assert drained_summary["parent_is_drained"] is True
+    assert drained_summary["display_state"] == "drained_parent"
+    assert drained_summary["approval_allowed"] is False
+    assert drained_summary["move_ready"] is False
+    assert drained_summary["requires_review"] is False
+    assert drained_summary["active_file_count"] == 0
+    assert drained_summary["child_batch_count"] == 4
+    assert drained_summary["historical_scan_snapshot"] is True
+    assert parent.metadata_json["albums"]
+    drained_display = build_batch_display_fields(parent, drained_summary)
+    assert drained_display["media_label"] == "Processed Container"
+    assert drained_display["secondary_name"] == "4 child batches created; 0 active files"
+    assert drained_display["edit_kind"] is None
+
 
 
 def test_split_complete_parent_without_candidates_stays_container(db) -> None:
@@ -419,9 +434,14 @@ def test_split_complete_parent_counts_actual_children_without_history(db) -> Non
     assert summary["materialized_child_count"] == 2
     assert summary["child_candidate_count"] == 2
     assert summary["remaining_candidate_count"] == 0
+    assert summary["parent_is_drained"] is True
+    assert summary["display_state"] == "drained_parent"
+    assert summary["active_file_count"] == 0
+    assert summary["child_batch_count"] == 2
 
     display = build_batch_display_fields(parent, summary)
-    assert display["secondary_name"] == "2 child batches created, split complete"
+    assert display["media_label"] == "Processed Container"
+    assert display["secondary_name"] == "2 child batches created; 0 active files"
     assert display["item_label"] == "child batches"
     assert display["item_count"] == 2
 

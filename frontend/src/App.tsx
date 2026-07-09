@@ -202,7 +202,7 @@ export default function App() {
 
   const filtered = batches.filter((batch) => {
     if (tab === "all") return true;
-    if (tab === "pending") return batch.status === "pending_review";
+    if (tab === "pending") return !batch.parent_is_drained && batch.status === "pending_review";
     if (tab === "needs_metadata") {
       return batch.status === "needs_metadata_review"
         || (batch.status === "pending_review" && batch.confidence < 0.6);
@@ -215,10 +215,10 @@ export default function App() {
 
   const counts: Record<TabKey, number> = {
     all: batches.length,
-    pending: batches.filter((batch) => batch.status === "pending_review").length,
+    pending: batches.filter((batch) => !batch.parent_is_drained && batch.status === "pending_review").length,
     needs_metadata: batches.filter((batch) => (
       batch.status === "needs_metadata_review"
-      || (batch.status === "pending_review" && batch.confidence < 0.6)
+      || (!batch.parent_is_drained && batch.status === "pending_review" && batch.confidence < 0.6)
     )).length,
     quarantine: batches.filter(
       (batch) => ["needs_quarantine_review", "quarantined"].includes(batch.status),

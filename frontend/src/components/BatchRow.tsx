@@ -68,6 +68,7 @@ function duplicateFragmentLabel(batch: BatchSummary): string | null {
 }
 
 function batchStatusLabel(batch: BatchSummary): string {
+  if (batch.parent_is_drained || batch.display_state === "drained_parent") return "Drained container";
   const duplicateLabel = duplicateFragmentLabel(batch);
   if (duplicateLabel) return duplicateLabel;
   if (!isParentReviewContainer(batch)) return statusLabel(batch.status);
@@ -143,10 +144,11 @@ export default function BatchRow({
   const year = batch.year ?? "-";
   const percent = Math.round((batch.confidence ?? 0) * 100);
   const parentReviewContainer = isParentReviewContainer(batch);
+  const drainedParent = Boolean(batch.parent_is_drained || batch.display_state === "drained_parent");
   const hasDiscographyRemainderReview = batch.detected_type === "music_discography"
     && batch.status === "split_complete"
     && ((batch.file_count ?? 0) > 0 || (batch.track_count ?? 0) > 0);
-  const splitCompleteParent = parentReviewContainer
+  const splitCompleteParent = drainedParent || parentReviewContainer
     && batch.parent_review_state === "split_complete"
     && !hasDiscographyRemainderReview;
   const isDiscographySplitChild =
@@ -158,7 +160,9 @@ export default function BatchRow({
   const activeDuplicateReview = hasActiveDuplicateFragmentReview(batch);
   const duplicateMatchCount = duplicateFragmentMatchCount(batch);
   const approveDisabled = batch.status !== "pending_review" || parentReviewContainer || activeDuplicateReview;
-  const approveTitle = parentReviewContainer
+  const approveTitle = drainedParent
+    ? "This intake container is drained. Review child batches instead."
+    : parentReviewContainer
     ? "Parent review containers need child batch creation before move approval"
     : activeDuplicateReview
       ? "Needs duplicate/fragment review before move approval"
@@ -167,7 +171,7 @@ export default function BatchRow({
   return (
     <>
       <tr
-        className={`row--clickable ${selected ? "row--selected" : ""}`}
+        className={`row--clickable ${selected ? "row--selected" : ""} ${drainedParent ? "row--drained-parent" : ""}`}
         onClick={() => onToggle(batch.id)}
       >
         <td onClick={(event) => event.stopPropagation()} style={{ textAlign: "center" }}>

@@ -178,23 +178,7 @@ function isMetadataConfirmed(batch: IngestBatch): boolean {
   );
 }
 
-function duplicateFragmentMatchCount(batch: BatchSummary): number {
-  return Math.max(batch.possible_fragment_count ?? 0, batch.possible_duplicate_count ?? 0);
-}
-
-function childApproveDisabledReason(child: BatchSummary): string | null {
-  if (!child.id) return "Unavailable";
-  if (child.status === "approved" || child.status === "moved") return "Already approved";
-  if (child.requires_duplicate_review && duplicateFragmentMatchCount(child) > 0) {
-    return "Resolve duplicate/fragment review first";
-  }
-  if ((child.blocking_review_items ?? []).length > 0) return "Blocking review items remain";
-  if (child.status === "needs_metadata_review") return "Review metadata first";
-  if (child.status !== "pending_review") return "Unavailable";
-  return null;
-}
-
-function CreatedChildBatchesPanel({ batchId, onEditBatch, onApproveBatch }: { batchId: number; onEditBatch?: (batch: BatchSummary) => void; onApproveBatch?: (id: number) => void }) {
+function CreatedChildBatchesPanel({ batchId, onEditBatch }: { batchId: number; onEditBatch?: (batch: BatchSummary) => void }) {
   const [children, setChildren] = useState<BatchSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -246,7 +230,6 @@ function CreatedChildBatchesPanel({ batchId, onEditBatch, onApproveBatch }: { ba
       <div className="created-child-batches__list">
         {children.map((child) => {
           const canReview = Boolean(child.id && onEditBatch);
-          const approveDisabledReason = onApproveBatch ? childApproveDisabledReason(child) : "Unavailable";
           return (
             <article key={child.id} className="created-child-batches__item">
               <div>
@@ -264,19 +247,10 @@ function CreatedChildBatchesPanel({ batchId, onEditBatch, onApproveBatch }: { ba
                   type="button"
                   className="btn-sm"
                   disabled={!canReview}
-                  title={canReview ? "Review child batch" : "Unavailable"}
+                  title={canReview ? "Open child batch" : "Unavailable"}
                   onClick={() => onEditBatch?.(child)}
                 >
-                  <i className="ti ti-pencil" /> Review
-                </button>
-                <button
-                  type="button"
-                  className="btn-sm"
-                  disabled={Boolean(approveDisabledReason)}
-                  title={approveDisabledReason ?? "Approve child batch"}
-                  onClick={() => onApproveBatch?.(child.id)}
-                >
-                  <i className="ti ti-check" /> Approve
+                  <i className="ti ti-external-link" /> Open child
                 </button>
               </div>
             </article>
@@ -1163,7 +1137,7 @@ type DiscographyParentCleanup = {
   format_hint?: string | null;
 };
 
-function DiscographyBatchDetail({ batch, moveSummary, onEditBatch, onApproveBatch }: Props) {
+function DiscographyBatchDetail({ batch, moveSummary, onEditBatch }: Props) {
   const metadata = batch.metadata_json ?? {};
   const albums = Array.isArray(metadata.albums)
     ? metadata.albums.filter(
@@ -1185,6 +1159,27 @@ function DiscographyBatchDetail({ batch, moveSummary, onEditBatch, onApproveBatc
   const isSplitParent = parentReviewState === "split_complete" || parentReviewState === "parent_partially_materialized" || hasChildBatchHistory;
   const remainingParentFileCount = Number(metadata.remaining_parent_file_count ?? batch.files.length ?? 0);
   const remainingAlbums = albums.filter((album) => album.release_decision !== "extract_as_child");
+  const materializedChildCount = Number(metadata.materialized_child_count ?? metadata.child_candidate_count ?? 0);
+  const isDrainedParent = isSplitParent && remainingParentFileCount === 0 && (materializedChildCount > 0 || hasChildBatchHistory);
+
+  if (isDrainedParent) {
+    return (
+      <div className="batch-detail batch-detail--drained-parent">
+        <section className="library-card drained-parent-card">
+          <div className="library-status__icon"><i className="ti ti-folders" /></div>
+          <div>
+            <div className="library-status__eyebrow">Processed intake container</div>
+            <h2>{getBatchDisplayTitle(batch)}</h2>
+            <p>This intake folder has been split into child batches.</p>
+            <p>0 active files remain on this parent.</p>
+            <p>Review the child batches from the dashboard.</p>
+            <p>Physical source cleanup will be handled later by Cleaner.</p>
+          </div>
+        </section>
+        <DebugDetails batch={batch} moveSummary={moveSummary} />
+      </div>
+    );
+  }
 
   return (
     <div className={`batch-detail ${moved ? "batch-detail--moved" : "batch-detail--review"}`}>
@@ -1226,7 +1221,7 @@ function DiscographyBatchDetail({ batch, moveSummary, onEditBatch, onApproveBatc
         </section>
       )}
 
-      {isSplitParent && <CreatedChildBatchesPanel batchId={batch.id} onEditBatch={onEditBatch} onApproveBatch={onApproveBatch} />}
+      {isSplitParent && <CreatedChildBatchesPanel batchId={batch.id} onEditBatch={onEditBatch} />}
 
       {(removedTokens.length > 0 || Boolean(cleanup?.year_range) || Boolean(artistSource)) && (
         <section className="library-card discography-cleanup">
@@ -1416,7 +1411,7 @@ function MovedBatchDetail({ batch, moveSummary }: Props) {
 }
 
 
-function DiscographyEditorGate({ batch, moveSummary, onEditBatch, onApproveBatch }: Props) {
+function DiscographyEditorGate({ batch, moveSummary, onEditBatch }: Props) {
   const [routing, setRouting] = useState<RoutingDecision | null>(null);
   const [routingError, setRoutingError] = useState<string | null>(null);
   const [routingLoading, setRoutingLoading] = useState(true);
@@ -1440,7 +1435,7 @@ function DiscographyEditorGate({ batch, moveSummary, onEditBatch, onApproveBatch
           <i className="ti ti-alert-triangle" />
           Could not verify media candidates. Editor shown but review the Universal Ingestion panel above.
         </div>
-        <DiscographyBatchDetail batch={batch} moveSummary={moveSummary} onEditBatch={onEditBatch} onApproveBatch={onApproveBatch} />
+        <DiscographyBatchDetail batch={batch} moveSummary={moveSummary} onEditBatch={onEditBatch} />
       </>
     );
   }
@@ -1452,7 +1447,7 @@ function DiscographyEditorGate({ batch, moveSummary, onEditBatch, onApproveBatch
           <i className="ti ti-info-circle" />
           Universal ingestion analysis not yet run for this batch.
         </div>
-        <DiscographyBatchDetail batch={batch} moveSummary={moveSummary} onEditBatch={onEditBatch} onApproveBatch={onApproveBatch} />
+        <DiscographyBatchDetail batch={batch} moveSummary={moveSummary} onEditBatch={onEditBatch} />
       </>
     );
   }
@@ -1493,21 +1488,21 @@ function DiscographyEditorGate({ batch, moveSummary, onEditBatch, onApproveBatch
           <i className="ti ti-alert-circle" />
           <span>Source fragments were detected. Review the Universal Ingestion panel above before saving discography corrections.</span>
         </div>
-        <DiscographyBatchDetail batch={batch} moveSummary={moveSummary} onEditBatch={onEditBatch} onApproveBatch={onApproveBatch} />
+        <DiscographyBatchDetail batch={batch} moveSummary={moveSummary} onEditBatch={onEditBatch} />
       </>
     );
   }
 
-  return <DiscographyBatchDetail batch={batch} moveSummary={moveSummary} onEditBatch={onEditBatch} onApproveBatch={onApproveBatch} />;
+  return <DiscographyBatchDetail batch={batch} moveSummary={moveSummary} onEditBatch={onEditBatch} />;
 }
-export default function BatchDetail({ batch, moveSummary, review, onEditBatch, onApproveBatch }: Props) {
+export default function BatchDetail({ batch, moveSummary, review, onEditBatch }: Props) {
   if (batch.status === "needs_quarantine_review" || batch.status === "quarantined") {
     return <QuarantineReviewDetail batch={batch} moveSummary={moveSummary} />;
   }
   if (batch.detected_type === "music_discography") {
     return (
       <BatchReviewShell batch={batch}>
-        <DiscographyEditorGate batch={batch} moveSummary={moveSummary} onEditBatch={onEditBatch} onApproveBatch={onApproveBatch} />
+        <DiscographyEditorGate batch={batch} moveSummary={moveSummary} onEditBatch={onEditBatch} />
       </BatchReviewShell>
     );
   }

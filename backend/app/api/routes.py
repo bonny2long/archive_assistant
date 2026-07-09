@@ -329,7 +329,8 @@ def list_pending_batches(
         .all()
     )
 
-    items = [_batch_to_summary(b, db=db) for b in batches]
+    items = [item for item in (_batch_to_summary(b, db=db) for b in batches) if not item.parent_is_drained]
+    total = len(items)
     return PaginatedResponse(
         items=items,
         page=page,
@@ -2042,7 +2043,11 @@ def approve_batch(batch_id: int, db: Session = Depends(get_db)):
         return ApproveResponse(
             batch_id=batch.id,
             status=batch.status,
-            message="Parent review containers require child batch creation before move approval.",
+            message=(
+                "This is a drained intake container. Review child batches instead."
+                if parent_summary.get("parent_is_drained")
+                else "Parent review containers require child batch creation before move approval."
+            ),
         )
 
     duplicate_summary = duplicate_fragment_summary_for_batch(db, batch)
@@ -2123,7 +2128,8 @@ def approve_selected_batches(
         if batch.detected_type in {"unknown_type", "unsupported_file"}:
             reason = "quarantine_review_required"
         elif build_parent_candidate_summary(db, batch)["is_parent_review_container"]:
-            reason = "parent_review_container_needs_child_batches"
+            parent_summary = build_parent_candidate_summary(db, batch)
+            reason = "drained_parent_review_child_batches" if parent_summary.get("parent_is_drained") else "parent_review_container_needs_child_batches"
         elif duplicate_fragment_summary_for_batch(db, batch)["requires_duplicate_review"]:
             reason = "duplicate_fragment_review_required"
         elif _music_track_completeness_blocker(batch):
@@ -2458,6 +2464,14 @@ def _batch_to_summary(
         needs_materialization=parent_summary["needs_materialization"],
         parent_review_state=parent_summary["parent_review_state"],
         is_parent_review_container=parent_summary["is_parent_review_container"],
+        parent_is_drained=bool(parent_summary.get("parent_is_drained", False)),
+        display_state=parent_summary.get("display_state"),
+        approval_allowed=bool(parent_summary.get("approval_allowed", True)),
+        move_ready=bool(parent_summary.get("move_ready", False)),
+        requires_review=bool(parent_summary.get("requires_review", False)),
+        active_file_count=int(parent_summary.get("active_file_count", actual_file_count) or 0),
+        child_batch_count=int(parent_summary.get("child_batch_count", parent_summary.get("materialized_child_count", 0)) or 0),
+        historical_scan_snapshot=bool(parent_summary.get("historical_scan_snapshot", False)),
         possible_duplicate_group_id=duplicate_summary["possible_duplicate_group_id"],
         possible_duplicate_count=duplicate_summary["possible_duplicate_count"],
         possible_fragment_group_id=duplicate_summary["possible_fragment_group_id"],

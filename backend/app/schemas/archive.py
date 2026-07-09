@@ -488,6 +488,14 @@ class BatchSummary(BaseModel):
     needs_materialization: bool = False
     parent_review_state: str | None = None
     is_parent_review_container: bool = False
+    parent_is_drained: bool = False
+    display_state: str | None = None
+    approval_allowed: bool = True
+    move_ready: bool = False
+    requires_review: bool = False
+    active_file_count: int = 0
+    child_batch_count: int = 0
+    historical_scan_snapshot: bool = False
     possible_duplicate_group_id: str | None = None
     possible_duplicate_count: int = 0
     possible_fragment_group_id: str | None = None

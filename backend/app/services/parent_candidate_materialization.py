@@ -12,6 +12,7 @@ PARENT_REVIEW_IN_PROGRESS = "review_in_progress"
 PARENT_CANDIDATES_APPROVED_WAITING_MATERIALIZATION = "candidates_approved_waiting_materialization"
 PARENT_PARTIALLY_MATERIALIZED = "parent_partially_materialized"
 PARENT_SPLIT_COMPLETE = "split_complete"
+PARENT_CONTAINER_TYPES = {"music_discography"}
 
 MATERIALIZATION_DECISION_ACTIONS = {
     "approve_candidate",
@@ -32,6 +33,17 @@ def _actual_child_batch_count(db: Session, parent_batch_id: int) -> int:
     return count
 
 
+def active_parent_file_count(db: Session, batch: IngestBatch) -> int:
+    return db.query(IngestFile).filter(IngestFile.batch_id == batch.id).count()
+
+
+def is_drained_parent(batch: IngestBatch, db: Session) -> bool:
+    return (
+        batch.detected_type in PARENT_CONTAINER_TYPES
+        and _actual_child_batch_count(db, batch.id) > 0
+        and active_parent_file_count(db, batch) == 0
+    )
+
 def empty_parent_candidate_summary() -> dict[str, Any]:
     return {
         "candidate_group_count": 0,
@@ -46,6 +58,14 @@ def empty_parent_candidate_summary() -> dict[str, Any]:
         "needs_materialization": False,
         "parent_review_state": None,
         "is_parent_review_container": False,
+        "parent_is_drained": False,
+        "display_state": None,
+        "approval_allowed": True,
+        "move_ready": False,
+        "requires_review": False,
+        "active_file_count": 0,
+        "child_batch_count": 0,
+        "historical_scan_snapshot": False,
     }
 
 
@@ -54,7 +74,27 @@ def build_parent_candidate_summary(db: Session | None, batch: IngestBatch) -> di
     if db is None:
         return empty_parent_candidate_summary()
 
-    remaining_parent_file_count = db.query(IngestFile).filter(IngestFile.batch_id == batch.id).count()
+    remaining_parent_file_count = active_parent_file_count(db, batch)
+    actual_child_count = _actual_child_batch_count(db, batch.id)
+    metadata = batch.metadata_json or {}
+    if is_drained_parent(batch, db):
+        return empty_parent_candidate_summary() | {
+            "candidate_group_count": actual_child_count,
+            "materialized_child_count": actual_child_count,
+            "child_candidate_count": actual_child_count,
+            "remaining_candidate_count": 0,
+            "needs_materialization": False,
+            "parent_review_state": PARENT_SPLIT_COMPLETE,
+            "is_parent_review_container": True,
+            "parent_is_drained": True,
+            "display_state": "drained_parent",
+            "approval_allowed": False,
+            "move_ready": False,
+            "requires_review": False,
+            "active_file_count": 0,
+            "child_batch_count": actual_child_count,
+            "historical_scan_snapshot": True,
+        }
     candidate_ids = [
         candidate_id
         for (candidate_id,) in db.query(MediaIdentityCandidate.id)
@@ -62,11 +102,9 @@ def build_parent_candidate_summary(db: Session | None, batch: IngestBatch) -> di
         .all()
     ]
     candidate_group_count = len(candidate_ids)
-    metadata = batch.metadata_json or {}
     metadata_parent_state = metadata.get("parent_review_state")
     if metadata_parent_state in {PARENT_PARTIALLY_MATERIALIZED, PARENT_SPLIT_COMPLETE}:
-        actual_child_count = _actual_child_batch_count(db, batch.id)
-        materialized_child_count = int(metadata.get("materialized_child_count") or actual_child_count or 0)
+        materialized_child_count = max(int(metadata.get("materialized_child_count") or 0), actual_child_count)
         extractable_count = int(metadata.get("extractable_candidate_count") or 0)
         review_later_count = int(metadata.get("review_later_candidate_count") or 0)
         excluded_count = int(metadata.get("excluded_candidate_count") or 0)
@@ -99,7 +137,6 @@ def build_parent_candidate_summary(db: Session | None, batch: IngestBatch) -> di
             item for item in history_entries
             if item.get("child_batch_id") or item.get("candidate_id")
         ])
-        actual_child_count = _actual_child_batch_count(db, batch.id)
         completed_child_count = actual_child_count or history_child_count
         fallback_count = int(
             metadata.get("release_count")

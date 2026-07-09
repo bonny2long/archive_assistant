@@ -4528,3 +4528,27 @@ button:focus-visible, input:focus-visible {
 }
 
 /* End AA-QA1-FIX3.3.3 */
+
+/* AA-CLEAN1 - drained parent containers */
+.row--drained-parent {
+  opacity: 0.72;
+}
+
+.row--drained-parent .media-type-label,
+.row--drained-parent .pill {
+  border-color: var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+.drained-parent-card {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.drained-parent-card p {
+  margin: 0.25rem 0 0;
+  color: var(--text-secondary);
+}
+
+/* End AA-CLEAN1 */

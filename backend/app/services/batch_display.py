@@ -71,6 +71,17 @@ def build_batch_display_fields(batch: IngestBatch, parent_summary: dict | None =
     metadata = batch.metadata_json or {}
     detected_type = batch.detected_type
     if parent_summary and parent_summary.get("is_parent_review_container"):
+        if parent_summary.get("parent_is_drained"):
+            child_count = int(parent_summary.get("child_batch_count") or parent_summary.get("materialized_child_count") or 0)
+            return {
+                "media_category": "processed",
+                "media_label": "Processed Container",
+                "primary_name": _parent_review_primary_name(batch, metadata),
+                "secondary_name": f"{_plural(child_count, 'child batch', 'child batches')} created; 0 active files",
+                "item_label": "child batches",
+                "item_count": child_count,
+                "edit_kind": None,
+            }
         candidate_group_count = int(parent_summary.get("candidate_group_count") or 0)
         materialized_child_count = int(parent_summary.get("materialized_child_count") or 0)
         parent_state = parent_summary.get("parent_review_state")
