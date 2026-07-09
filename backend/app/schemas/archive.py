@@ -487,14 +487,17 @@ class BatchSummary(BaseModel):
     remaining_candidate_count: int = 0
     needs_materialization: bool = False
     parent_review_state: str | None = None
+    parent_container_state: str | None = None
     is_parent_review_container: bool = False
     parent_is_drained: bool = False
     display_state: str | None = None
     approval_allowed: bool = True
     move_ready: bool = False
     requires_review: bool = False
+    active_parent_file_count: int = 0
     active_file_count: int = 0
     child_batch_count: int = 0
+    parent_has_remaining_files: bool = False
     historical_scan_snapshot: bool = False
     possible_duplicate_group_id: str | None = None
     possible_duplicate_count: int = 0

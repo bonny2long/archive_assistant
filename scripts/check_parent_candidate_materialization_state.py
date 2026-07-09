@@ -251,13 +251,16 @@ def test_split_complete_parent_without_candidates_stays_container(db) -> None:
     assert summary["candidate_group_count"] == 3
     assert summary["approved_candidate_count"] == 0
     assert summary["materialized_child_count"] == 3
+    assert summary["child_batch_count"] == 0
+    assert summary["parent_container_state"] is None
+    assert summary["parent_is_drained"] is False
     assert summary["remaining_candidate_count"] == 0
     assert summary["needs_materialization"] is False
 
     display = build_batch_display_fields(parent, summary)
     assert display["media_label"] == "Discography Source"
-    assert display["secondary_name"] == "3 child batches created, split complete"
-    assert display["item_label"] == "child batches"
+    assert display["secondary_name"] == "0 approved candidates, 0 remaining"
+    assert display["item_label"] == "candidate groups"
     assert display["item_count"] == 3
     assert display["item_count"] != 63
 
@@ -293,13 +296,16 @@ def test_split_complete_parent_with_remaining_files_requires_remainder_review(db
     assert summary["candidate_group_count"] == 3
     assert summary["materialized_child_count"] == 1
     assert summary["child_candidate_count"] == 1
+    assert summary["child_batch_count"] == 0
+    assert summary["parent_container_state"] == "active_parent_container"
+    assert summary["parent_is_drained"] is False
     assert summary["unresolved_candidate_count"] == 1
     assert summary["remaining_candidate_count"] == 1
     assert summary["needs_materialization"] is False
 
     display = build_batch_display_fields(parent, summary)
     assert display["media_label"] == "Discography Source"
-    assert display["secondary_name"] == "1 child batch created, 1 unresolved"
+    assert display["secondary_name"] == "0 approved candidates, 1 remaining"
     assert display["item_label"] == "candidate groups"
     assert display["item_count"] == 3
     assert display["item_count"] != 63

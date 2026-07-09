@@ -454,14 +454,17 @@ export type BatchSummary = {
   remaining_candidate_count?: number;
   needs_materialization?: boolean;
   parent_review_state?: "review_in_progress" | "candidates_approved_waiting_materialization" | "parent_partially_materialized" | "split_complete" | string | null;
+  parent_container_state?: "active_parent_container" | "partial_parent_container" | "drained_parent" | string | null;
   is_parent_review_container?: boolean;
   parent_is_drained?: boolean;
   display_state?: string | null;
   approval_allowed?: boolean;
   move_ready?: boolean;
   requires_review?: boolean;
+  active_parent_file_count?: number;
   active_file_count?: number;
   child_batch_count?: number;
+  parent_has_remaining_files?: boolean;
   historical_scan_snapshot?: boolean;
   possible_duplicate_group_id?: string | null;
   possible_duplicate_count?: number;
