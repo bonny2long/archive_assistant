@@ -1,4 +1,0 @@
-Batch 20 status: pending_review
-Is parent_review_state: None
-split_history: null
-remaining_albums count: 3

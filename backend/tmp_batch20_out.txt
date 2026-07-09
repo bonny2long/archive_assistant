@@ -1,9 +1,0 @@
-Batch 20 file count: 0
-Albums in metadata:
-  - Kanye West - Discography [FLAC Songs] [PMEDIA] ⭐️ | include=True
-  - Lil Wayne - Discography 1999-2023 [FLAC] 88 | include=True
-  - The Weeknd Discography 2012-2022 (FLAC) vtwin88cube | include=True
-
-File-level source folders:
-
-Files with no sf: 0
