@@ -232,7 +232,7 @@ def test_split_complete_parent_without_candidates_stays_container(db) -> None:
     display = build_batch_display_fields(parent, summary)
     assert display["media_label"] == "Discography Source"
     assert display["secondary_name"] == "3 child batches created, split complete"
-    assert display["item_label"] == "candidate groups"
+    assert display["item_label"] == "child batches"
     assert display["item_count"] == 3
     assert display["item_count"] != 63
 
@@ -365,6 +365,56 @@ def test_partial_materialization_keeps_unresolved_parent_remainder(db) -> None:
     moved, errors = move_approved_batches(db)
     assert moved == 0
     assert any("parent review container" in error for error in errors)
+
+def test_split_complete_parent_counts_actual_children_without_history(db) -> None:
+    parent = IngestBatch(
+        source_kind="manual-drop",
+        source_path=str(PROJECT_ROOT / ".tmp" / "stale-parent-history"),
+        detected_type="music_discography",
+        status="split_complete",
+        confidence=1.0,
+        metadata_json={
+            "type": "music_discography",
+            "artist": "drive-download-20260628T012539Z-3-010",
+            "album_count": 3,
+            "release_count": 3,
+            "track_count": 63,
+            "parent_review_state": "split_complete",
+        },
+    )
+    db.add(parent)
+    db.flush()
+    for album in ("Graduation", "Tha Block Is Hot"):
+        db.add(IngestBatch(
+            source_kind="manual-drop",
+            source_path=parent.source_path,
+            detected_type="music_album",
+            status="pending_review",
+            confidence=0.9,
+            suggested_destination=str(PROJECT_ROOT / ".tmp" / "Music" / "Library" / "FLAC" / album),
+            suggested_metadata={"artist": "Test Artist", "album": album},
+            metadata_json={
+                "artist": "Test Artist",
+                "album": album,
+                "track_count": 1,
+                "split_from_batch_id": parent.id,
+            },
+        ))
+    db.commit()
+    db.refresh(parent)
+
+    summary = build_parent_candidate_summary(db, parent)
+    assert summary["is_parent_review_container"] is True
+    assert summary["parent_review_state"] == "split_complete"
+    assert summary["materialized_child_count"] == 2
+    assert summary["child_candidate_count"] == 2
+    assert summary["remaining_candidate_count"] == 0
+
+    display = build_batch_display_fields(parent, summary)
+    assert display["secondary_name"] == "2 child batches created, split complete"
+    assert display["item_label"] == "child batches"
+    assert display["item_count"] == 2
+
 
 def test_discography_editor_rows_create_child_batches_without_candidates(db) -> None:
     releases = [
@@ -521,6 +571,7 @@ def main() -> None:
         test_split_complete_parent_without_candidates_stays_container(db)
         test_split_complete_parent_with_remaining_files_requires_remainder_review(db)
         test_partial_materialization_keeps_unresolved_parent_remainder(db)
+        test_split_complete_parent_counts_actual_children_without_history(db)
         test_discography_editor_rows_create_child_batches_without_candidates(db)
         test_failed_materialization_does_not_complete_parent(db)
         test_single_item_batch_stays_normal(db)
