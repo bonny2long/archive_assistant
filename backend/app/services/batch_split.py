@@ -536,6 +536,133 @@ def _suggested_metadata(album: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+
+def _child_batch_ids_from_parent_metadata(metadata: dict[str, Any]) -> set[int]:
+    child_ids: set[int] = set()
+    for key in ("split_history", "materialization_history"):
+        value = metadata.get(key)
+        if not isinstance(value, list):
+            continue
+        for item in value:
+            if isinstance(item, dict) and item.get("child_batch_id"):
+                child_ids.add(int(item.get("child_batch_id") or 0))
+    audit = metadata.get("discography_split_audit")
+    if isinstance(audit, list):
+        for item in audit:
+            if not isinstance(item, dict):
+                continue
+            for key in ("created_child_batch_ids", "existing_child_batch_ids"):
+                values = item.get(key)
+                if isinstance(values, list):
+                    child_ids.update(int(value or 0) for value in values if value)
+    child_ids.discard(0)
+    return child_ids
+
+
+def split_child_batches_for_parent(db: Session, parent_batch: IngestBatch) -> list[IngestBatch]:
+    metadata = parent_batch.metadata_json or {}
+    child_ids = _child_batch_ids_from_parent_metadata(metadata) if isinstance(metadata, dict) else set()
+    children: dict[int, IngestBatch] = {}
+    if child_ids:
+        for child in (
+            db.query(IngestBatch)
+            .options(selectinload(IngestBatch.files))
+            .filter(IngestBatch.id.in_(child_ids), IngestBatch.status != "merged")
+            .all()
+        ):
+            children[child.id] = child
+    for child in (
+        db.query(IngestBatch)
+        .options(selectinload(IngestBatch.files))
+        .filter(IngestBatch.id != parent_batch.id, IngestBatch.status != "merged")
+        .all()
+    ):
+        child_metadata = child.metadata_json or {}
+        if not isinstance(child_metadata, dict):
+            continue
+        source_parent_id = int(child_metadata.get("split_from_batch_id") or child_metadata.get("source_parent_batch_id") or 0)
+        if source_parent_id == parent_batch.id:
+            children[child.id] = child
+    return sorted(children.values(), key=lambda item: (item.created_at.isoformat() if item.created_at else ""), reverse=True)
+
+
+def _actual_audio_format(files: list[IngestFile]) -> str:
+    formats = {
+        _file_extension(file).lstrip(".").upper()
+        for file in files
+        if _is_audio_file(file) and _file_extension(file)
+    }
+    if formats == {"FLAC"}:
+        return "FLAC"
+    if formats == {"MP3"}:
+        return "MP3"
+    if len(formats) > 1:
+        return "MIXED"
+    return next(iter(formats), "Unknown")
+
+
+def rebuild_split_child_destination_authority(child: IngestBatch) -> bool:
+    if child.detected_type != "music_album":
+        return False
+    metadata = deepcopy(child.metadata_json or {})
+    if not isinstance(metadata, dict):
+        metadata = {}
+    actual_format = _actual_audio_format(list(child.files))
+    changed = False
+    warnings = list(metadata.get("metadata_warnings") or [])
+    blocking = list(metadata.get("blocking_review_items") or [])
+
+    if actual_format in {"FLAC", "MP3"}:
+        metadata["format"] = actual_format
+        warning = "mixed_audio_formats_destination_review_required"
+        warnings = [item for item in warnings if item != warning]
+        blocking = [item for item in blocking if not (isinstance(item, dict) and item.get("type") == warning)]
+        destination = _library_album_destination(metadata)
+        stale_values = [
+            child.suggested_destination,
+            (child.suggested_metadata or {}).get("suggested_destination") if isinstance(child.suggested_metadata, dict) else None,
+            metadata.get("suggested_destination"),
+        ]
+        if any(value != destination for value in stale_values):
+            changed = True
+        child.suggested_destination = destination
+        suggested_metadata = dict(child.suggested_metadata or {})
+        suggested_metadata.update(_suggested_metadata(metadata))
+        suggested_metadata["suggested_destination"] = destination
+        child.suggested_metadata = suggested_metadata
+        metadata["suggested_destination"] = destination
+    elif actual_format == "MIXED":
+        metadata["format"] = "MIXED"
+        warning = "mixed_audio_formats_destination_review_required"
+        if warning not in warnings:
+            warnings.append(warning)
+            changed = True
+        if not any(isinstance(item, dict) and item.get("type") == warning for item in blocking):
+            blocking.append({"type": warning, "message": "Mixed audio formats require destination review before move."})
+            changed = True
+        child.metadata_confirmed = False
+        child.status = "needs_metadata_review"
+
+    metadata["file_count"] = len(child.files)
+    metadata["metadata_warnings"] = warnings
+    metadata["blocking_review_items"] = blocking
+    if metadata != (child.metadata_json or {}):
+        changed = True
+    if changed:
+        child.metadata_json = metadata
+        child.updated_at = now_utc()
+    return changed
+
+
+def recover_split_child_batches(db: Session, parent_batch: IngestBatch) -> list[IngestBatch]:
+    children = split_child_batches_for_parent(db, parent_batch)
+    changed = False
+    for child in children:
+        changed = rebuild_split_child_destination_authority(child) or changed
+    if changed:
+        db.flush()
+    return children
+
 def _active_materialization_actions(db: Session, batch_id: int, candidate_id: int) -> list[UniversalIngestionReviewAction]:
     return db.query(UniversalIngestionReviewAction).filter(
         UniversalIngestionReviewAction.batch_id == batch_id,
@@ -666,26 +793,21 @@ def execute_split_discography_releases(db: Session, batch_id: int) -> dict[str, 
 
     extract_albums = [album for album in albums if _discography_release_decision(album) == "extract_as_child"]
     split_history = batch_metadata.get("split_history") if isinstance(batch_metadata.get("split_history"), list) else []
-    if not extract_albums and split_history:
-        existing_child_ids = [
-            int(item.get("child_batch_id") or 0)
-            for item in split_history
-            if isinstance(item, dict)
-            and item.get("child_batch_id")
-            and db.get(IngestBatch, int(item.get("child_batch_id") or 0)) is not None
-        ]
-        if existing_child_ids:
+    if not extract_albums:
+        existing_children = recover_split_child_batches(db, parent_batch)
+        if existing_children:
+            db.commit()
             remaining_parent_file_count = db.query(IngestFile).filter(IngestFile.batch_id == parent_batch.id).count()
             return {
                 "parent_batch_id": parent_batch.id,
                 "created_child_batch_ids": [],
-                "existing_child_batch_ids": existing_child_ids,
+                "existing_child_batch_ids": [child.id for child in existing_children],
                 "created_count": 0,
-                "skipped_count": len(existing_child_ids),
+                "skipped_count": len(existing_children),
                 "remaining_parent_file_count": remaining_parent_file_count,
                 "parent_status": parent_batch.status,
                 "parent_review_state": batch_metadata.get("parent_review_state") or parent_batch.status,
-                "message": "Release child batches already exist.",
+                "message": "Child batches already exist.",
             }
 
     created_child_batch_ids: list[int] = []
@@ -758,6 +880,21 @@ def execute_split_discography_releases(db: Session, batch_id: int) -> dict[str, 
     remaining_parent_file_count = db.query(IngestFile).filter(IngestFile.batch_id == parent_batch.id).count()
 
     if not created_child_batch_ids and not skipped_child_batch_ids and extract_albums:
+        existing_children = recover_split_child_batches(db, parent_batch)
+        if existing_children:
+            db.commit()
+            remaining_parent_file_count = db.query(IngestFile).filter(IngestFile.batch_id == parent_batch.id).count()
+            return {
+                "parent_batch_id": parent_batch.id,
+                "created_child_batch_ids": [],
+                "existing_child_batch_ids": [child.id for child in existing_children],
+                "created_count": 0,
+                "skipped_count": len(existing_children),
+                "remaining_parent_file_count": remaining_parent_file_count,
+                "parent_status": parent_batch.status,
+                "parent_review_state": batch_metadata.get("parent_review_state") or parent_batch.status,
+                "message": "Child batches already exist.",
+            }
         raise ValueError(
             "No child batches were created. Make sure releases marked Extract as child have source folders with attached files."
         )
@@ -814,6 +951,7 @@ def execute_split_discography_releases(db: Session, batch_id: int) -> dict[str, 
     parent_batch.status = "split_complete" if batch_metadata["parent_review_state"] == "split_complete" else "pending_review"
     parent_batch.metadata_json = batch_metadata
     parent_batch.updated_at = timestamp
+    recover_split_child_batches(db, parent_batch)
     db.commit()
     db.refresh(parent_batch)
 

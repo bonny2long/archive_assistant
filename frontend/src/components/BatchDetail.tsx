@@ -11,6 +11,8 @@ type Props = {
   batch: IngestBatch;
   moveSummary?: BatchMoveSummary;
   review?: BatchReview;
+  onEditBatch?: (batch: BatchSummary) => void;
+  onApproveBatch?: (id: number) => void;
 };
 
 function isMusicQualityBatch(batch: IngestBatch): boolean {
@@ -176,7 +178,7 @@ function isMetadataConfirmed(batch: IngestBatch): boolean {
   );
 }
 
-function CreatedChildBatchesPanel({ batchId }: { batchId: number }) {
+function CreatedChildBatchesPanel({ batchId, onEditBatch, onApproveBatch }: { batchId: number; onEditBatch?: (batch: BatchSummary) => void; onApproveBatch?: (id: number) => void }) {
   const [children, setChildren] = useState<BatchSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -221,7 +223,7 @@ function CreatedChildBatchesPanel({ batchId }: { batchId: number }) {
       <div className="created-child-batches__header">
         <div>
           <h3>Created child batches</h3>
-          <p>These are the extracted review batches. Approve and move these rows, not the parent container.</p>
+          <p>These are the extracted review batches. Review, approve, and move these rows, not the parent container.</p>
         </div>
         <span>{children.length} child batch{children.length === 1 ? "" : "es"}</span>
       </div>
@@ -238,6 +240,14 @@ function CreatedChildBatchesPanel({ batchId }: { batchId: number }) {
               <span>{child.file_count} file{child.file_count === 1 ? "" : "s"}</span>
             </div>
             <code title={child.suggested_destination ?? ""}>{readableLibraryPath(child.suggested_destination)}</code>
+            <div className="created-child-batches__actions">
+              <button type="button" className="btn-sm" disabled={!onEditBatch} onClick={() => onEditBatch?.(child)}>
+                <i className="ti ti-pencil" /> Review
+              </button>
+              <button type="button" className="btn-sm" disabled={!onApproveBatch || child.status !== "pending_review"} onClick={() => onApproveBatch?.(child.id)}>
+                <i className="ti ti-check" /> Approve
+              </button>
+            </div>
           </article>
         ))}
       </div>
@@ -1121,7 +1131,7 @@ type DiscographyParentCleanup = {
   format_hint?: string | null;
 };
 
-function DiscographyBatchDetail({ batch, moveSummary }: Props) {
+function DiscographyBatchDetail({ batch, moveSummary, onEditBatch, onApproveBatch }: Props) {
   const metadata = batch.metadata_json ?? {};
   const albums = Array.isArray(metadata.albums)
     ? metadata.albums.filter(
@@ -1139,7 +1149,8 @@ function DiscographyBatchDetail({ batch, moveSummary }: Props) {
   const moved = batch.status === "moved";
   const releaseCount = getReleaseCount(batch);
   const parentReviewState = typeof metadata.parent_review_state === "string" ? metadata.parent_review_state : batch.status === "split_complete" ? "split_complete" : null;
-  const isSplitParent = parentReviewState === "split_complete" || parentReviewState === "parent_partially_materialized";
+  const hasChildBatchHistory = Number(metadata.materialized_child_count ?? 0) > 0 || Array.isArray(metadata.split_history) || Array.isArray(metadata.discography_split_audit);
+  const isSplitParent = parentReviewState === "split_complete" || parentReviewState === "parent_partially_materialized" || hasChildBatchHistory;
   const remainingParentFileCount = Number(metadata.remaining_parent_file_count ?? batch.files.length ?? 0);
   const remainingAlbums = albums.filter((album) => album.release_decision !== "extract_as_child");
 
@@ -1183,7 +1194,7 @@ function DiscographyBatchDetail({ batch, moveSummary }: Props) {
         </section>
       )}
 
-      {isSplitParent && <CreatedChildBatchesPanel batchId={batch.id} />}
+      {isSplitParent && <CreatedChildBatchesPanel batchId={batch.id} onEditBatch={onEditBatch} onApproveBatch={onApproveBatch} />}
 
       {(removedTokens.length > 0 || Boolean(cleanup?.year_range) || Boolean(artistSource)) && (
         <section className="library-card discography-cleanup">
@@ -1457,7 +1468,7 @@ function DiscographyEditorGate({ batch, moveSummary }: Props) {
 
   return <DiscographyBatchDetail batch={batch} moveSummary={moveSummary} />;
 }
-export default function BatchDetail({ batch, moveSummary, review }: Props) {
+export default function BatchDetail({ batch, moveSummary, review, onEditBatch, onApproveBatch }: Props) {
   if (batch.status === "needs_quarantine_review" || batch.status === "quarantined") {
     return <QuarantineReviewDetail batch={batch} moveSummary={moveSummary} />;
   }

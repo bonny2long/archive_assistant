@@ -90,7 +90,7 @@ from app.services.book_metadata import (
 from app.services.title_display import clean_display_title, destination_title
 from app.services.metadata_quality_gate import get_batch_metadata_quality
 from app.services.candidate_move_plan_preview import build_candidate_move_plan_preview
-from app.services.batch_split import execute_split_candidate, execute_split_discography_releases
+from app.services.batch_split import execute_split_candidate, execute_split_discography_releases, recover_split_child_batches
 from app.services.approved_candidate_materialization import materialize_approved_candidates
 from app.services.universal_review_routing import get_batch_routing_decision
 from app.services.universal_ingestion_review import (
@@ -363,16 +363,8 @@ def list_child_batches(batch_id: int, db: Session = Depends(get_db)):
     if not parent:
         raise HTTPException(status_code=404, detail="Batch not found")
 
-    children = []
-    for child in db.query(IngestBatch).options(selectinload(IngestBatch.files)).filter(IngestBatch.id != batch_id, IngestBatch.status != "merged").all():
-        metadata = child.metadata_json or {}
-        if not isinstance(metadata, dict):
-            continue
-        source_parent_id = int(metadata.get("split_from_batch_id") or metadata.get("source_parent_batch_id") or 0)
-        if source_parent_id == batch_id:
-            children.append(child)
-
-    children.sort(key=lambda item: item.created_at, reverse=True)
+    children = recover_split_child_batches(db, parent)
+    db.commit()
     return [_batch_to_summary(child, db=db) for child in children]
 
 

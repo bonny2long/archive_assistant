@@ -4416,7 +4416,7 @@ button:focus-visible, input:focus-visible {
 }
 .created-child-batches__item {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) auto minmax(220px, 1.2fr);
+  grid-template-columns: minmax(180px, 1fr) auto minmax(220px, 1.2fr) auto;
   align-items: center;
   gap: 0.75rem;
   padding: 0.75rem;
@@ -4449,6 +4449,12 @@ button:focus-visible, input:focus-visible {
   border-radius: 999px;
   background: var(--bg-raised);
   white-space: nowrap;
+}
+.created-child-batches__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  justify-content: flex-end;
 }
 .created-child-batches__item code {
   overflow: hidden;

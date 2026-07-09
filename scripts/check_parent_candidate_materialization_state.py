@@ -38,12 +38,12 @@ def album_row(title: str, year: str) -> dict:
     }
 
 
-def add_album_file(batch: IngestBatch, release: dict, index: int, role: str = "music_audio") -> IngestFile:
-    name = f"{index:02d} - Track {index}.flac"
+def add_album_file(batch: IngestBatch, release: dict, index: int, role: str = "music_audio", extension: str = ".flac") -> IngestFile:
+    name = f"{index:02d} - Track {index}{extension}"
     ingest_file = IngestFile(
         file_path=str(Path(batch.source_path) / release["source_folder"] / name),
         file_name=name,
-        extension=".flac",
+        extension=extension,
         size_bytes=4096,
         checksum=f"sha-{release['source_folder']}-{index}",
         detected_role=role,
@@ -56,6 +56,7 @@ def add_album_file(batch: IngestBatch, release: dict, index: int, role: str = "m
             "tracknumber": str(index),
             "date": release["year"],
             "genre": release["genre"],
+            "format": extension.lstrip(".").upper(),
             "_discography_album": release,
         },
     )
@@ -418,9 +419,10 @@ def test_split_complete_parent_counts_actual_children_without_history(db) -> Non
 
 def test_discography_editor_rows_create_child_batches_without_candidates(db) -> None:
     releases = [
-        {**album_row("Graduation", "2007"), "artist": "Kanye West", "source_folder": "Kanye West - Discography"},
-        {**album_row("Tha Block Is Hot", "1999"), "artist": "Lil Wayne", "source_folder": "Lil Wayne - Tha Block Is Hot"},
-        {**album_row("Trilogy - House Of Balloons", "2012"), "artist": "The Weeknd", "source_folder": "The Weeknd Discography"},
+        {**album_row("Graduation", "2007"), "artist": "Kanye West", "source_folder": "Kanye West - Discography", "format": "FLAC"},
+        {**album_row("Tha Block Is Hot", "1999"), "artist": "Lil Wayne", "source_folder": "Lil Wayne - Tha Block Is Hot", "format": "FLAC"},
+        {**album_row("Trilogy - House Of Balloons", "2012"), "artist": "The Weeknd", "source_folder": "The Weeknd Discography", "format": "FLAC"},
+        {**album_row("Impossible", "2006"), "artist": "Kanye West", "source_folder": "Kanye West - Impossible", "format": "MP3"},
     ]
     parent = IngestBatch(
         source_kind="manual-drop",
@@ -439,20 +441,21 @@ def test_discography_editor_rows_create_child_batches_without_candidates(db) -> 
                 {**release, "format": "FLAC", "include": True, "release_type": "album", "warnings": ["folder_artist_mismatch"]}
                 for release in releases
             ],
-            "album_count": 3,
-            "release_count": 3,
-            "track_count": 3,
+            "album_count": 4,
+            "release_count": 4,
+            "track_count": 4,
         },
     )
     db.add(parent)
     db.flush()
     for index, release in enumerate(releases, start=1):
-        add_album_file(parent, release, index, role="discography_track")
+        extension = ".mp3" if release.get("format") == "MP3" else ".flac"
+        add_album_file(parent, release, index, role="discography_track", extension=extension)
     db.commit()
     db.refresh(parent)
 
     result = execute_split_discography_releases(db, parent.id)
-    assert result["created_count"] == 3
+    assert result["created_count"] == 4
     assert result["skipped_count"] == 0
     assert result["parent_status"] == "split_complete"
     assert result["parent_review_state"] == "split_complete"
@@ -463,18 +466,35 @@ def test_discography_editor_rows_create_child_batches_without_candidates(db) -> 
     assert db.query(IngestFile).filter(IngestFile.batch_id == parent.id).count() == 0
     children = [db.get(IngestBatch, child_id) for child_id in result["created_child_batch_ids"]]
     assert {child.metadata_json["artist"] for child in children if child is not None} == {"Kanye West", "Lil Wayne", "The Weeknd"}
-    assert {child.metadata_json["album"] for child in children if child is not None} == {"Graduation", "Tha Block Is Hot", "Trilogy - House Of Balloons"}
+    assert {child.metadata_json["album"] for child in children if child is not None} == {"Graduation", "Tha Block Is Hot", "Trilogy - House Of Balloons", "Impossible"}
     assert all(child.detected_type == "music_album" for child in children if child is not None)
     assert all(child.status == "pending_review" for child in children if child is not None)
-    assert all("Music" in (child.suggested_destination or "") and "FLAC" in (child.suggested_destination or "") for child in children if child is not None)
+    flac_children = [child for child in children if child is not None and child.metadata_json.get("format") == "FLAC"]
+    mp3_children = [child for child in children if child is not None and child.metadata_json.get("format") == "MP3"]
+    assert flac_children and all("Music" in (child.suggested_destination or "") and "FLAC" in (child.suggested_destination or "") for child in flac_children)
+    assert mp3_children and all("Music" in (child.suggested_destination or "") and "MP3" in (child.suggested_destination or "") for child in mp3_children)
+    stale_flac = flac_children[0]
+    stale_flac.suggested_destination = (stale_flac.suggested_destination or "").replace("Music\\Library\\FLAC", "Music\\Library\\MP3").replace("Music/Library/FLAC", "Music/Library/MP3")
+    stale_meta = dict(stale_flac.metadata_json or {})
+    stale_meta["suggested_destination"] = stale_flac.suggested_destination
+    stale_flac.metadata_json = stale_meta
+    stale_suggested = dict(stale_flac.suggested_metadata or {})
+    stale_suggested["suggested_destination"] = stale_flac.suggested_destination
+    stale_flac.suggested_metadata = stale_suggested
+    db.commit()
 
     second = execute_split_discography_releases(db, parent.id)
     assert second["created_count"] == 0
     assert set(second["existing_child_batch_ids"]) == set(result["created_child_batch_ids"])
+    db.refresh(stale_flac)
+    assert stale_flac.metadata_json["format"] == "FLAC"
+    assert "FLAC" in (stale_flac.suggested_destination or "")
+    assert stale_flac.suggested_metadata["suggested_destination"] == stale_flac.suggested_destination
+    assert stale_flac.metadata_json["suggested_destination"] == stale_flac.suggested_destination
     assert db.query(IngestBatch).filter(
         IngestBatch.detected_type == "music_album",
         IngestBatch.source_path == parent.source_path,
-    ).count() == 3
+    ).count() == 4
 
 
 def test_failed_materialization_does_not_complete_parent(db) -> None:

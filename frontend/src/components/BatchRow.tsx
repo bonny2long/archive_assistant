@@ -328,7 +328,7 @@ export default function BatchRow({
             )}
             {detail && (
               <>
-                <BatchDetail batch={detail} moveSummary={moveSummary} review={review} />
+                <BatchDetail batch={detail} moveSummary={moveSummary} review={review} onEditBatch={onEdit} onApproveBatch={onApprove} />
                 <MoveManifestProof batch={batch} moveSummary={moveSummary} />
               </>
             )}
