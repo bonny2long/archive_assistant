@@ -111,6 +111,8 @@ def add_music_batch_with_tracks(
     extension: str = ".flac",
     title_overrides: dict[int, str] | None = None,
     size_overrides: dict[int, int] | None = None,
+    track_count_override: int | None = None,
+    tracknumber_overrides: dict[int, str] | None = None,
 ) -> IngestBatch:
     normalized_extension = extension if extension.startswith(".") else f".{extension}"
     format_bucket = "FLAC" if normalized_extension.lower() == ".flac" else "MP3"
@@ -133,7 +135,7 @@ def add_music_batch_with_tracks(
             "album": album,
             "title": album,
             "year": year,
-            "track_count": max(track_numbers) if track_numbers else 0,
+            "track_count": track_count_override if track_count_override is not None else (max(track_numbers) if track_numbers else 0),
             "file_count": len(track_numbers),
             "format": format_bucket,
             "suggested_destination": suggested_destination,
@@ -159,7 +161,7 @@ def add_music_batch_with_tracks(
                 "albumartist": artist,
                 "album": album,
                 "title": title,
-                "tracknumber": str(track_number),
+                "tracknumber": (tracknumber_overrides or {}).get(track_number, str(track_number)),
                 "date": year,
             },
         ))
@@ -167,6 +169,63 @@ def add_music_batch_with_tracks(
     db.refresh(batch)
     return batch
 
+
+def _cluster_row_for_batch(db, batch: IngestBatch) -> dict:
+    scoped_review = batch_duplicate_fragment_review(batch.id, db)
+    assert scoped_review["active_cluster"] is True
+    assert len(scoped_review["clusters"]) == 1
+    rows = {row["batch_id"]: row for row in scoped_review["clusters"][0]["batches"]}
+    return rows[batch.id]
+
+
+def test_track_completeness_detects_internal_gaps(db) -> None:
+    add_music_batch_with_tracks(db, artist="Kanye West", album="Gap Album", year="2021", track_numbers=[1, 2, 3, 4, 5, 6])
+    fragment = add_music_batch_with_tracks(
+        db,
+        artist="Kanye West",
+        album="Gap Album",
+        year="2021",
+        track_numbers=[3, 4, 6],
+        track_count_override=3,
+        tracknumber_overrides={3: "track 03", 4: "04/12", 6: "6 of 12"},
+    )
+    fragment_row = _cluster_row_for_batch(db, fragment)
+    assert fragment_row["present_track_numbers"] == [3, 4, 6]
+    assert fragment_row["missing_track_numbers"] == [1, 2, 5]
+    assert fragment_row["completeness_status"] == "incomplete"
+
+    db.query(IngestFile).delete()
+    db.query(IngestBatch).delete()
+    db.commit()
+
+    add_music_batch_with_tracks(db, artist="Kanye West", album="Gap Album", year="2021", track_numbers=[1, 2, 3, 4])
+    internal_gap = add_music_batch_with_tracks(db, artist="Kanye West", album="Gap Album", year="2021", track_numbers=[1, 2, 4])
+    internal_row = _cluster_row_for_batch(db, internal_gap)
+    assert internal_row["present_track_numbers"] == [1, 2, 4]
+    assert internal_row["missing_track_numbers"] == [3]
+    assert internal_row["completeness_status"] == "incomplete"
+
+    db.query(IngestFile).delete()
+    db.query(IngestBatch).delete()
+    db.commit()
+
+    add_music_batch_with_tracks(db, artist="Kanye West", album="Single Gap", year="2021", track_numbers=[1, 2])
+    single_gap = add_music_batch_with_tracks(db, artist="Kanye West", album="Single Gap", year="2021", track_numbers=[2])
+    single_gap_row = _cluster_row_for_batch(db, single_gap)
+    assert single_gap_row["present_track_numbers"] == [2]
+    assert single_gap_row["missing_track_numbers"] == [1]
+    assert single_gap_row["completeness_status"] == "incomplete"
+
+    db.query(IngestFile).delete()
+    db.query(IngestBatch).delete()
+    db.commit()
+
+    add_music_batch_with_tracks(db, artist="Kanye West", album="Complete Album", year="2021", track_numbers=[1, 2, 3])
+    complete = add_music_batch_with_tracks(db, artist="Kanye West", album="Complete Album", year="2021", track_numbers=[1, 2, 3])
+    complete_row = _cluster_row_for_batch(db, complete)
+    assert complete_row["present_track_numbers"] == [1, 2, 3]
+    assert complete_row["missing_track_numbers"] == []
+    assert complete_row["completeness_status"] == "complete"
 def test_fragment_cluster_blocks_approval_and_move(db) -> None:
     donda10 = add_music_batch(db, artist="Kanye West", album="Donda", year="2021", track_count=10)
     donda3 = add_music_batch(db, artist="Kanye West", album="Donda", year="2021", track_count=3)
@@ -555,6 +614,7 @@ def main() -> None:
     Base.metadata.create_all(bind=engine)
     Session = sessionmaker(bind=engine)
     tests = [
+        test_track_completeness_detects_internal_gaps,
         test_fragment_cluster_blocks_approval_and_move,
         test_same_destination_creates_duplicate_conflict,
         test_missing_file_ownership_is_flagged_and_blocked,

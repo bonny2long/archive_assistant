@@ -225,9 +225,10 @@ def _file_formats(batch: IngestBatch) -> list[str]:
 def _batch_row(batch: IngestBatch) -> dict[str, Any]:
     metadata = batch.metadata_json or {}
     item_count = _item_count(batch, metadata)
-    file_count = len(batch.files or [])
+    files = batch.files or []
+    file_count = len(files)
     missing_files = item_count > 0 and file_count == 0
-    return {
+    row = {
         "batch_id": batch.id,
         "title": _display_title(batch, metadata),
         "creator": _display_creator(metadata),
@@ -242,7 +243,18 @@ def _batch_row(batch: IngestBatch) -> dict[str, Any]:
         "status": batch.status,
         "detected_type": batch.detected_type,
     }
-
+    if _media_type(batch, metadata) == "music_album":
+        audio_files = [file for file in files if _is_music_audio_file(file)]
+        completeness = _music_track_completeness(audio_files, metadata)
+        row.update({
+            "track_completeness": completeness,
+            "present_track_numbers": completeness["present_track_numbers"],
+            "missing_track_numbers": completeness["missing_track_numbers"],
+            "duplicate_track_numbers": completeness["duplicate_track_numbers"],
+            "track_number_conflicts": completeness["track_number_conflicts"],
+            "completeness_status": completeness["completeness_status"],
+        })
+    return row
 
 def _metadata_value(metadata: dict[str, Any], *keys: str) -> str:
     for key in keys:
@@ -262,7 +274,8 @@ def _track_number(value: object) -> str:
     text = str(value or "").strip()
     if not text:
         return ""
-    return re.split(r"[/\-]", text)[0].strip()
+    match = re.search(r"\d+", text)
+    return match.group(0) if match else ""
 
 
 def _track_key(ingest_file: IngestFile) -> tuple[str, str] | None:
@@ -808,8 +821,11 @@ def _music_track_completeness(audio_files: list[IngestFile], metadata: dict[str,
         if number > 0:
             expected_total = number
             break
-    if expected_total is None and present:
-        expected_total = max(present)
+    max_observed = max(present) if present else None
+    if expected_total is None and max_observed is not None:
+        expected_total = max_observed
+    elif expected_total is not None and max_observed is not None:
+        expected_total = max(expected_total, max_observed)
 
     missing = [] if expected_total is None else [number for number in range(1, expected_total + 1) if number not in by_track]
     if not present:
