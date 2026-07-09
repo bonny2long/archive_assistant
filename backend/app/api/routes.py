@@ -350,10 +350,23 @@ def get_batch(batch_id: int, db: Session = Depends(get_db)):
     )
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
-    batch.metadata_json = build_review_state(
+    metadata = build_review_state(
         batch.detected_type,
         batch.metadata_json,
     )
+    parent_summary = build_parent_candidate_summary(db, batch)
+    metadata.update({
+        "parent_container_state": parent_summary.get("parent_container_state"),
+        "parent_is_drained": bool(parent_summary.get("parent_is_drained", False)),
+        "active_parent_file_count": int(parent_summary.get("active_parent_file_count", 0) or 0),
+        "child_batch_count": int(parent_summary.get("child_batch_count", 0) or 0),
+        "parent_has_remaining_files": bool(parent_summary.get("parent_has_remaining_files", False)),
+        "approval_allowed": bool(parent_summary.get("approval_allowed", True)),
+        "move_ready": bool(parent_summary.get("move_ready", False)),
+        "requires_review": bool(parent_summary.get("requires_review", False)),
+        "display_state": parent_summary.get("display_state"),
+    })
+    batch.metadata_json = metadata
     batch.files = sort_music_tracks(batch.files)
     return batch
 
@@ -2452,14 +2465,17 @@ def _batch_to_summary(
         remaining_candidate_count=parent_summary["remaining_candidate_count"],
         needs_materialization=parent_summary["needs_materialization"],
         parent_review_state=parent_summary["parent_review_state"],
+        parent_container_state=parent_summary.get("parent_container_state"),
         is_parent_review_container=parent_summary["is_parent_review_container"],
         parent_is_drained=bool(parent_summary.get("parent_is_drained", False)),
         display_state=parent_summary.get("display_state"),
         approval_allowed=bool(parent_summary.get("approval_allowed", True)),
         move_ready=bool(parent_summary.get("move_ready", False)),
         requires_review=bool(parent_summary.get("requires_review", False)),
+        active_parent_file_count=int(parent_summary.get("active_parent_file_count", parent_summary.get("active_file_count", actual_file_count)) or 0),
         active_file_count=int(parent_summary.get("active_file_count", actual_file_count) or 0),
         child_batch_count=int(parent_summary.get("child_batch_count", parent_summary.get("materialized_child_count", 0)) or 0),
+        parent_has_remaining_files=bool(parent_summary.get("parent_has_remaining_files", False)),
         historical_scan_snapshot=bool(parent_summary.get("historical_scan_snapshot", False)),
         possible_duplicate_group_id=duplicate_summary["possible_duplicate_group_id"],
         possible_duplicate_count=duplicate_summary["possible_duplicate_count"],

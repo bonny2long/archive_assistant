@@ -39,16 +39,15 @@ def _parent_review_primary_name(batch: IngestBatch, metadata: dict) -> str:
 
 def _parent_review_secondary_name(parent_summary: dict) -> str:
     approved = int(parent_summary.get("approved_candidate_count") or 0)
-    materialized = int(parent_summary.get("materialized_child_count") or 0)
+    child_count = int(parent_summary.get("child_batch_count") or 0)
     remaining = int(parent_summary.get("remaining_candidate_count") or 0)
     excluded = int(parent_summary.get("excluded_candidate_count") or 0)
     blocked = int(parent_summary.get("blocked_candidate_count") or 0)
     review_later = int(parent_summary.get("review_later_candidate_count") or 0)
-    if parent_summary.get("parent_review_state") == "split_complete":
-        child_count = materialized or approved
-        return f"{_plural(child_count, 'child batch', 'child batches')} created, split complete"
-    if parent_summary.get("parent_review_state") == "parent_partially_materialized":
-        parts = [_plural(materialized, "child batch", "child batches") + " created"]
+    if parent_summary.get("parent_container_state") == "drained_parent":
+        return f"{_plural(child_count or approved, 'child batch', 'child batches')} created, split complete"
+    if parent_summary.get("parent_container_state") == "partial_parent_container":
+        parts = [_plural(child_count, "child batch", "child batches") + " created"]
         if remaining:
             parts.append(f"{remaining} unresolved")
         if review_later:
@@ -72,7 +71,7 @@ def build_batch_display_fields(batch: IngestBatch, parent_summary: dict | None =
     detected_type = batch.detected_type
     if parent_summary and parent_summary.get("is_parent_review_container"):
         if parent_summary.get("parent_is_drained"):
-            child_count = int(parent_summary.get("child_batch_count") or parent_summary.get("materialized_child_count") or 0)
+            child_count = int(parent_summary.get("child_batch_count") or 0)
             return {
                 "media_category": "processed",
                 "media_label": "Processed Container",
@@ -83,11 +82,11 @@ def build_batch_display_fields(batch: IngestBatch, parent_summary: dict | None =
                 "edit_kind": None,
             }
         candidate_group_count = int(parent_summary.get("candidate_group_count") or 0)
-        materialized_child_count = int(parent_summary.get("materialized_child_count") or 0)
-        parent_state = parent_summary.get("parent_review_state")
-        edit_kind = "music_discography" if detected_type == "music_discography" and parent_state == "parent_partially_materialized" else None
-        item_label = "child batches" if parent_state == "split_complete" else "candidate groups"
-        item_count = materialized_child_count if parent_state == "split_complete" else candidate_group_count
+        child_batch_count = int(parent_summary.get("child_batch_count") or 0)
+        parent_state = parent_summary.get("parent_container_state")
+        edit_kind = "music_discography" if detected_type == "music_discography" and parent_state in {"active_parent_container", "partial_parent_container"} else None
+        item_label = "child batches" if parent_state == "drained_parent" else "candidate groups"
+        item_count = child_batch_count if parent_state == "drained_parent" else candidate_group_count
         return {
             "media_category": "review",
             "media_label": _parent_review_media_label(detected_type),

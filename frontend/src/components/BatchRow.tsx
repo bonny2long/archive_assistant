@@ -44,11 +44,7 @@ function statusLabel(status: string): string {
 }
 
 function isParentReviewContainer(batch: BatchSummary): boolean {
-  return Boolean(
-    batch.is_parent_review_container
-    || batch.needs_materialization
-    || batch.parent_review_state,
-  );
+  return Boolean(batch.is_parent_review_container || batch.parent_container_state);
 }
 
 function duplicateFragmentMatchCount(batch: BatchSummary): number {
@@ -68,15 +64,17 @@ function duplicateFragmentLabel(batch: BatchSummary): string | null {
 }
 
 function batchStatusLabel(batch: BatchSummary): string {
-  if (batch.parent_is_drained || batch.display_state === "drained_parent") return "Drained container";
+  if (batch.parent_is_drained || batch.parent_container_state === "drained_parent" || batch.display_state === "drained_parent") {
+    return "Drained intake container";
+  }
   const duplicateLabel = duplicateFragmentLabel(batch);
   if (duplicateLabel) return duplicateLabel;
   if (!isParentReviewContainer(batch)) return statusLabel(batch.status);
-  if (batch.parent_review_state === "candidates_approved_waiting_materialization") {
+  if (batch.parent_container_state === "partial_parent_container") return "Active files remaining";
+  if ((batch.approved_candidate_count ?? 0) > 0 && (batch.unresolved_candidate_count ?? 0) === 0 && (batch.child_batch_count ?? 0) === 0) {
     return "Ready to create child batches";
   }
-  if (batch.parent_review_state === "split_complete") return "Split complete";
-  if (batch.parent_review_state === "parent_partially_materialized") return "Partially materialized";
+  if ((batch.child_batch_count ?? 0) > 0) return "Child batches created";
   return "Review in progress";
 }
 
@@ -144,13 +142,9 @@ export default function BatchRow({
   const year = batch.year ?? "-";
   const percent = Math.round((batch.confidence ?? 0) * 100);
   const parentReviewContainer = isParentReviewContainer(batch);
-  const drainedParent = Boolean(batch.parent_is_drained || batch.display_state === "drained_parent");
-  const hasDiscographyRemainderReview = batch.detected_type === "music_discography"
-    && batch.status === "split_complete"
-    && ((batch.file_count ?? 0) > 0 || (batch.track_count ?? 0) > 0);
-  const splitCompleteParent = drainedParent || parentReviewContainer
-    && batch.parent_review_state === "split_complete"
-    && !hasDiscographyRemainderReview;
+  const drainedParent = Boolean(batch.parent_is_drained || batch.parent_container_state === "drained_parent" || batch.display_state === "drained_parent");
+  const hasDiscographyRemainderReview = batch.parent_container_state === "partial_parent_container";
+  const splitCompleteParent = drainedParent && !hasDiscographyRemainderReview;
   const isDiscographySplitChild =
     batch.detected_type === "music_album"
     && batch.review_origin === "multi_artist_discography_split";
@@ -163,7 +157,7 @@ export default function BatchRow({
   const approveTitle = drainedParent
     ? "This intake container is drained. Review child batches instead."
     : parentReviewContainer
-    ? "Parent review containers need child batch creation before move approval"
+    ? "Parent containers are not move-ready. Review child batches or handle active files first."
     : activeDuplicateReview
       ? "Needs duplicate/fragment review before move approval"
       : "Approve";

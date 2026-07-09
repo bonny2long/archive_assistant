@@ -31,7 +31,7 @@ function BatchReviewShell({ batch, children }: { batch: IngestBatch; children: R
 }
 
 function hasSplitChildHistory(metadata: Record<string, unknown>): boolean {
-  return Number(metadata.materialized_child_count ?? metadata.child_candidate_count ?? 0) > 0
+  return Number(metadata.child_batch_count ?? 0) > 0
     || Array.isArray(metadata.materialization_history)
     || Array.isArray(metadata.split_history)
     || Array.isArray(metadata.discography_split_audit);
@@ -39,13 +39,12 @@ function hasSplitChildHistory(metadata: Record<string, unknown>): boolean {
 
 function isDrainedParentBatch(batch: IngestBatch): boolean {
   const metadata = batch.metadata_json ?? {};
-  const parentReviewState = typeof metadata.parent_review_state === "string"
-    ? metadata.parent_review_state
-    : batch.status === "split_complete" ? "split_complete" : null;
-  const activeFileCount = batch.files?.length ?? Number(metadata.remaining_parent_file_count ?? 0);
+  const parentState = typeof metadata.parent_container_state === "string" ? metadata.parent_container_state : metadata.display_state;
+  if (metadata.parent_is_drained === true || parentState === "drained_parent") return true;
+  const activeFileCount = Number(metadata.active_parent_file_count ?? batch.files?.length ?? 0);
   return batch.detected_type === "music_discography"
     && activeFileCount === 0
-    && (parentReviewState === "split_complete" || hasSplitChildHistory(metadata));
+    && hasSplitChildHistory(metadata);
 }
 
 function DrainedParentDetail({ batch, moveSummary }: { batch: IngestBatch; moveSummary?: BatchMoveSummary }) {
@@ -1191,13 +1190,13 @@ function DiscographyBatchDetail({ batch, moveSummary, onEditBatch }: Props) {
   const warnings = metadataWarnings(batch);
   const moved = batch.status === "moved";
   const releaseCount = getReleaseCount(batch);
-  const parentReviewState = typeof metadata.parent_review_state === "string" ? metadata.parent_review_state : batch.status === "split_complete" ? "split_complete" : null;
-  const hasChildBatchHistory = Number(metadata.materialized_child_count ?? 0) > 0 || Array.isArray(metadata.split_history) || Array.isArray(metadata.discography_split_audit);
-  const isSplitParent = parentReviewState === "split_complete" || parentReviewState === "parent_partially_materialized" || hasChildBatchHistory;
-  const remainingParentFileCount = Number(metadata.remaining_parent_file_count ?? batch.files.length ?? 0);
+  const parentContainerState = typeof metadata.parent_container_state === "string" ? metadata.parent_container_state : null;
+  const hasChildBatchHistory = Number(metadata.child_batch_count ?? 0) > 0 || Array.isArray(metadata.split_history) || Array.isArray(metadata.discography_split_audit);
+  const isSplitParent = Boolean(parentContainerState) || hasChildBatchHistory;
+  const remainingParentFileCount = Number(metadata.active_parent_file_count ?? batch.files.length ?? 0);
   const remainingAlbums = albums.filter((album) => album.release_decision !== "extract_as_child");
-  const materializedChildCount = Number(metadata.materialized_child_count ?? metadata.child_candidate_count ?? 0);
-  const isDrainedParent = isSplitParent && remainingParentFileCount === 0 && (materializedChildCount > 0 || hasChildBatchHistory);
+  const childBatchCount = Number(metadata.child_batch_count ?? 0);
+  const isDrainedParent = metadata.parent_is_drained === true || parentContainerState === "drained_parent" || (isSplitParent && remainingParentFileCount === 0 && (childBatchCount > 0 || hasChildBatchHistory));
 
   if (isDrainedParent) {
     return <DrainedParentDetail batch={batch} moveSummary={moveSummary} />;
@@ -1209,7 +1208,7 @@ function DiscographyBatchDetail({ batch, moveSummary, onEditBatch }: Props) {
       <div className="library-status">
         <div className="library-status__icon"><i className="ti ti-folders" /></div>
         <div>
-          <div className="library-status__eyebrow">{isSplitParent ? "Discography parent container" : "Discography detected"}</div>
+          <div className="library-status__eyebrow">{isSplitParent ? "Intake container" : "Discography detected"}</div>
           <h2>{getBatchDisplayTitle(batch)}</h2>
           <p>{releaseCount} releases · {String(metadata.track_count ?? batch.files.length)} tracks</p>
         </div>
@@ -1221,7 +1220,7 @@ function DiscographyBatchDetail({ batch, moveSummary, onEditBatch }: Props) {
 
       {isSplitParent ? (
         <section className="library-card discography-parent-state">
-          <h3>{parentReviewState === "split_complete" ? "Parent container split complete" : "Parent container partially split"}</h3>
+          <h3>{parentContainerState === "partial_parent_container" ? "Active files remaining" : "Processed container"}</h3>
           <p>
             This parent is not move-ready. Review, approve, and move the created child batches instead.
             {remainingParentFileCount > 0 ? ` ${remainingParentFileCount} file${remainingParentFileCount === 1 ? "" : "s"} remain attached to the parent.` : ""}
