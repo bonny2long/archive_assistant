@@ -16,9 +16,13 @@ from app.services.batch_split import (
 )
 from app.services.destination_authority import rebuild_music_batch_destination_from_attached_files
 from app.services.parent_candidate_materialization import (
+    PARENT_CONTAINER_DRAINED,
     PARENT_PARTIALLY_MATERIALIZED,
     PARENT_SPLIT_COMPLETE,
     build_parent_candidate_summary,
+    get_active_parent_file_count,
+    get_child_batch_count,
+    get_parent_container_display_state,
 )
 
 CLOSED_PARENT_STATUSES = {"moved", "move_failed", "merged"}
@@ -398,26 +402,21 @@ def materialize_approved_candidates(db: Session, batch_id: int) -> dict[str, Any
             "materialized_at": timestamp.isoformat(),
         })
         metadata["partial_materialization_audit"] = partial_audit
+        child_batch_count = get_child_batch_count(parent_batch, db)
+        active_parent_file_count = get_active_parent_file_count(parent_batch, db)
+        parent_container_state = get_parent_container_display_state(parent_batch, db)
         metadata["child_candidate_count"] = len(candidate_id_set)
-        metadata["materialized_child_count"] = len({
-            int(item.get("candidate_id") or 0)
-            for item in metadata.get("materialization_history") or []
-            if isinstance(item, dict) and item.get("candidate_id")
-        })
+        metadata["materialized_child_count"] = child_batch_count
         metadata["blocked_candidate_count"] = len(blocked_candidate_ids)
         metadata["excluded_candidate_count"] = len(excluded_candidate_ids)
         metadata["review_later_candidate_count"] = len(review_later_candidate_ids)
-        remaining_parent_file_count = db.query(IngestFile).filter(IngestFile.batch_id == parent_batch.id).count()
-        metadata["remaining_parent_file_count"] = remaining_parent_file_count
+        metadata["remaining_parent_file_count"] = active_parent_file_count
         metadata["unresolved_candidate_count"] = len(unresolved_candidate_ids)
-        if remaining_parent_file_count > 0 and metadata["unresolved_candidate_count"] == 0:
+        if active_parent_file_count > 0 and metadata["unresolved_candidate_count"] == 0:
             metadata["unresolved_candidate_count"] = 1
-        all_candidates_materialized = (
-            metadata["materialized_child_count"] >= len(candidate_id_set)
-            and remaining_parent_file_count == 0
-        )
-        parent_batch.status = PARENT_SPLIT_COMPLETE if all_candidates_materialized else "pending_review"
-        metadata["parent_review_state"] = PARENT_SPLIT_COMPLETE if all_candidates_materialized else PARENT_PARTIALLY_MATERIALIZED
+        parent_complete = parent_container_state == PARENT_CONTAINER_DRAINED
+        parent_batch.status = PARENT_SPLIT_COMPLETE if parent_complete else "pending_review"
+        metadata["parent_review_state"] = PARENT_SPLIT_COMPLETE if parent_complete else PARENT_PARTIALLY_MATERIALIZED
         parent_batch.metadata_json = metadata
         parent_batch.updated_at = timestamp
         db.commit()
