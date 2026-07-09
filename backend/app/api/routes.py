@@ -133,13 +133,16 @@ def _music_track_completeness_blocker(batch: IngestBatch) -> str | None:
     return None
 
 
-def _discography_child_batch_blocker(batch: IngestBatch) -> str | None:
+def _discography_child_batch_blocker(batch: IngestBatch, parent_summary: dict | None = None) -> str | None:
     if batch.detected_type != "music_discography":
         return None
     metadata = batch.metadata_json or {}
-    parent_state = metadata.get("parent_review_state")
-    if parent_state in {"split_complete", "parent_partially_materialized"}:
-        return "Review and move the created child batches, not the parent discography container."
+    if parent_summary:
+        parent_state = parent_summary.get("parent_container_state")
+        if parent_summary.get("parent_is_drained"):
+            return "This is a drained intake container. Review child batches instead."
+        if parent_state == "partial_parent_container":
+            return "Active files remain on this parent container. Handle remaining files before parent completion."
     albums = [item for item in metadata.get("albums", []) if isinstance(item, dict)]
     extractable = [
         item for item in albums
@@ -2066,7 +2069,7 @@ def approve_batch(batch_id: int, db: Session = Depends(get_db)):
             status=batch.status,
             message=completeness_blocker,
         )
-    discography_blocker = _discography_child_batch_blocker(batch)
+    discography_blocker = _discography_child_batch_blocker(batch, parent_summary)
     if discography_blocker:
         return ApproveResponse(
             batch_id=batch.id,
@@ -2127,16 +2130,16 @@ def approve_selected_batches(
             continue
 
         metadata = build_review_state(batch.detected_type, batch.metadata_json)
+        parent_summary = build_parent_candidate_summary(db, batch)
         if batch.detected_type in {"unknown_type", "unsupported_file"}:
             reason = "quarantine_review_required"
-        elif build_parent_candidate_summary(db, batch)["is_parent_review_container"]:
-            parent_summary = build_parent_candidate_summary(db, batch)
+        elif parent_summary["is_parent_review_container"]:
             reason = "drained_parent_review_child_batches" if parent_summary.get("parent_is_drained") else "parent_review_container_needs_child_batches"
         elif duplicate_fragment_summary_for_batch(db, batch)["requires_duplicate_review"]:
             reason = "duplicate_fragment_review_required"
         elif _music_track_completeness_blocker(batch):
             reason = "music_track_completeness_required"
-        elif _discography_child_batch_blocker(batch):
+        elif _discography_child_batch_blocker(batch, parent_summary):
             reason = "discography_child_batches_required"
         elif metadata["blocking_review_items"]:
             reason = "blocking_review_items"
@@ -2474,7 +2477,7 @@ def _batch_to_summary(
         requires_review=bool(parent_summary.get("requires_review", False)),
         active_parent_file_count=int(parent_summary.get("active_parent_file_count", parent_summary.get("active_file_count", actual_file_count)) or 0),
         active_file_count=int(parent_summary.get("active_file_count", actual_file_count) or 0),
-        child_batch_count=int(parent_summary.get("child_batch_count", parent_summary.get("materialized_child_count", 0)) or 0),
+        child_batch_count=int(parent_summary.get("child_batch_count", 0) or 0),
         parent_has_remaining_files=bool(parent_summary.get("parent_has_remaining_files", False)),
         historical_scan_snapshot=bool(parent_summary.get("historical_scan_snapshot", False)),
         possible_duplicate_group_id=duplicate_summary["possible_duplicate_group_id"],

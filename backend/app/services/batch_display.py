@@ -40,7 +40,7 @@ def _parent_review_primary_name(batch: IngestBatch, metadata: dict) -> str:
 def _parent_review_secondary_name(parent_summary: dict) -> str:
     approved = int(parent_summary.get("approved_candidate_count") or 0)
     child_count = int(parent_summary.get("child_batch_count") or 0)
-    remaining = int(parent_summary.get("remaining_candidate_count") or 0)
+    remaining = int(parent_summary.get("unresolved_candidate_count") or 0)
     excluded = int(parent_summary.get("excluded_candidate_count") or 0)
     blocked = int(parent_summary.get("blocked_candidate_count") or 0)
     review_later = int(parent_summary.get("review_later_candidate_count") or 0)
