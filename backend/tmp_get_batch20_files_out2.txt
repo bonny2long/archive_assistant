@@ -1,0 +1,1 @@
+﻿Direct query file count for batch 20: 0
