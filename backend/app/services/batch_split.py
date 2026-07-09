@@ -707,7 +707,9 @@ def execute_split_discography_releases(db: Session, batch_id: int) -> dict[str, 
         created_child_batch_ids.append(child_batch.id)
         split_sources.add(_norm_match(source_folder))
 
-    if not created_child_batch_ids and not skipped_child_batch_ids:
+    remaining_parent_file_count = db.query(IngestFile).filter(IngestFile.batch_id == parent_batch.id).count()
+
+    if not created_child_batch_ids and not skipped_child_batch_ids and remaining_parent_file_count > 0:
         raise ValueError(
             "No child batches were created. Make sure each included release has a source folder with attached files."
         )
@@ -723,8 +725,13 @@ def execute_split_discography_releases(db: Session, batch_id: int) -> dict[str, 
     db.flush()
     batch_metadata["materialized_child_count"] = len(split_history)
     batch_metadata["child_candidate_count"] = len(split_history)
-    batch_metadata["remaining_parent_file_count"] = db.query(IngestFile).filter(IngestFile.batch_id == parent_batch.id).count()
-    batch_metadata["parent_review_state"] = "split_complete" if not remaining_albums and batch_metadata["remaining_parent_file_count"] == 0 else "parent_partially_materialized"
+    batch_metadata["remaining_parent_file_count"] = remaining_parent_file_count
+    
+    if remaining_parent_file_count == 0:
+        batch_metadata["parent_review_state"] = "split_complete"
+    else:
+        batch_metadata["parent_review_state"] = "split_complete" if not remaining_albums else "parent_partially_materialized"
+        
     parent_batch.status = "split_complete" if batch_metadata["parent_review_state"] == "split_complete" else "pending_review"
     parent_batch.metadata_json = batch_metadata
     parent_batch.updated_at = timestamp
