@@ -1,4 +1,4 @@
-type ActionKey = "refresh" | "scan" | "move" | "reset";
+﻿type ActionKey = "refresh" | "scan" | "move" | "reset";
 
 type Props = {
   onScan: () => Promise<void>;
@@ -9,6 +9,7 @@ type Props = {
   devToolsEnabled: boolean;
   serverTime?: string | null;
   ingestPath?: string | null;
+  isScanningIngest?: boolean;
 };
 
 export default function ActionBar({
@@ -20,8 +21,10 @@ export default function ActionBar({
   devToolsEnabled,
   serverTime,
   ingestPath,
+  isScanningIngest = false,
 }: Props) {
   const disabled = loadingAction !== null;
+  const scanDisabled = disabled || isScanningIngest;
 
   return (
     <div className="action-bar">
@@ -29,7 +32,7 @@ export default function ActionBar({
         <div className="action-bar__title">Archive Assistant</div>
         <div className="action-bar__subtitle">Archive ingest dashboard</div>
         <div className="action-bar__system-path">
-          Scanning ingest: {ingestPath || "unknown - check backend"}
+          {isScanningIngest ? "Scanning ingest" : "Ingest path"}: {ingestPath || "unknown - check backend"}
         </div>
         {devToolsEnabled && serverTime && (
           <div className="action-bar__system-time">{serverTime}</div>
@@ -39,8 +42,8 @@ export default function ActionBar({
         <button className="btn" disabled={disabled} onClick={() => void onRefresh()}>
           <i className={`ti ti-refresh ${loadingAction === "refresh" ? "spinner" : ""}`} /> Refresh
         </button>
-        <button className="btn" disabled={disabled} onClick={() => void onScan()}>
-          <i className={`ti ti-scan ${loadingAction === "scan" ? "spinner" : ""}`} /> Scan ingest
+        <button className="btn" disabled={scanDisabled} onClick={() => void onScan()}>
+          <i className={`ti ti-scan ${loadingAction === "scan" || isScanningIngest ? "spinner" : ""}`} /> {isScanningIngest ? "Scanning ingest" : "Scan ingest"}
         </button>
         <button className="btn btn--green" disabled={disabled} onClick={() => void onMove()}>
           <i className={`ti ti-circle-arrow-right ${loadingAction === "move" ? "spinner" : ""}`} /> Move approved

@@ -1,4 +1,4 @@
-"""AA-FLOW1 guard: internal archive actions must not scan _INGEST/ready."""
+﻿"""AA-FLOW1 guard: internal archive actions must not scan _INGEST/ready."""
 from __future__ import annotations
 
 import re
@@ -8,6 +8,8 @@ ROOT = Path(__file__).resolve().parents[1]
 ROUTES = ROOT / "backend" / "app" / "api" / "routes.py"
 SCAN_RUNTIME = ROOT / "backend" / "app" / "services" / "scan_runtime.py"
 APP = ROOT / "frontend" / "src" / "App.tsx"
+ACTION_BAR = ROOT / "frontend" / "src" / "components" / "ActionBar.tsx"
+BATCH_TABLE = ROOT / "frontend" / "src" / "components" / "BatchTable.tsx"
 CLIENT = ROOT / "frontend" / "src" / "api" / "client.ts"
 
 FORBIDDEN_ROUTE_CALLS = (
@@ -19,7 +21,7 @@ FORBIDDEN_ROUTE_CALLS = (
 
 
 def read(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
+    return path.read_text(encoding="utf-8-sig")
 
 
 def route_functions(source: str) -> dict[str, str]:
@@ -68,12 +70,14 @@ def check_backend_routes() -> None:
 
 def check_frontend_actions() -> None:
     app = read(APP)
+    action_bar = read(ACTION_BAR)
+    batch_table = read(BATCH_TABLE)
     client = read(CLIENT)
 
     assert_true('scanMusic: () => request<ScanJobStatus>("/scan/music", "POST")' in client, "scanMusic must target explicit scan endpoint")
     assert_true('scanStatus: () => request<ScanJobStatus>("/scan/status")' in client, "scanStatus must target scan status endpoint")
-    assert_true('listBatches: () => request<PaginatedResponse<BatchSummary>>("/batches?page_size=100")' in client, "listBatches must remain a DB/API reload")
-    assert_true('listPending: () => request<PaginatedResponse<BatchSummary>>("/batches/pending?page_size=100")' in client, "listPending must remain a DB/API reload")
+    assert_true('listBatches: () => request<PaginatedResponse<BatchSummary>>("/batches?page_size=100", "GET", undefined, BATCH_LIST_TIMEOUT_MS)' in client, "listBatches must remain a timed DB/API reload")
+    assert_true('listPending: () => request<PaginatedResponse<BatchSummary>>("/batches/pending?page_size=100", "GET", undefined, BATCH_LIST_TIMEOUT_MS)' in client, "listPending must remain a timed DB/API reload")
 
     load_batches = const_block(app, "loadBatches")
     handle_refresh = const_block(app, "handleRefresh")
@@ -82,11 +86,23 @@ def check_frontend_actions() -> None:
     assert_true("api.listBatches()" in load_batches, "loadBatches must reload batches from DB/API")
     assert_true("api.listPending()" in load_batches, "loadBatches fallback must reload pending batches from DB/API")
     assert_true("api.scanMusic" not in load_batches, "loadBatches must not scan ingest")
+    assert_true("batchLoadRequestId" in load_batches, "loadBatches must ignore stale overlapping responses")
+    assert_true("setBatchLoadError" in load_batches, "loadBatches must settle to an error state on failure")
 
-    assert_true("await loadBatches()" in handle_refresh, "Refresh must reload existing DB/API batches")
+    assert_true('await loadBatches({ mode: "refresh" })' in handle_refresh, "Refresh must reload existing DB/API batches")
     assert_true("api.scanMusic" not in handle_refresh, "Refresh must not scan ingest")
 
     assert_true("api.scanMusic()" in handle_scan, "Only Scan ingest should call scan endpoint")
+    assert_true("setIsScanningIngest(true)" in handle_scan, "Scan action must set scan-specific UI state")
+
+    assert_true('"Scanning ingest:"' not in action_bar, "Static header must not say Scanning ingest:")
+    assert_true('"Ingest path"' in action_bar, "Default header should identify the ingest path")
+    assert_true("isScanningIngest" in action_bar, "Scan wording must be conditional on isScanningIngest")
+
+    assert_true("isInitialLoading && batches.length === 0 && !hasLoaded" in batch_table, "Full batch loading state must be initial empty load only")
+    assert_true("Loading saved batches..." in batch_table, "Batch loading copy must not use scan language")
+    assert_true("Refreshing..." in batch_table, "Refresh should have a compact refresh indicator")
+    assert_true("No batches found. Click Scan ingest to discover ready media." in batch_table, "Empty state must tell the user how to discover media")
 
 
 def main() -> None:

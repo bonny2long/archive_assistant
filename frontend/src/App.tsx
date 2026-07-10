@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   BatchMetadataUpdate,
   AudiobookMetadataUpdate,
@@ -80,10 +80,13 @@ export default function App() {
   const [reviews, setReviews] = useState<Record<number, BatchReview>>({});
   const [detailLoading, setDetailLoading] = useState<Set<number>>(new Set());
   const [detailErrors, setDetailErrors] = useState<Record<number, string>>({});
-  const [loading, setLoading] = useState(false);
+  const [isInitialLoadingBatches, setIsInitialLoadingBatches] = useState(false);
+  const [isRefreshingBatches, setIsRefreshingBatches] = useState(false);
+  const [isScanningIngest, setIsScanningIngest] = useState(false);
+  const [hasLoadedBatches, setHasLoadedBatches] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [showBulkApprove, setShowBulkApprove] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [batchLoadError, setBatchLoadError] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>("all");
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -102,6 +105,8 @@ export default function App() {
   const [systemTime, setSystemTime] = useState<SystemTimeResponse | null>(null);
   const [ingestPath, setIngestPath] = useState<string | null>(null);
   const [scanStatus, setScanStatus] = useState<ScanJobStatus | null>(null);
+  const batchLoadRequestId = useRef(0);
+  const hasLoadedBatchesRef = useRef(false);
 
   const showToast = useCallback((msg: string, type: ToastState["type"] = "info") => {
     setToast({ msg, type });
@@ -115,42 +120,61 @@ export default function App() {
     }
   }, []);
 
-  const loadBatches = useCallback(async (options: { resetCachedDetails?: boolean } = {}): Promise<BatchSummary[]> => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await api.listBatches();
-      const items = response.items.filter((batch) => batch.status !== "merged");
+  const loadBatches = useCallback(async (options: { resetCachedDetails?: boolean; mode?: "initial" | "refresh" } = {}): Promise<BatchSummary[]> => {
+    const requestId = batchLoadRequestId.current + 1;
+    batchLoadRequestId.current = requestId;
+    const initialLoad = options.mode === "initial" || !hasLoadedBatchesRef.current;
+
+    if (initialLoad) {
+      setIsInitialLoadingBatches(true);
+    } else {
+      setIsRefreshingBatches(true);
+    }
+    setBatchLoadError(null);
+
+    const applyItems = (items: BatchSummary[]) => {
+      if (requestId !== batchLoadRequestId.current) return false;
       setBatches(items);
+      hasLoadedBatchesRef.current = true;
+      setHasLoadedBatches(true);
       if (options.resetCachedDetails) {
         setDetails({});
         setMoveSummaries({});
         setReviews({});
       }
-      return items;
+      return true;
+    };
+
+    try {
+      const response = await api.listBatches();
+      const items = response.items.filter((batch) => batch.status !== "merged");
+      return applyItems(items) ? items : [];
     } catch (primaryError: unknown) {
       try {
         const fallback = await api.listPending();
         const items = fallback.items.filter((batch) => batch.status !== "merged");
-        setBatches(items);
-        if (options.resetCachedDetails) {
-          setDetails({});
-          setMoveSummaries({});
-          setReviews({});
-        }
-        return items;
+        return applyItems(items) ? items : [];
       } catch {
-        setError(primaryError instanceof Error ? primaryError.message : "Unable to load batches");
+        if (requestId === batchLoadRequestId.current) {
+          setBatchLoadError(
+            primaryError instanceof Error
+              ? primaryError.message
+              : "Could not load batches. Backend may be unavailable.",
+          );
+        }
         return [];
       }
     } finally {
-      await loadLibrarySummary();
-      setLoading(false);
+      if (requestId === batchLoadRequestId.current) {
+        await loadLibrarySummary();
+        setIsInitialLoadingBatches(false);
+        setIsRefreshingBatches(false);
+      }
     }
   }, [loadLibrarySummary]);
 
   useEffect(() => {
-    void loadBatches({ resetCachedDetails: true });
+    void loadBatches({ resetCachedDetails: true, mode: "initial" });
     void api.health()
       .then((health) => setDevToolsEnabled(health.dev_tools_enabled))
       .catch(() => setDevToolsEnabled(false));
@@ -175,7 +199,7 @@ export default function App() {
     let lastBatchReload = 0;
 
     const applyCompletedScan = async (status: ScanJobStatus) => {
-      const items = await loadBatches();
+      const items = await loadBatches({ mode: "refresh" });
       if (cancelled) return;
       const result = status.result;
       if (!result) return;
@@ -199,10 +223,12 @@ export default function App() {
         const now = Date.now();
         if (next.status === "running" && now - lastBatchReload >= 4500) {
           lastBatchReload = now;
-          void loadBatches();
+          void loadBatches({ mode: "refresh" });
         } else if (next.status === "completed") {
+          setIsScanningIngest(false);
           await applyCompletedScan(next);
         } else if (next.status === "failed") {
+          setIsScanningIngest(false);
           showToast(next.error_message || "Scan failed", "error");
         }
       } catch {
@@ -400,7 +426,7 @@ export default function App() {
       } else {
         showToast(`Batch ${id} approved`);
       }
-      await loadBatches();
+      await loadBatches({ mode: "refresh" });
     } catch {
       showToast("Approve failed", "error");
     }
@@ -410,7 +436,7 @@ export default function App() {
     try {
       await api.rejectBatch(id);
       showToast(`Batch ${id} rejected`);
-      await loadBatches();
+      await loadBatches({ mode: "refresh" });
     } catch {
       showToast("Reject failed", "error");
     }
@@ -420,7 +446,7 @@ export default function App() {
     try {
       await api.sendToRecovery(id);
       showToast(`Batch ${id} sent to recovery`);
-      await loadBatches();
+      await loadBatches({ mode: "refresh" });
     } catch {
       showToast("Recovery failed", "error");
     }
@@ -436,7 +462,7 @@ export default function App() {
     try {
       const result = await api.quarantineBatch(id);
       showToast(result.action_message ?? "Item moved to quarantine");
-      await loadBatches();
+      await loadBatches({ mode: "refresh" });
     } catch (quarantineError: unknown) {
       showToast(
         quarantineError instanceof Error
@@ -456,7 +482,7 @@ export default function App() {
     try {
       const result = await api.restoreQuarantinedBatch(id);
       showToast(result.action_message ?? "Item restored to ingest");
-      await loadBatches();
+      await loadBatches({ mode: "refresh" });
     } catch (restoreError: unknown) {
       showToast(
         restoreError instanceof Error
@@ -474,7 +500,7 @@ export default function App() {
       const result = await api.updateBatchMetadata(editingBatch.id, update);
       showToast(result.action_message ?? `Batch ${editingBatch.id} metadata updated`);
       setEditingBatch(null);
-      await loadBatches();
+      await loadBatches({ mode: "refresh" });
     } catch (saveError: unknown) {
       showToast(
         saveError instanceof Error ? saveError.message : "Metadata update failed",
@@ -492,7 +518,7 @@ export default function App() {
       const result = await api.updateDiscographyMetadata(editingBatch.id, update);
       showToast(result.action_message ?? "Discography metadata updated");
       setEditingBatch(null);
-      await loadBatches();
+      await loadBatches({ mode: "refresh" });
     } catch (saveError: unknown) {
       showToast(
         saveError instanceof Error ? saveError.message : "Discography update failed",
@@ -512,7 +538,7 @@ export default function App() {
       const result = await api.splitDiscographyReleases(batchId);
       showToast(result.message);
       setEditingBatch(null);
-      await loadBatches();
+      await loadBatches({ mode: "refresh" });
     } catch (saveError: unknown) {
       showToast(
         saveError instanceof Error ? saveError.message : "Discography child batch creation failed",
@@ -530,7 +556,7 @@ export default function App() {
       const result = await api.updateMovieMetadata(editingBatch.id, update);
       showToast(result.action_message ?? "Movie metadata updated");
       setEditingBatch(null);
-      await loadBatches();
+      await loadBatches({ mode: "refresh" });
     } catch (saveError: unknown) {
       showToast(
         saveError instanceof Error ? saveError.message : "Movie metadata update failed",
@@ -548,7 +574,7 @@ export default function App() {
       const result = await api.updateMovieCollectionReview(editingBatch.id, update);
       showToast(result.action_message ?? "Movie collection review saved");
       setEditingBatch(null);
-      await loadBatches();
+      await loadBatches({ mode: "refresh" });
     } catch (saveError: unknown) {
       showToast(
         saveError instanceof Error ? saveError.message : "Movie collection review save failed",
@@ -566,7 +592,7 @@ export default function App() {
       const result = await api.updateTvMetadata(editingBatch.id, update);
       showToast(result.action_message ?? "TV metadata updated");
       setEditingBatch(null);
-      await loadBatches();
+      await loadBatches({ mode: "refresh" });
     } catch (saveError: unknown) {
       showToast(
         saveError instanceof Error ? saveError.message : "TV metadata update failed",
@@ -584,7 +610,7 @@ export default function App() {
       const result = await api.updateBookMetadata(editingBatch.id, update);
       showToast(result.action_message ?? "Book metadata updated");
       setEditingBatch(null);
-      await loadBatches();
+      await loadBatches({ mode: "refresh" });
     } catch (saveError: unknown) {
       showToast(
         saveError instanceof Error ? saveError.message : "Book metadata update failed",
@@ -602,7 +628,7 @@ export default function App() {
       const result = await api.updateBookCollectionReview(editingBatch.id, update);
       showToast(result.action_message ?? "Book collection review saved");
       setEditingBatch(null);
-      await loadBatches();
+      await loadBatches({ mode: "refresh" });
     } catch (saveError: unknown) {
       showToast(
         saveError instanceof Error ? saveError.message : "Book collection review failed",
@@ -620,7 +646,7 @@ export default function App() {
       const result = await api.updateAudiobookMetadata(editingBatch.id, update);
       showToast(result.action_message ?? "Audiobook metadata updated");
       setEditingBatch(null);
-      await loadBatches();
+      await loadBatches({ mode: "refresh" });
     } catch (saveError: unknown) {
       showToast(
         saveError instanceof Error
@@ -640,7 +666,7 @@ export default function App() {
       const result = await api.updateTvEpisodeReview(editingBatch.id, update);
       showToast(result.action_message ?? "TV episode review saved");
       setEditingBatch(null);
-      await loadBatches();
+      await loadBatches({ mode: "refresh" });
     } catch (saveError: unknown) {
       showToast(
         saveError instanceof Error ? saveError.message : "TV episode review save failed",
@@ -661,7 +687,7 @@ export default function App() {
       });
       showToast(result.action_message ?? "Review confirmed");
       setEditingBatch(null);
-      await loadBatches();
+      await loadBatches({ mode: "refresh" });
     } catch (confirmError: unknown) {
       showToast(
         confirmError instanceof Error ? confirmError.message : "Review confirmation failed",
@@ -688,7 +714,7 @@ export default function App() {
       showToast(parts.join(" "), result.skipped.length ? "error" : "info");
       setSelected(new Set());
       setShowBulkApprove(false);
-      await loadBatches();
+      await loadBatches({ mode: "refresh" });
     } catch (bulkError: unknown) {
       showToast(
         bulkError instanceof Error ? bulkError.message : "Bulk approval failed",
@@ -717,7 +743,7 @@ export default function App() {
         failures ? "error" : "info",
       );
       setSelected(new Set());
-      await loadBatches();
+      await loadBatches({ mode: "refresh" });
     } finally {
       setBulkLoading(false);
     }
@@ -726,7 +752,7 @@ export default function App() {
   const handleRefresh = async () => {
     setLoadingAction("refresh");
     try {
-      await loadBatches();
+      await loadBatches({ mode: "refresh" });
     } finally {
       setLoadingAction(null);
     }
@@ -734,15 +760,18 @@ export default function App() {
 
   const handleScan = async () => {
     setLoadingAction("scan");
+    setIsScanningIngest(true);
     try {
       const status = await api.scanMusic();
       setScanStatus(status);
+      setIsScanningIngest(status.status === "running");
       if (status.already_running) {
         showToast("Scan already running");
       } else {
         showToast("Scan started");
       }
     } catch (scanError: unknown) {
+      setIsScanningIngest(false);
       showToast(
         scanError instanceof Error ? scanError.message : "Scan failed",
         "error",
@@ -771,7 +800,7 @@ export default function App() {
       });
       setTab("all");
       setSelected(new Set());
-      await loadBatches();
+      await loadBatches({ mode: "refresh" });
     } catch (resetError: unknown) {
       showToast(
         resetError instanceof Error ? resetError.message : "Reset failed",
@@ -791,7 +820,7 @@ export default function App() {
         hasProblems ? `Moved ${result.moved} batch(es) with issues` : `Moved ${result.moved} batch(es)`,
         hasProblems ? "error" : "info",
       );
-      await loadBatches();
+      await loadBatches({ mode: "refresh" });
       const summary = await api.getLibrarySummary();
       setLibrarySummary(summary);
       const hasFailedMoves = result.failed_moves > 0;
@@ -829,6 +858,7 @@ export default function App() {
           ? `Server time: ${formatArchiveTime(systemTime.server_utc)} ${archiveTimezone()}`
           : null}
         ingestPath={ingestPath}
+        isScanningIngest={isScanningIngest}
       />
       {scanStatus && scanStatus.status !== "idle" && (
         <section className={`scan-status scan-status--${scanStatus.status}`}>
@@ -882,8 +912,10 @@ export default function App() {
           reviews={reviews}
           detailLoading={detailLoading}
           detailErrors={detailErrors}
-          loading={loading}
-          error={error ?? undefined}
+          isInitialLoading={isInitialLoadingBatches}
+          isRefreshing={isRefreshingBatches}
+          hasLoaded={hasLoadedBatches}
+          error={batchLoadError ?? undefined}
           bulkLoading={bulkLoading}
           onSelectOne={handleSelectOne}
           onSelectAll={handleSelectAll}

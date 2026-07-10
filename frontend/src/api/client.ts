@@ -39,6 +39,7 @@ import type {
 } from "../types/archive";
 
 const BASE = "/api";
+const BATCH_LIST_TIMEOUT_MS = 30000;
 
 export function formatApiError(errorBody: unknown, fallback: string): string {
   const detail = (
@@ -110,8 +111,8 @@ export const api = {
   health: () => request<HealthResponse>("/health"),
   systemTime: () => request<SystemTimeResponse>("/system/time"),
   systemPaths: () => request<SystemPathsResponse>("/system/paths"),
-  listBatches: () => request<PaginatedResponse<BatchSummary>>("/batches?page_size=100"),
-  listPending: () => request<PaginatedResponse<BatchSummary>>("/batches/pending?page_size=100"),
+  listBatches: () => request<PaginatedResponse<BatchSummary>>("/batches?page_size=100", "GET", undefined, BATCH_LIST_TIMEOUT_MS),
+  listPending: () => request<PaginatedResponse<BatchSummary>>("/batches/pending?page_size=100", "GET", undefined, BATCH_LIST_TIMEOUT_MS),
   getBatch: (id: number) => request<IngestBatch>(`/batches/${id}`),
   getBatchChildBatches: (id: number) => request<BatchSummary[]>(`/batches/${id}/child-batches`),
   getBatchReview: (id: number) => request<BatchReview>(`/batches/${id}/review`),

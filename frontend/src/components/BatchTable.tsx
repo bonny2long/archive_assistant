@@ -24,7 +24,9 @@ type Props = {
   reviews: Record<number, BatchReview>;
   detailLoading: Set<number>;
   detailErrors: Record<number, string>;
-  loading?: boolean;
+  isInitialLoading?: boolean;
+  isRefreshing?: boolean;
+  hasLoaded?: boolean;
   error?: string;
   bulkLoading: boolean;
   onSelectOne: (id: number, checked: boolean) => void;
@@ -49,7 +51,9 @@ export default function BatchTable({
   reviews,
   detailLoading,
   detailErrors,
-  loading,
+  isInitialLoading = false,
+  isRefreshing = false,
+  hasLoaded = false,
   error,
   bulkLoading,
   onSelectOne,
@@ -110,6 +114,12 @@ export default function BatchTable({
           </button>
         </div>
       )}
+      {isRefreshing && batches.length > 0 && (
+        <div className="batch-table__refreshing"><i className="ti ti-loader-2 spinner" /> Refreshing...</div>
+      )}
+      {error && batches.length > 0 && (
+        <div className="batch-table__refreshing batch-table__refreshing--error"><i className="ti ti-wifi-off" /> Could not refresh batches. Keeping the last loaded table.</div>
+      )}
       <div className="batch-table-scroll">
         <table className="batch-table">
           <colgroup>
@@ -146,11 +156,11 @@ export default function BatchTable({
             </tr>
           </thead>
           <tbody>
-            {loading && batches.length === 0 && (
-              <tr><td colSpan={10}><div className="state-msg"><i className="ti ti-loader-2 spinner" />Loading batches...</div></td></tr>
+            {isInitialLoading && batches.length === 0 && !hasLoaded && (
+              <tr><td colSpan={10}><div className="state-msg"><i className="ti ti-loader-2 spinner" />Loading saved batches...</div></td></tr>
             )}
-            {!loading && error && batches.length === 0 && (
-              <tr><td colSpan={10}><div className="state-msg state-msg--error"><i className="ti ti-wifi-off" />{error}</div></td></tr>
+            {!isInitialLoading && error && batches.length === 0 && (
+              <tr><td colSpan={10}><div className="state-msg state-msg--error"><i className="ti ti-wifi-off" />Could not load batches. Backend may be unavailable.</div></td></tr>
             )}
             {batches.map((batch, index) => (
               <BatchRow
@@ -178,8 +188,8 @@ export default function BatchTable({
           </tbody>
         </table>
       </div>
-      {!loading && !error && batches.length === 0 && (
-        <div className="state-msg"><i className="ti ti-inbox" />No batches here</div>
+      {!isInitialLoading && !error && hasLoaded && batches.length === 0 && (
+        <div className="state-msg"><i className="ti ti-inbox" />No batches found. Click Scan ingest to discover ready media.</div>
       )}
     </div>
   );
