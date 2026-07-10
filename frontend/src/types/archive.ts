@@ -1072,6 +1072,9 @@ export interface RoutingDecision {
     media_class_counts: Record<string, number>;
     mixed_media_flag_count: number;
     source_fragment_group_count?: number;
+    source_fragment_count?: number;
+    embedded_album_value_count?: number;
+    source_identity_risk?: boolean;
     reconstruction_decision_count?: number;
     blocked_conflict_count: number;
     review_required_count?: number;

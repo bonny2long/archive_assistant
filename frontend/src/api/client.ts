@@ -138,6 +138,8 @@ export const api = {
     request<SplitDiscographyReleasesResult>(`/batches/${id}/split-discography-releases`, "POST", undefined, 180000),
   materializeApprovedCandidates: (id: number) =>
     request<MaterializeApprovedCandidatesResult>(`/batches/${id}/materialize-approved-candidates`, "POST", undefined, 180000),
+  createUniversalIngestionChildBatches: (id: number) =>
+    request<MaterializeApprovedCandidatesResult>(`/batches/${id}/universal-ingestion/create-child-batches`, "POST", undefined, 180000),
   getBatchMoves: (id: number) => request<BatchMoveSummary>(`/batches/${id}/moves`),
   updateBatchMetadata: (id: number, update: BatchMetadataUpdate) =>
     request<BatchSummary>(`/batches/${id}/metadata`, "PATCH", update),

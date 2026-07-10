@@ -51,6 +51,16 @@ function isProcessedContainerRow(batch: BatchSummary): boolean {
   return Boolean(batch.parent_is_drained || batch.parent_container_state === "drained_parent" || batch.display_state === "drained_parent");
 }
 
+function requiresChildBatchReview(batch: BatchSummary): boolean {
+  return batch.detected_type === "music_album"
+    && !isProcessedContainerRow(batch)
+    && (
+      (batch.candidate_group_count ?? 0) > 1
+      || batch.parent_container_state === "active_parent_container"
+      || batch.parent_container_state === "partial_parent_container"
+    );
+}
+
 function duplicateFragmentMatchCount(batch: BatchSummary): number {
   return Math.max(batch.possible_fragment_count ?? 0, batch.possible_duplicate_count ?? 0);
 }
@@ -71,6 +81,7 @@ function getBatchStatusLabel(batch: BatchSummary): string {
   if (isProcessedContainerRow(batch)) return "Processed container";
   const duplicateLabel = duplicateFragmentLabel(batch);
   if (duplicateLabel) return duplicateLabel;
+  if (requiresChildBatchReview(batch)) return (batch.approved_candidate_count ?? 0) > 0 ? "Create child batches" : "Review required";
   if (!isParentReviewContainer(batch)) return statusLabel(batch.status);
   if (batch.parent_container_state === "partial_parent_container") return "Active files remaining";
   if ((batch.approved_candidate_count ?? 0) > 0 && (batch.unresolved_candidate_count ?? 0) === 0 && (batch.child_batch_count ?? 0) === 0) {
@@ -83,7 +94,7 @@ function getBatchStatusLabel(batch: BatchSummary): string {
 function getBatchStatusTone(batch: BatchSummary): string {
   if (isProcessedContainerRow(batch)) return "moved";
   if (hasActiveDuplicateFragmentReview(batch)) return "needs_metadata_review";
-  if (batch.parent_container_state === "partial_parent_container") return "pending_review";
+  if (batch.parent_container_state === "partial_parent_container" || requiresChildBatchReview(batch)) return "pending_review";
   return batch.status;
 }
 
@@ -154,6 +165,7 @@ export default function BatchRow({
   const year = batch.year ?? "-";
   const percent = Math.round((batch.confidence ?? 0) * 100);
   const parentReviewContainer = isParentReviewContainer(batch);
+  const childBatchReviewRequired = requiresChildBatchReview(batch);
   const drainedParent = isProcessedContainerRow(batch);
   const splitCompleteParent = drainedParent;
   const isDiscographySplitChild =
@@ -164,11 +176,13 @@ export default function BatchRow({
   const duplicateLabel = duplicateFragmentLabel(batch);
   const activeDuplicateReview = hasActiveDuplicateFragmentReview(batch);
   const duplicateMatchCount = duplicateFragmentMatchCount(batch);
-  const approveDisabled = batch.status !== "pending_review" || parentReviewContainer || activeDuplicateReview;
+  const approveDisabled = batch.status !== "pending_review" || parentReviewContainer || childBatchReviewRequired || activeDuplicateReview;
   const approveTitle = drainedParent
     ? "This intake container is drained. Review child batches instead."
     : parentReviewContainer
     ? "Parent containers are not move-ready. Review child batches or handle active files first."
+    : childBatchReviewRequired
+      ? "Create child batches before approving. This source batch contains multiple candidate groups."
     : activeDuplicateReview
       ? "Needs duplicate/fragment review before move approval"
       : "Approve";
@@ -194,7 +208,7 @@ export default function BatchRow({
           {secondaryName}
           {quarantineReview && (
             <small className="row-artwork">
-              {batch.file_count} file(s) ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· {batch.folder_count} folder(s)
+              {batch.file_count} file(s) · {batch.folder_count} folder(s)
             </small>
           )}
           {!quarantineReview && batch.artwork_count > 0 && (
@@ -263,14 +277,21 @@ export default function BatchRow({
           </button>}
           <button
             className="btn-sm"
-            title="Edit metadata"
+            title={childBatchReviewRequired ? "Create child batches before metadata review" : "Edit metadata"}
             disabled={
               batch.status === "moved"
               || quarantineReview
-              || !editKind
+              || (!editKind && !childBatchReviewRequired)
             }
             style={{ color: "var(--accent-blue)" }}
-            onClick={(event) => { event.stopPropagation(); onEdit(batch); }}
+            onClick={(event) => {
+              event.stopPropagation();
+              if (childBatchReviewRequired) {
+                onOpenWorkspace(batch);
+                return;
+              }
+              onEdit(batch);
+            }}
           >
             <i className="ti ti-pencil" />
           </button>

@@ -101,14 +101,14 @@ def main():
     Session = sessionmaker(bind=engine)
     db = Session()
     try:
-        def music_only_allowed():
-            batch = make_batch(db, "m4d4-music-only")
+        def music_source_fragment_required():
+            batch = make_batch(db, "m4d4-music-source-fragment")
             add_candidate(db, batch, "music")
             db.commit()
             result = get_batch_routing_decision(db, batch.id)
-            assert result["decision"] == "music_editor_allowed"
-            assert "music_discography" in result["allowed_editors"]
-            assert result["blocked_editors"] == []
+            assert result["decision"] == "universal_review_required"
+            assert "source_fragment_group_detected" in result["reasons"]
+            assert "music_discography" in result["blocked_editors"]
 
         def music_ebook_required():
             batch = make_batch(db, "m4d4-ebook")
@@ -139,23 +139,24 @@ def main():
             assert result["allowed_editors"] == ["universal"]
             assert "music_discography" in result["blocked_editors"]
 
-        def fragment_recommended():
+        def fragment_required():
             batch = make_batch(db, "m4d4-fragment")
             add_candidate(db, batch, "music")
             add_flag(db, batch, "source_fragment_group_detected", "warning")
             db.commit()
             result = get_batch_routing_decision(db, batch.id)
-            assert result["decision"] == "universal_review_recommended"
+            assert result["decision"] == "universal_review_required"
             assert "source_fragment_group_detected" in result["reasons"]
 
-        def review_required_recommended():
+        def review_required_routes_to_universal():
             batch = make_batch(db, "m4d4-review")
             candidate = add_candidate(db, batch, "music")
             add_decision(db, batch, candidate, "review_required")
             db.commit()
             result = get_batch_routing_decision(db, batch.id)
-            assert result["decision"] == "universal_review_recommended"
+            assert result["decision"] == "universal_review_required"
             assert "reconstruction_review_required" in result["reasons"]
+            assert "source_fragment_group_detected" in result["reasons"]
 
         def chunk_identity():
             batch = make_batch(db, "m4d4-chunk")
@@ -172,12 +173,12 @@ def main():
             assert result["decision"] == "not_analyzed"
             assert result["requires_snapshot"] is True
 
-        def allowed_editors_for_allowed():
-            batch = make_batch(db, "m4d4-allowed-editors")
+        def not_analyzed_allows_snapshot_path():
+            batch = make_batch(db, "m4d4-allowed-editors", analyzed=False)
             add_candidate(db, batch, "music")
             db.commit()
             result = get_batch_routing_decision(db, batch.id)
-            assert "music_discography" in result["allowed_editors"]
+            assert result["decision"] == "not_analyzed"
             assert result["blocked_editors"] == []
 
         def blocked_editors_for_required():
@@ -189,15 +190,15 @@ def main():
             assert result["decision"] == "universal_review_required"
             assert "music_discography" in result["blocked_editors"]
 
-        check("Music-only batch, no fragments -> music_editor_allowed", music_only_allowed)
+        check("Music source-fragment batch -> universal_review_required", music_source_fragment_required)
         check("Music + ebook batch -> universal_review_required", music_ebook_required)
         check("Music + audiobook batch -> universal_review_required", music_audiobook_required)
         check("Blocked conflict decision -> blocked_conflict routing", blocked_conflict)
-        check("Source fragment group flag -> universal_review_recommended", fragment_recommended)
-        check("Review-required reconstruction -> universal_review_recommended", review_required_recommended)
+        check("Source fragment group flag -> universal_review_required", fragment_required)
+        check("Review-required reconstruction with source fragment -> universal_review_required", review_required_routes_to_universal)
         check("Chunk-derived candidate identity is flagged", chunk_identity)
         check("No analysis -> not_analyzed", not_analyzed)
-        check("music_editor_allowed exposes music_discography", allowed_editors_for_allowed)
+        check("No analysis without source identity remains not_analyzed", not_analyzed_allows_snapshot_path)
         check("universal_review_required blocks music_discography", blocked_editors_for_required)
     finally:
         db.close()

@@ -305,7 +305,8 @@ def list_batches(
         .all()
     )
 
-    items = [_batch_to_summary(b, db=db) for b in batches]
+    duplicate_clusters = build_duplicate_fragment_review(db)["clusters"]
+    items = [_batch_to_summary(b, db=db, duplicate_clusters=duplicate_clusters) for b in batches]
     return PaginatedResponse(
         items=items,
         page=page,
@@ -332,7 +333,8 @@ def list_pending_batches(
         .all()
     )
 
-    items = [item for item in (_batch_to_summary(b, db=db) for b in batches) if not item.parent_is_drained]
+    duplicate_clusters = build_duplicate_fragment_review(db)["clusters"]
+    items = [item for item in (_batch_to_summary(b, db=db, duplicate_clusters=duplicate_clusters) for b in batches) if not item.parent_is_drained]
     total = len(items)
     return PaginatedResponse(
         items=items,
@@ -654,6 +656,18 @@ def split_batch_discography_releases(batch_id: int, db: Session = Depends(get_db
 
 @router.post("/batches/{batch_id}/materialize-approved-candidates", response_model=MaterializeApprovedCandidatesResponse)
 def materialize_batch_approved_candidates(batch_id: int, db: Session = Depends(get_db)):
+    try:
+        return materialize_approved_candidates(db, batch_id)
+    except ValueError as exc:
+        detail = str(exc)
+        status_code = 404 if detail == "Batch not found" else 400
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+
+
+
+
+@router.post("/batches/{batch_id}/universal-ingestion/create-child-batches", response_model=MaterializeApprovedCandidatesResponse)
+def create_universal_ingestion_child_batches(batch_id: int, db: Session = Depends(get_db)):
     try:
         return materialize_approved_candidates(db, batch_id)
     except ValueError as exc:
@@ -2055,6 +2069,18 @@ def approve_batch(batch_id: int, db: Session = Depends(get_db)):
             ),
         )
 
+    routing_decision = get_batch_routing_decision(db, batch_id)
+    if routing_decision["decision"] in {"universal_review_required", "blocked_conflict"}:
+        return ApproveResponse(
+            batch_id=batch.id,
+            status=batch.status,
+            message=(
+                "Source folder name detected as identity. Review and create child batches before approval."
+                if "source_folder_name_used_as_identity" in routing_decision.get("reasons", [])
+                else "Create child batches before approving. This source batch contains multiple candidate groups."
+            ),
+        )
+
     duplicate_summary = duplicate_fragment_summary_for_batch(db, batch)
     if duplicate_summary["requires_duplicate_review"]:
         return ApproveResponse(
@@ -2327,10 +2353,11 @@ def _batch_to_summary(
     *,
     db: Session | None = None,
     action_message: str | None = None,
+    duplicate_clusters: list[dict] | None = None,
 ) -> BatchSummary:
     meta = build_review_state(batch.detected_type, batch.metadata_json)
     parent_summary = build_parent_candidate_summary(db, batch)
-    duplicate_summary = duplicate_fragment_summary_for_batch(db, batch) if db is not None else {
+    duplicate_summary = duplicate_fragment_summary_for_batch(db, batch, duplicate_clusters) if db is not None else {
         "possible_duplicate_group_id": None,
         "possible_duplicate_count": 0,
         "possible_fragment_group_id": None,

@@ -1426,6 +1426,60 @@ function MovedBatchDetail({ batch, moveSummary }: Props) {
 }
 
 
+function MusicAlbumEditorGate({ batch, moveSummary, review }: Props) {
+  const [routing, setRouting] = useState<RoutingDecision | null>(null);
+  const [routingError, setRoutingError] = useState<string | null>(null);
+  const [routingLoading, setRoutingLoading] = useState(true);
+
+  useEffect(() => {
+    setRoutingLoading(true);
+    api.getReviewRouting(batch.id, "music_album")
+      .then(setRouting)
+      .catch((err: unknown) => setRoutingError(err instanceof Error ? err.message : "Could not load routing decision"))
+      .finally(() => setRoutingLoading(false));
+  }, [batch.id]);
+
+  if (routingLoading) {
+    return <div className="routing-gate routing-gate--loading">Checking media candidates...</div>;
+  }
+
+  if (routingError) {
+    return (
+      <>
+        <div className="routing-gate routing-gate--warning">
+          <i className="ti ti-alert-triangle" />
+          Could not verify media candidates. Editor shown but review the Universal Ingestion panel above.
+        </div>
+        <ReviewBatchDetail batch={batch} moveSummary={moveSummary} review={review} />
+      </>
+    );
+  }
+
+  if (routing?.decision === "blocked_conflict") {
+    return (
+      <div className="routing-gate routing-gate--blocked">
+        <i className="ti ti-shield-x" />
+        <strong>Editor blocked - conflict requires resolution</strong>
+        <p>This source batch has a conflict that prevents safe music correction. Review candidates in the Review Workspace before editing metadata.</p>
+      </div>
+    );
+  }
+
+  if (routing?.decision === "universal_review_required") {
+    return (
+      <div className="routing-gate routing-gate--required">
+        <i className="ti ti-folders" />
+        <strong>Create child batches before metadata review</strong>
+        <p>This source batch contains multiple candidate groups or source-fragment identity risk. Use the Review Workspace to approve candidates and create child batches.</p>
+        <p className="routing-gate__reason">
+          Reasons: {routing.reasons.map((reason) => reason.replace(/_/g, " ")).join(" | ")}
+        </p>
+      </div>
+    );
+  }
+
+  return <ReviewBatchDetail batch={batch} moveSummary={moveSummary} review={review} />;
+}
 function DiscographyEditorGate({ batch, moveSummary, onEditBatch }: Props) {
   const [routing, setRouting] = useState<RoutingDecision | null>(null);
   const [routingError, setRoutingError] = useState<string | null>(null);
@@ -1516,6 +1570,13 @@ export default function BatchDetail({ batch, moveSummary, review, onEditBatch }:
   }
   if (batch.status === "needs_quarantine_review" || batch.status === "quarantined") {
     return <QuarantineReviewDetail batch={batch} moveSummary={moveSummary} />;
+  }
+  if (batch.detected_type === "music_album" && batch.status !== "moved") {
+    return (
+      <BatchReviewShell batch={batch}>
+        <MusicAlbumEditorGate batch={batch} moveSummary={moveSummary} review={review} />
+      </BatchReviewShell>
+    );
   }
   if (batch.detected_type === "music_discography") {
     return (

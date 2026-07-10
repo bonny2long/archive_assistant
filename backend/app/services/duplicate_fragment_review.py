@@ -588,7 +588,7 @@ def build_duplicate_fragment_review(db: Session, batch_id: int | None = None) ->
     }
 
 
-def duplicate_fragment_summary_for_batch(db: Session, batch: IngestBatch) -> dict[str, Any]:
+def duplicate_fragment_summary_for_batch(db: Session, batch: IngestBatch, clusters: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     metadata = batch.metadata_json or {}
     reviewed_state = metadata.get("duplicate_fragment_review_state")
     if _destination_sync_problem(batch):
@@ -610,7 +610,13 @@ def duplicate_fragment_summary_for_batch(db: Session, batch: IngestBatch) -> dic
             "requires_duplicate_review": False,
         }
 
-    clusters = build_duplicate_fragment_review(db, batch.id)["clusters"] if db is not None else []
+    if clusters is None:
+        clusters = build_duplicate_fragment_review(db, batch.id)["clusters"] if db is not None else []
+    else:
+        clusters = [
+            cluster for cluster in clusters
+            if any(row["batch_id"] == batch.id for row in cluster["batches"])
+        ]
     if not clusters:
         resolved_without_cluster = reviewed_state in DUPLICATE_REVIEWED_STATES
         missing_file_ownership = _has_missing_file_ownership(batch)

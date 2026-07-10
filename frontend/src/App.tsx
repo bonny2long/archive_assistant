@@ -411,7 +411,7 @@ export default function App() {
   };
 
   const handleWorkspaceMaterializeApprovedCandidates = async (batchId: number) => {
-    const result = await api.materializeApprovedCandidates(batchId);
+    const result = await api.createUniversalIngestionChildBatches(batchId);
     showToast(result.message);
     await loadBatches();
     await handleLoadDetail(batchId);

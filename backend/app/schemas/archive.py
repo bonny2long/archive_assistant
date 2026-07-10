@@ -229,6 +229,9 @@ class RoutingDecisionSummaryOut(BaseModel):
     media_class_counts: dict[str, int] = Field(default_factory=dict)
     mixed_media_flag_count: int = 0
     source_fragment_group_count: int = 0
+    source_fragment_count: int = 0
+    embedded_album_value_count: int = 0
+    source_identity_risk: bool = False
     reconstruction_decision_count: int = 0
     blocked_conflict_count: int = 0
     review_required_count: int = 0
