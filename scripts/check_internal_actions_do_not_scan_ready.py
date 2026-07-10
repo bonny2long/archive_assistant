@@ -1,4 +1,4 @@
-﻿"""AA-FLOW1 guard: internal archive actions must not scan _INGEST/ready."""
+"""AA-FLOW1 guard: internal archive actions must not scan _INGEST/ready."""
 from __future__ import annotations
 
 import re
@@ -84,7 +84,7 @@ def check_frontend_actions() -> None:
     handle_scan = const_block(app, "handleScan")
 
     assert_true("api.listBatches()" in load_batches, "loadBatches must reload batches from DB/API")
-    assert_true("api.listPending()" in load_batches, "loadBatches fallback must reload pending batches from DB/API")
+    assert_true("api.listPending()" not in load_batches, "loadBatches must not substitute a pending-only list for the full dashboard")
     assert_true("api.scanMusic" not in load_batches, "loadBatches must not scan ingest")
     assert_true("batchLoadRequestId" in load_batches, "loadBatches must ignore stale overlapping responses")
     assert_true("setBatchLoadError" in load_batches, "loadBatches must settle to an error state on failure")

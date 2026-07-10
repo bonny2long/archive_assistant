@@ -170,6 +170,35 @@ def add_music_batch_with_tracks(
     return batch
 
 
+def _set_resolved_filename_track_evidence(db, batch: IngestBatch) -> None:
+    for ingest_file in batch.files or []:
+        track_number = int(ingest_file.file_name.split(" - ", 1)[0])
+        metadata = dict(ingest_file.metadata_json or {})
+        embedded_track = int(str(metadata.get("tracknumber") or "0").split("/", 1)[0] or 0)
+        metadata["track_number_evidence"] = {
+            "filename_track": track_number,
+            "embedded_track": embedded_track,
+            "resolved_track": track_number,
+            "disc": 1,
+            "preferred_source": "filename_prefix",
+            "confidence": 0.9,
+            "warnings": [
+                "duplicate_embedded_tracknumber",
+                "track_order_source_filename_preferred",
+            ],
+        }
+        ingest_file.metadata_json = metadata
+    db.commit()
+    db.refresh(batch)
+
+
+def _mark_appendable_canonical(db, batch: IngestBatch) -> None:
+    metadata = dict(batch.metadata_json or {})
+    metadata["duplicate_fragment_review_state"] = "reviewed_merged"
+    batch.metadata_json = metadata
+    db.commit()
+    db.refresh(batch)
+
 def _cluster_row_for_batch(db, batch: IngestBatch) -> dict:
     scoped_review = batch_duplicate_fragment_review(batch.id, db)
     assert scoped_review["active_cluster"] is True
@@ -631,6 +660,126 @@ def test_incremental_append_conflict_is_blocked(db) -> None:
     assert db.query(IngestFile).filter(IngestFile.batch_id == canonical_seed.id).count() == 3
     assert db.query(IngestFile).filter(IngestFile.batch_id == incoming.id).count() == 1
 
+def test_resolved_filename_evidence_prevents_false_append_conflicts(db) -> None:
+    canonical = add_music_batch_with_tracks(
+        db,
+        artist="Lil Wayne",
+        album="Tha Carter II",
+        year="2005",
+        track_numbers=[1, 2, 3],
+        tracknumber_overrides={1: "1", 2: "1", 3: "1"},
+    )
+    _set_resolved_filename_track_evidence(db, canonical)
+    _mark_appendable_canonical(db, canonical)
+
+    incoming = add_music_batch_with_tracks(
+        db,
+        artist="Lil Wayne",
+        album="Tha Carter II",
+        year="2005",
+        track_numbers=[4, 5, 6],
+        tracknumber_overrides={4: "1", 5: "1", 6: "1"},
+    )
+    _set_resolved_filename_track_evidence(db, incoming)
+
+    scoped_review = batch_duplicate_fragment_review(incoming.id, db)
+    cluster = scoped_review["clusters"][0]
+    assert cluster["review_type"] == "possible_append_to_canonical"
+    plan = cluster["append_plan"]
+    assert len(plan["new_file_ids"]) == 3
+    assert plan["duplicate_file_ids"] == []
+    assert plan["conflict_file_ids"] == []
+
+    result = resolve_duplicate_fragment_group(
+        db,
+        incoming.id,
+        "append_to_existing_canonical_batch",
+        canonical_batch_id=canonical.id,
+    )
+    assert result["canonical_batch_id"] == canonical.id
+    assert db.query(IngestFile).filter(IngestFile.batch_id == canonical.id).count() == 6
+    assert db.get(IngestBatch, incoming.id).status == "merged"
+
+
+def test_resolved_same_track_conflict_still_blocks_append(db) -> None:
+    canonical = add_music_batch_with_tracks(
+        db,
+        artist="Lil Wayne",
+        album="Tha Carter II",
+        year="2005",
+        track_numbers=[6],
+        title_overrides={6: "Shooter"},
+        size_overrides={6: 6000},
+        tracknumber_overrides={6: "1"},
+    )
+    _set_resolved_filename_track_evidence(db, canonical)
+    _mark_appendable_canonical(db, canonical)
+
+    incoming = add_music_batch_with_tracks(
+        db,
+        artist="Lil Wayne",
+        album="Tha Carter II",
+        year="2005",
+        track_numbers=[6],
+        title_overrides={6: "Different Song"},
+        size_overrides={6: 9999},
+        tracknumber_overrides={6: "1"},
+    )
+    _set_resolved_filename_track_evidence(db, incoming)
+
+    cluster = batch_duplicate_fragment_review(incoming.id, db)["clusters"][0]
+    plan = cluster["append_plan"]
+    assert len(plan["conflict_file_ids"]) == 1
+    assert plan["new_file_ids"] == []
+    detail = plan["conflict_details"][0]
+    assert detail["disc_number"] == "1"
+    assert detail["track_number"] == "6"
+    assert detail["existing_file_names"] == ["06 - Shooter.flac"]
+
+    try:
+        resolve_duplicate_fragment_group(
+            db,
+            incoming.id,
+            "append_to_existing_canonical_batch",
+            canonical_batch_id=canonical.id,
+        )
+    except DuplicateFragmentResolutionError as exc:
+        assert "Track conflicts require review before append." in str(exc)
+    else:
+        raise AssertionError("Resolved same-track conflict should block append")
+
+
+def test_resolved_same_track_duplicate_is_skipped(db) -> None:
+    canonical = add_music_batch_with_tracks(
+        db,
+        artist="Lil Wayne",
+        album="Tha Carter II",
+        year="2005",
+        track_numbers=[6],
+        title_overrides={6: "Shooter"},
+        size_overrides={6: 6000},
+        tracknumber_overrides={6: "1"},
+    )
+    _set_resolved_filename_track_evidence(db, canonical)
+    _mark_appendable_canonical(db, canonical)
+
+    incoming = add_music_batch_with_tracks(
+        db,
+        artist="Lil Wayne",
+        album="Tha Carter II",
+        year="2005",
+        track_numbers=[6],
+        title_overrides={6: "Shooter"},
+        size_overrides={6: 6000},
+        tracknumber_overrides={6: "1"},
+    )
+    _set_resolved_filename_track_evidence(db, incoming)
+
+    plan = batch_duplicate_fragment_review(incoming.id, db)["clusters"][0]["append_plan"]
+    assert len(plan["duplicate_file_ids"]) == 1
+    assert plan["new_file_ids"] == []
+    assert plan["conflict_file_ids"] == []
+
 def main() -> None:
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
     Base.metadata.create_all(bind=engine)
@@ -649,6 +798,9 @@ def main() -> None:
         test_mark_duplicate_blocks_duplicate_batch_from_move,
         test_incremental_append_adds_only_new_files_and_blocks_incomplete_move,
         test_incremental_append_conflict_is_blocked,
+        test_resolved_filename_evidence_prevents_false_append_conflicts,
+        test_resolved_same_track_conflict_still_blocks_append,
+        test_resolved_same_track_duplicate_is_skipped,
         test_singletons_are_not_flagged,
         test_edition_conflicts_are_grouped_not_fragmented,
     ]

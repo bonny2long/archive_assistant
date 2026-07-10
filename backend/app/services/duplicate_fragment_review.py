@@ -17,6 +17,7 @@ from app.services.destination_authority import (
     sync_batch_destination_fields,
     validate_music_format_destination,
 )
+from app.services.music_metadata import music_track_numbers
 from app.services.parent_candidate_materialization import build_parent_candidate_summary
 
 DUPLICATE_STATE_NONE = "none"
@@ -285,6 +286,30 @@ def _track_key(ingest_file: IngestFile) -> tuple[str, str] | None:
     return (disc, track) if track else None
 
 
+def _resolved_music_track_key(ingest_file: IngestFile) -> tuple[str, str] | None:
+    metadata = ingest_file.metadata_json or {}
+    evidence = metadata.get("track_number_evidence")
+    if isinstance(evidence, dict):
+        resolved_track = _track_number(evidence.get("resolved_track"))
+        if resolved_track:
+            resolved_disc = (
+                _track_number(evidence.get("disc") or evidence.get("disc_number"))
+                or _track_number(_metadata_value(metadata, "discnumber", "disc_number"))
+                or "1"
+            )
+            return resolved_disc, resolved_track
+
+    disc, track = music_track_numbers(metadata, ingest_file.file_name)
+    if track is not None:
+        return str(disc or 1), str(track)
+
+    filename_track = _filename_track_int(ingest_file)
+    if filename_track is not None:
+        disc = _track_number(_metadata_value(metadata, "discnumber", "disc_number")) or "1"
+        return disc, str(filename_track)
+
+    return _track_key(ingest_file)
+
 def _duration_seconds(ingest_file: IngestFile) -> float | None:
     metadata = ingest_file.metadata_json or {}
     value = metadata.get("duration_seconds") or metadata.get("duration")
@@ -302,7 +327,8 @@ def _file_title(ingest_file: IngestFile) -> str:
 def _embedded_identity_key(ingest_file: IngestFile) -> tuple[str, str, str, str] | None:
     metadata = ingest_file.metadata_json or {}
     title = normalize_identity_value(_metadata_value(metadata, "title") or Path(ingest_file.file_name).stem)
-    track = _track_number(_metadata_value(metadata, "tracknumber", "track_number"))
+    track_key = _resolved_music_track_key(ingest_file)
+    track = track_key[1] if track_key is not None else ""
     album = normalize_identity_value(_metadata_value(metadata, "album"))
     artist = normalize_identity_value(_metadata_value(metadata, "artist", "albumartist", "album_artist"))
     if not title or not track:
@@ -373,7 +399,7 @@ def _append_plan(canonical: IngestBatch, incoming_batches: list[IngestBatch]) ->
     embedded_keys = {key: file for file in canonical_files if (key := _embedded_identity_key(file)) is not None}
     track_keys: dict[tuple[str, str], list[IngestFile]] = defaultdict(list)
     for file in canonical_files:
-        key = _track_key(file)
+        key = _resolved_music_track_key(file)
         if key is not None:
             track_keys[key].append(file)
 
@@ -391,7 +417,7 @@ def _append_plan(canonical: IngestBatch, incoming_batches: list[IngestBatch]) ->
             reason = "normalized_filename_and_size"
         else:
             embedded_key = _embedded_identity_key(incoming)
-            track_key = _track_key(incoming)
+            track_key = _resolved_music_track_key(incoming)
             if embedded_key is not None and embedded_key in embedded_keys:
                 reason = "embedded_title_track_album_artist"
             elif track_key is not None and track_key in track_keys:
@@ -406,6 +432,7 @@ def _append_plan(canonical: IngestBatch, incoming_batches: list[IngestBatch]) ->
                         "disc_number": track_key[0],
                         "track_number": track_key[1],
                         "existing_file_ids": [file.id for file in existing_matches],
+                        "existing_file_names": [file.file_name for file in existing_matches],
                         "reason": "same_disc_track_different_identity",
                     })
                     continue
