@@ -115,25 +115,29 @@ export default function App() {
     }
   }, []);
 
-  const loadBatches = useCallback(async (): Promise<BatchSummary[]> => {
+  const loadBatches = useCallback(async (options: { resetCachedDetails?: boolean } = {}): Promise<BatchSummary[]> => {
     setLoading(true);
     setError(null);
     try {
       const response = await api.listBatches();
       const items = response.items.filter((batch) => batch.status !== "merged");
       setBatches(items);
-      setDetails({});
-      setMoveSummaries({});
-      setReviews({});
+      if (options.resetCachedDetails) {
+        setDetails({});
+        setMoveSummaries({});
+        setReviews({});
+      }
       return items;
     } catch (primaryError: unknown) {
       try {
         const fallback = await api.listPending();
         const items = fallback.items.filter((batch) => batch.status !== "merged");
         setBatches(items);
-        setDetails({});
-        setMoveSummaries({});
-        setReviews({});
+        if (options.resetCachedDetails) {
+          setDetails({});
+          setMoveSummaries({});
+          setReviews({});
+        }
         return items;
       } catch {
         setError(primaryError instanceof Error ? primaryError.message : "Unable to load batches");
@@ -146,7 +150,7 @@ export default function App() {
   }, [loadLibrarySummary]);
 
   useEffect(() => {
-    void loadBatches();
+    void loadBatches({ resetCachedDetails: true });
     void api.health()
       .then((health) => setDevToolsEnabled(health.dev_tools_enabled))
       .catch(() => setDevToolsEnabled(false));

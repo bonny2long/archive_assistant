@@ -146,13 +146,13 @@ export default function BatchTable({
             </tr>
           </thead>
           <tbody>
-            {loading && (
+            {loading && batches.length === 0 && (
               <tr><td colSpan={10}><div className="state-msg"><i className="ti ti-loader-2 spinner" />Loading batches...</div></td></tr>
             )}
-            {!loading && error && (
+            {!loading && error && batches.length === 0 && (
               <tr><td colSpan={10}><div className="state-msg state-msg--error"><i className="ti ti-wifi-off" />{error}</div></td></tr>
             )}
-            {!loading && !error && batches.map((batch, index) => (
+            {batches.map((batch, index) => (
               <BatchRow
                 key={batch.id}
                 batch={batch}
