@@ -226,6 +226,28 @@ def test_track_completeness_detects_internal_gaps(db) -> None:
     assert complete_row["present_track_numbers"] == [1, 2, 3]
     assert complete_row["missing_track_numbers"] == []
     assert complete_row["completeness_status"] == "complete"
+
+    db.query(IngestFile).delete()
+    db.query(IngestBatch).delete()
+    db.commit()
+
+    add_music_batch_with_tracks(db, artist="Kanye West", album="Filename Fallback", year="2021", track_numbers=[1, 2, 3, 4, 5, 6])
+    collapsed_tags = add_music_batch_with_tracks(
+        db,
+        artist="Kanye West",
+        album="Filename Fallback",
+        year="2021",
+        track_numbers=[3, 4, 6],
+        track_count_override=6,
+        tracknumber_overrides={3: "1", 4: "1", 6: "1"},
+    )
+    collapsed_row = _cluster_row_for_batch(db, collapsed_tags)
+    assert collapsed_row["present_track_numbers"] == [3, 4, 6]
+    assert collapsed_row["missing_track_numbers"] == [1, 2, 5]
+    assert collapsed_row["track_completeness"]["track_number_source"] == "filename"
+    assert collapsed_row["completeness_status"] == "incomplete"
+
+
 def test_fragment_cluster_blocks_approval_and_move(db) -> None:
     donda10 = add_music_batch(db, artist="Kanye West", album="Donda", year="2021", track_count=10)
     donda3 = add_music_batch(db, artist="Kanye West", album="Donda", year="2021", track_count=3)
@@ -572,12 +594,12 @@ def test_incremental_append_adds_only_new_files_and_blocks_incomplete_move(db) -
 
     response = approve_batch(canonical.id, db)
     assert response.status == "pending_review"
-    assert "missing or conflicting tracks" in response.message
+    assert "missing track numbers" in response.message
     canonical.status = "approved"
     db.commit()
     moved, errors = move_approved_batches(db)
     assert moved == 0
-    assert any("missing or conflicting tracks" in error for error in errors)
+    assert any("missing track numbers" in error for error in errors)
     assert db.query(MoveAction).count() == 0
 
 

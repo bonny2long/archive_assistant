@@ -4,10 +4,12 @@ import type {
   BatchSummary,
   FieldEnvelope,
   MetadataCandidate,
+  MetadataEnrichmentApplyResponse,
   MusicTrackProfileSummary,
 } from "../types/archive";
 import MetadataAssistStaleWarning from "./MetadataAssistStaleWarning";
 import MetadataSuggestionChips from "./MetadataSuggestionChips";
+import MusicMetadataEnrichmentPanel from "./MusicMetadataEnrichmentPanel";
 
 type Props = {
   batch: BatchSummary;
@@ -314,6 +316,13 @@ export default function MusicAlbumReviewEditor({
   const releaseProfile = summary?.release_profile ?? {};
   const trackProfiles = summary?.track_profiles ?? [];
 
+  const handleEnrichmentApplied = (result: MetadataEnrichmentApplyResponse) => {
+    setArtist(result.artist);
+    setAlbum(result.album);
+    setYear(result.year ?? "");
+    if (result.genre) setGenre(result.genre);
+  };
+
   const preview = useMemo(() => {
     const root = destinationRoot(batch.suggested_destination);
     const artistFolder = sanitizePathPart(artist);
@@ -403,6 +412,10 @@ export default function MusicAlbumReviewEditor({
 
         <div className="editor-shell__body metadata-cockpit__body">
           <MetadataAssistStaleWarning batch={batch} />
+          <MusicMetadataEnrichmentPanel
+            batchId={batch.id}
+            onApplied={handleEnrichmentApplied}
+          />
 
           <section className="metadata-cockpit__hero">
             <div>

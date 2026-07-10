@@ -12,6 +12,7 @@ from app.models.media_metadata import (
     MediaIdentityCandidate,
     MixedMediaFlag,
     SourceFragment,
+    UniversalIngestionReviewAction,
 )
 from app.services.universal_ingestion import snapshot_universal_ingestion_boundary
 
@@ -163,6 +164,44 @@ def _candidate_has_chunk_identity(candidate: MediaIdentityCandidate) -> bool:
         or _is_source_chunk_name(candidate.candidate_key)
     )
 
+
+def _single_music_candidate_is_approved(
+    db: Session,
+    batch_id: int,
+    candidates: list[MediaIdentityCandidate],
+) -> bool:
+    if len(candidates) != 1 or candidates[0].candidate_media_type != "music":
+        return False
+    candidate_id = candidates[0].id
+    return db.query(UniversalIngestionReviewAction.id).filter(
+        UniversalIngestionReviewAction.batch_id == batch_id,
+        UniversalIngestionReviewAction.candidate_id == candidate_id,
+        UniversalIngestionReviewAction.action_type == "approve_candidate",
+        UniversalIngestionReviewAction.decision_status != "cleared",
+    ).first() is not None
+
+
+def _confirmed_materialized_music_child(
+    batch: IngestBatch,
+    candidates: list[MediaIdentityCandidate],
+) -> bool:
+    """Identify a reviewed child whose source-fragment work is already complete.
+
+    Materialization preserves the parent source-fragment evidence on the child,
+    so the presence of fragments alone must not force the child back through the
+    universal review route after its scoped metadata has been confirmed.
+    """
+    metadata = batch.metadata_json or {}
+    if batch.detected_type != "music_album" or len(candidates) != 1:
+        return False
+    if candidates[0].candidate_media_type != "music":
+        return False
+    if not batch.metadata_confirmed or not metadata.get("review_confirmed"):
+        return False
+    return bool(
+        metadata.get("source_parent_batch_id")
+        or metadata.get("split_from_batch_id")
+    )
 
 def _routing_result(
     batch_id: int,
@@ -328,7 +367,25 @@ def get_batch_routing_decision(
         if "non_music_candidate_present" not in reasons:
             _add_reason(reasons, "weak_discography_identity")
 
-    if any(reason in REQUIRED_REASONS for reason in reasons):
+    if _confirmed_materialized_music_child(batch, candidates):
+        # A confirmed child owns scoped files and keeps source fragments only as
+        # evidence. Do not make the operator repeat parent reconstruction review.
+        reasons = [
+            reason
+            for reason in reasons
+            if reason not in {
+                "source_fragment_group_detected",
+                "reconstruction_review_required",
+            }
+        ]
+
+    required_reasons = {reason for reason in reasons if reason in REQUIRED_REASONS}
+    if _single_music_candidate_is_approved(db, batch_id, candidates):
+        # One reconstructed album has already passed the operator decision.
+        # Its source fragments do not require creating another child batch.
+        required_reasons.discard("source_fragment_group_detected")
+
+    if required_reasons:
         decision = "universal_review_required"
         allowed_editors = ["universal"]
         blocked_editors = ["music_album", "music_discography"]

@@ -150,20 +150,14 @@ export default function App() {
       const items = response.items.filter((batch) => batch.status !== "merged");
       return applyItems(items) ? items : [];
     } catch (primaryError: unknown) {
-      try {
-        const fallback = await api.listPending();
-        const items = fallback.items.filter((batch) => batch.status !== "merged");
-        return applyItems(items) ? items : [];
-      } catch {
-        if (requestId === batchLoadRequestId.current) {
-          setBatchLoadError(
-            primaryError instanceof Error
-              ? primaryError.message
-              : "Could not load batches. Backend may be unavailable.",
-          );
-        }
-        return [];
+      if (requestId === batchLoadRequestId.current) {
+        setBatchLoadError(
+          primaryError instanceof Error
+            ? primaryError.message
+            : "Could not load batches. Backend may be unavailable.",
+        );
       }
+      return [];
     } finally {
       if (requestId === batchLoadRequestId.current) {
         await loadLibrarySummary();

@@ -560,6 +560,66 @@ class BatchMetadataUpdate(BaseModel):
     lookup_later: bool = False
 
 
+class MetadataEnrichmentTrackMatch(BaseModel):
+    file_id: int
+    file_name: str
+    score: float
+    disc_number: int | None = None
+    track_number: str | None = None
+    title: str
+    recording_id: str | None = None
+    release_id: str | None = None
+
+
+class MetadataEnrichmentCandidate(BaseModel):
+    provider: str
+    release_id: str
+    release_group_id: str | None = None
+    artist: str
+    title: str
+    year: str | None = None
+    release_type: str | None = None
+    genres: list[str] = []
+    provider_score: float = 0.0
+    match_score: float = 0.0
+    match_confidence: float = 0.0
+    matched_track_count: int = 0
+    local_track_count: int = 0
+    unmatched_track_count: int = 0
+    tracks: list[dict] = []
+    track_matches: list[MetadataEnrichmentTrackMatch] = []
+
+
+class MetadataEnrichmentPreview(BaseModel):
+    batch_id: int
+    provider: str
+    query: dict
+    candidates: list[MetadataEnrichmentCandidate] = []
+    message: str
+
+
+class MetadataEnrichmentApplyRequest(BaseModel):
+    release_id: str = Field(min_length=1)
+
+
+class MetadataEnrichmentApplyResponse(BaseModel):
+    batch_id: int
+    provider: str
+    release_id: str
+    artist: str
+    album: str
+    year: str | None = None
+    release_type: str | None = None
+    genre: str | None = None
+    match_confidence: float
+    applied_track_count: int
+    matched_track_count: int
+    local_track_count: int
+    filename_previews: list[dict] = []
+    suggested_destination: str | None = None
+    message: str
+
+
 class MovieMetadataUpdate(BaseModel):
     title: str = Field(min_length=1)
     year: str | None = Field(default=None, pattern=r"^(19|20)\d{2}$")

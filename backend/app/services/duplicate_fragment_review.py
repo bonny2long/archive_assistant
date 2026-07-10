@@ -795,15 +795,39 @@ def _track_int(value: object) -> int | None:
     return number if number > 0 else None
 
 
+def _filename_track_int(ingest_file: IngestFile) -> int | None:
+    stem = Path(ingest_file.file_name or "").stem
+    match = re.match(r"^\s*(\d{1,3})(?:\s*[-._)]|\s+)", stem)
+    if not match:
+        return None
+    number = int(match.group(1))
+    return number if number > 0 else None
+
+
 def _music_track_completeness(audio_files: list[IngestFile], metadata: dict[str, Any]) -> dict[str, Any]:
-    by_track: dict[int, list[IngestFile]] = defaultdict(list)
+    embedded_by_track: dict[int, list[IngestFile]] = defaultdict(list)
+    filename_by_track: dict[int, list[IngestFile]] = defaultdict(list)
     for ingest_file in audio_files:
         key = _track_key(ingest_file)
-        if not key:
-            continue
-        track_number = _track_int(key[1])
-        if track_number is not None:
-            by_track[track_number].append(ingest_file)
+        if key:
+            track_number = _track_int(key[1])
+            if track_number is not None:
+                embedded_by_track[track_number].append(ingest_file)
+        filename_track = _filename_track_int(ingest_file)
+        if filename_track is not None:
+            filename_by_track[filename_track].append(ingest_file)
+
+    embedded_has_conflicts = any(len(files) > 1 for files in embedded_by_track.values())
+    filename_covers_all = sum(len(files) for files in filename_by_track.values()) == len(audio_files)
+    filename_numbers_are_unique = all(len(files) == 1 for files in filename_by_track.values())
+    use_filename_numbers = (
+        bool(audio_files)
+        and embedded_has_conflicts
+        and filename_covers_all
+        and filename_numbers_are_unique
+    )
+    by_track = filename_by_track if use_filename_numbers else embedded_by_track
+    track_number_source = "filename" if use_filename_numbers else "embedded"
 
     present = sorted(by_track)
     duplicate_numbers = sorted(number for number, files in by_track.items() if len(files) > 1)
@@ -849,7 +873,28 @@ def _music_track_completeness(audio_files: list[IngestFile], metadata: dict[str,
         "duplicate_track_numbers": duplicate_numbers,
         "track_number_conflicts": conflicts,
         "completeness_status": status,
+        "track_number_source": track_number_source,
     }
+
+
+def music_track_completeness_for_batch(batch: IngestBatch) -> dict[str, Any]:
+    metadata = batch.metadata_json or {}
+    if _media_type(batch, metadata) != "music_album":
+        return {
+            "present_track_numbers": [],
+            "missing_track_numbers": [],
+            "duplicate_track_numbers": [],
+            "track_number_conflicts": [],
+            "completeness_status": "unknown",
+            "track_number_source": "unknown",
+        }
+    audio_files = [
+        ingest_file
+        for ingest_file in (batch.files or [])
+        if _is_music_audio_file(ingest_file)
+    ]
+    return _music_track_completeness(audio_files, metadata)
+
 
 def _rebuild_canonical_metadata(
     canonical: IngestBatch,

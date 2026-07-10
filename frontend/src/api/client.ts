@@ -36,6 +36,8 @@ import type {
   RoutingDecision,
   UniversalReviewAction,
   UniversalReviewActionUpdate,
+  MetadataEnrichmentApplyResponse,
+  MetadataEnrichmentPreview,
 } from "../types/archive";
 
 const BASE = "/api";
@@ -88,7 +90,7 @@ async function request<T>(path: string, method = "GET", body?: unknown, timeoutM
     });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
-      throw new Error(`${method} ${path} timed out. Refresh and check whether child batches were created.`);
+      throw new Error(`${method} ${path} timed out. Refresh and try again.`);
     }
     throw error;
   } finally {
@@ -141,6 +143,10 @@ export const api = {
   createUniversalIngestionChildBatches: (id: number) =>
     request<MaterializeApprovedCandidatesResult>(`/batches/${id}/universal-ingestion/create-child-batches`, "POST", undefined, 180000),
   getBatchMoves: (id: number) => request<BatchMoveSummary>(`/batches/${id}/moves`),
+  previewMetadataEnrichment: (id: number) =>
+    request<MetadataEnrichmentPreview>("/batches/" + id + "/metadata-enrichment/preview", "POST", undefined, 60000),
+  applyMetadataEnrichment: (id: number, releaseId: string) =>
+    request<MetadataEnrichmentApplyResponse>("/batches/" + id + "/metadata-enrichment/apply", "POST", { release_id: releaseId }, 60000),
   updateBatchMetadata: (id: number, update: BatchMetadataUpdate) =>
     request<BatchSummary>(`/batches/${id}/metadata`, "PATCH", update),
   updateDiscographyMetadata: (id: number, update: DiscographyMetadataUpdate) =>

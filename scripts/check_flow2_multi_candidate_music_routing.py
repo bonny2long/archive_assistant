@@ -20,6 +20,7 @@ from app.db.session import Base  # noqa: E402
 from app.models.archive import IngestBatch, IngestFile  # noqa: E402
 from app.models.media_metadata import (  # noqa: E402
     CandidateMember,
+    FragmentReconstructionDecision,
     MediaIdentityCandidate,
     SourceFragment,
     UniversalIngestionReviewAction,
@@ -202,6 +203,155 @@ def test_single_music_album_stays_music_editor_allowed(db) -> None:
     assert summary["needs_materialization"] is False
 
 
+def test_reviewed_single_fragment_album_can_be_approved(db) -> None:
+    destination = "Music/Library/FLAC/Lil Wayne/2011 - Tha Carter IV"
+    batch = IngestBatch(
+        source_kind="manual-drop",
+        source_path=str(PROJECT_ROOT / ".tmp" / "single-reviewed-fragment-album"),
+        detected_type="music_album",
+        status="pending_review",
+        confidence=0.95,
+        suggested_destination=destination,
+        suggested_metadata={
+            "artist": "Lil Wayne",
+            "album": "Tha Carter IV",
+            "year": "2011",
+            "format": "FLAC",
+            "suggested_destination": destination,
+        },
+        metadata_confirmed=True,
+        metadata_json={
+            "metadata_quality": "good",
+            "metadata_warnings": [],
+            "blocking_review_items": [],
+            "artist": "Lil Wayne",
+            "albumartist": "Lil Wayne",
+            "album": "Tha Carter IV",
+            "title": "Tha Carter IV",
+            "year": "2011",
+            "track_count": 1,
+            "file_count": 1,
+            "format": "FLAC",
+            "suggested_destination": destination,
+            "review_type": "music_album",
+            "review_mode": "single_item",
+        },
+    )
+    db.add(batch)
+    db.flush()
+    ingest_file = make_file(batch, "Tha Carter IV", "2011", 1)
+    db.add(ingest_file)
+    db.flush()
+    db.add(SourceFragment(
+        batch_id=batch.id,
+        source_root=batch.source_path,
+        relative_fragment_path="part-001",
+        fragment_group_key="tha-carter-iv",
+        fragment_label="part-001",
+        file_count=1,
+        media_class_counts_json={"music_audio": 1},
+    ))
+    add_candidate(db, batch, "Tha Carter IV", "2011", [ingest_file])
+    db.commit()
+
+    routing = get_batch_routing_decision(db, batch.id, target_editor="music_album")
+    assert "source_fragment_group_detected" in routing["reasons"]
+    assert routing["decision"] != "universal_review_required"
+    assert "music_album" not in routing["blocked_editors"]
+
+    response = approve_batch(batch.id, db)
+    assert response.status == "approved"
+    assert db.get(IngestBatch, batch.id).status == "approved"
+
+
+def test_confirmed_materialized_child_can_be_approved(db) -> None:
+    destination = "Music/Library/FLAC/Lil Wayne/2000 - Lights Out"
+    batch = IngestBatch(
+        source_kind="manual-drop",
+        source_path=str(PROJECT_ROOT / ".tmp" / "materialized-lights-out"),
+        detected_type="music_album",
+        status="pending_review",
+        confidence=1.0,
+        suggested_destination=destination,
+        suggested_metadata={
+            "artist": "Lil Wayne",
+            "album": "Lights Out",
+            "year": "2000",
+            "format": "FLAC",
+            "suggested_destination": destination,
+        },
+        metadata_confirmed=True,
+        metadata_json={
+            "artist": "Lil Wayne",
+            "albumartist": "Lil Wayne",
+            "album": "Lights Out",
+            "title": "Lights Out",
+            "year": "2000",
+            "track_count": 1,
+            "file_count": 1,
+            "format": "FLAC",
+            "suggested_destination": destination,
+            "review_type": "music_album",
+            "review_mode": "single_item",
+            "review_origin": "approved_candidate_materialization",
+            "source_parent_batch_id": 20,
+            "review_confirmed": True,
+            "metadata_warnings": [],
+            "blocking_review_items": [],
+        },
+    )
+    db.add(batch)
+    db.flush()
+    ingest_file = make_file(batch, "Lights Out", "2000", 1)
+    db.add(ingest_file)
+    db.flush()
+    candidate = MediaIdentityCandidate(
+        batch_id=batch.id,
+        candidate_key="music:lil-wayne:lights-out",
+        candidate_media_type="music",
+        candidate_title="Lights Out",
+        candidate_primary_creator="Lil Wayne",
+        candidate_year="2000",
+        candidate_confidence=1.0,
+        identity_evidence_json={"album": "Lights Out", "artist": "Lil Wayne"},
+    )
+    db.add(candidate)
+    db.flush()
+    db.add(CandidateMember(
+        candidate_id=candidate.id,
+        batch_file_id=ingest_file.id,
+        relative_path="Lights Out/01 - Track 1.flac",
+        media_class="music_audio",
+        role_in_candidate="primary",
+        sort_key=ingest_file.file_name,
+        evidence_json={"album": "Lights Out"},
+    ))
+    db.add(SourceFragment(
+        batch_id=batch.id,
+        source_root=batch.source_path,
+        relative_fragment_path="2000 - Lights Out",
+        fragment_group_key="lights-out",
+        fragment_label="2000 - Lights Out",
+        file_count=1,
+        media_class_counts_json={"music_audio": 1},
+    ))
+    db.add(FragmentReconstructionDecision(
+        batch_id=batch.id,
+        candidate_id=candidate.id,
+        decision="review_required",
+        severity="review",
+    ))
+    db.commit()
+
+    routing = get_batch_routing_decision(db, batch.id, target_editor="music_album")
+    assert routing["decision"] == "music_editor_allowed"
+    assert "source_fragment_group_detected" not in routing["reasons"]
+    assert "reconstruction_review_required" not in routing["reasons"]
+
+    response = approve_batch(batch.id, db)
+    assert response.status == "approved"
+    assert db.get(IngestBatch, batch.id).status == "approved"
+
 def main() -> None:
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
@@ -210,6 +360,8 @@ def main() -> None:
     try:
         test_music_source_routes_to_universal_review(db)
         test_single_music_album_stays_music_editor_allowed(db)
+        test_reviewed_single_fragment_album_can_be_approved(db)
+        test_confirmed_materialized_child_can_be_approved(db)
         print("PASS - AA-FLOW2 multi-candidate music routing verified")
     finally:
         db.close()

@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     dev_tools_enabled: bool = True
     archive_assistant_timezone: str = "America/Chicago"
 
+    musicbrainz_api_base_url: str = "https://musicbrainz.org/ws/2"
+    musicbrainz_user_agent: str = "ArchiveAssistant/0.1 (local metadata enrichment)"
+    musicbrainz_timeout_seconds: float = 15.0
+
     class Config:
         env_file = ".env"
 

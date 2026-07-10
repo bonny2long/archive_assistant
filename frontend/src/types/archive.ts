@@ -498,6 +498,73 @@ export type MetadataCandidate = {
   notes: string[];
 };
 
+export type MetadataEnrichmentTrackMatch = {
+  file_id: number;
+  file_name: string;
+  score: number;
+  disc_number?: number | null;
+  track_number?: string | null;
+  title: string;
+  recording_id?: string | null;
+  release_id?: string | null;
+};
+
+export type MetadataEnrichmentCandidate = {
+  provider: string;
+  release_id: string;
+  release_group_id?: string | null;
+  artist: string;
+  title: string;
+  year?: string | null;
+  release_type?: string | null;
+  genres: string[];
+  provider_score: number;
+  match_score: number;
+  match_confidence: number;
+  matched_track_count: number;
+  local_track_count: number;
+  unmatched_track_count: number;
+  tracks: Array<Record<string, unknown>>;
+  track_matches: MetadataEnrichmentTrackMatch[];
+};
+
+export type MetadataEnrichmentPreview = {
+  batch_id: number;
+  provider: string;
+  query: {
+    release_title?: string;
+    raw_release_title?: string;
+    artist?: string | null;
+    year?: string | null;
+    tracks?: Array<Record<string, unknown>>;
+  };
+  candidates: MetadataEnrichmentCandidate[];
+  message: string;
+};
+
+export type MetadataEnrichmentApplyResponse = {
+  batch_id: number;
+  provider: string;
+  release_id: string;
+  artist: string;
+  album: string;
+  year?: string | null;
+  release_type?: string | null;
+  genre?: string | null;
+  match_confidence: number;
+  applied_track_count: number;
+  matched_track_count: number;
+  local_track_count: number;
+  filename_previews: Array<{
+    file_id: number;
+    source_name: string;
+    suggested_track_number?: string | null;
+    suggested_title: string;
+  }>;
+  suggested_destination?: string | null;
+  message: string;
+};
+
 export type ChapterCandidate = {
   source_file: string;
   track_number?: string | number | null;

@@ -12,6 +12,9 @@ from app.schemas.archive import (
     BatchMoveSummary,
     BatchMetadataQualityOut,
     BatchMetadataUpdate,
+    MetadataEnrichmentApplyRequest,
+    MetadataEnrichmentApplyResponse,
+    MetadataEnrichmentPreview,
     BatchReview,
     BatchReviewTrack,
     BatchSummary,
@@ -55,6 +58,7 @@ from app.services.duplicate_fragment_review import (
     build_duplicate_fragment_review,
     DuplicateFragmentResolutionError,
     duplicate_fragment_summary_for_batch,
+    music_track_completeness_for_batch,
     resolve_duplicate_fragment_group,
 )
 from app.services.batch_merge import (
@@ -127,9 +131,16 @@ def _music_track_completeness_blocker(batch: IngestBatch) -> str | None:
         return None
     if metadata.get("accepted_incomplete_album"):
         return None
-    status = metadata.get("completeness_status") or (metadata.get("track_completeness") or {}).get("completeness_status")
-    if status in {"incomplete", "conflict"}:
-        return "Music album has missing or conflicting tracks before approval."
+    completeness = music_track_completeness_for_batch(batch)
+    status = completeness.get("completeness_status")
+    if status == "incomplete":
+        missing = completeness.get("missing_track_numbers") or []
+        missing_text = ", ".join(str(number) for number in missing)
+        return f"Music album is missing track numbers: {missing_text}." if missing_text else "Music album has missing tracks before approval."
+    if status == "conflict":
+        duplicates = completeness.get("duplicate_track_numbers") or []
+        duplicate_text = ", ".join(str(number) for number in duplicates)
+        return f"Music album has conflicting track numbers: {duplicate_text}." if duplicate_text else "Music album has conflicting tracks before approval."
     return None
 
 
@@ -673,6 +684,36 @@ def create_universal_ingestion_child_batches(batch_id: int, db: Session = Depend
     except ValueError as exc:
         detail = str(exc)
         status_code = 404 if detail == "Batch not found" else 400
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+
+
+@router.post("/batches/{batch_id}/metadata-enrichment/preview", response_model=MetadataEnrichmentPreview)
+def preview_batch_metadata_enrichment(batch_id: int, db: Session = Depends(get_db)):
+    try:
+        from app.services.music_metadata_enrichment import preview_music_metadata_enrichment
+        return preview_music_metadata_enrichment(db, batch_id)
+    except Exception as exc:
+        if isinstance(exc, HTTPException):
+            raise
+        detail = str(exc) or "Metadata enrichment preview failed."
+        status_code = 404 if detail == "Batch not found." else 502
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+
+
+@router.post("/batches/{batch_id}/metadata-enrichment/apply", response_model=MetadataEnrichmentApplyResponse)
+def apply_batch_metadata_enrichment(
+    batch_id: int,
+    update: MetadataEnrichmentApplyRequest,
+    db: Session = Depends(get_db),
+):
+    try:
+        from app.services.music_metadata_enrichment import apply_music_metadata_enrichment
+        return apply_music_metadata_enrichment(db, batch_id, update.release_id)
+    except Exception as exc:
+        if isinstance(exc, HTTPException):
+            raise
+        detail = str(exc) or "Metadata enrichment apply failed."
+        status_code = 404 if detail == "Batch not found." else 400
         raise HTTPException(status_code=status_code, detail=detail) from exc
 
 
@@ -2071,14 +2112,19 @@ def approve_batch(batch_id: int, db: Session = Depends(get_db)):
 
     routing_decision = get_batch_routing_decision(db, batch_id)
     if routing_decision["decision"] in {"universal_review_required", "blocked_conflict"}:
+        routing_reasons = set(routing_decision.get("reasons", []))
+        if "source_folder_name_used_as_identity" in routing_reasons:
+            routing_message = "Source folder name detected as identity. Review and create child batches before approval."
+        elif routing_reasons & {"multiple_candidate_groups", "multiple_embedded_album_values"}:
+            routing_message = "Create child batches before approving. This source batch contains multiple candidate groups."
+        elif routing_decision["decision"] == "blocked_conflict":
+            routing_message = "Resolve the blocking candidate conflict in Review Workspace before approval."
+        else:
+            routing_message = "Complete the required Review Workspace decisions before approval."
         return ApproveResponse(
             batch_id=batch.id,
             status=batch.status,
-            message=(
-                "Source folder name detected as identity. Review and create child batches before approval."
-                if "source_folder_name_used_as_identity" in routing_decision.get("reasons", [])
-                else "Create child batches before approving. This source batch contains multiple candidate groups."
-            ),
+            message=routing_message,
         )
 
     duplicate_summary = duplicate_fragment_summary_for_batch(db, batch)

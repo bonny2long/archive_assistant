@@ -23,8 +23,8 @@ export default function MetadataAssistStaleWarning({ batch }: Props) {
       <div>
         <strong>Metadata suggestions may be stale</strong>
         <span>
-          Suggestions were built by an older metadata parser. Reset/rescan this
-          test batch to refresh them.
+          Suggestions were built by an older metadata parser. Use Find metadata
+          below to rebuild suggestions from the attached files.
         </span>
       </div>
     </div>

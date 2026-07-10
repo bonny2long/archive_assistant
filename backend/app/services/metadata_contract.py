@@ -24,6 +24,7 @@ VALID_METADATA_SOURCES = {
     "manual",
     "local_metadata_db",
     "local_audio_analysis",
+    "musicbrainz_lookup",
     "local_ai_suggestion",
     "unknown",
 }

@@ -28,7 +28,7 @@ from app.services.library_manifest import (
 )
 from app.services.move_manifest import write_move_manifest
 from app.services.parent_candidate_materialization import build_parent_candidate_summary
-from app.services.duplicate_fragment_review import duplicate_fragment_summary_for_batch
+from app.services.duplicate_fragment_review import duplicate_fragment_summary_for_batch, music_track_completeness_for_batch
 
 
 def _music_track_completeness_blocker(batch: IngestBatch) -> str | None:
@@ -37,9 +37,16 @@ def _music_track_completeness_blocker(batch: IngestBatch) -> str | None:
         return None
     if metadata.get("accepted_incomplete_album"):
         return None
-    status = metadata.get("completeness_status") or (metadata.get("track_completeness") or {}).get("completeness_status")
-    if status in {"incomplete", "conflict"}:
-        return "Music album has missing or conflicting tracks before move."
+    completeness = music_track_completeness_for_batch(batch)
+    status = completeness.get("completeness_status")
+    if status == "incomplete":
+        missing = completeness.get("missing_track_numbers") or []
+        missing_text = ", ".join(str(number) for number in missing)
+        return f"Music album is missing track numbers: {missing_text}." if missing_text else "Music album has missing tracks before move."
+    if status == "conflict":
+        duplicates = completeness.get("duplicate_track_numbers") or []
+        duplicate_text = ", ".join(str(number) for number in duplicates)
+        return f"Music album has conflicting track numbers: {duplicate_text}." if duplicate_text else "Music album has conflicting tracks before move."
     return None
 
 def _safe_path_part(value: str) -> str:
