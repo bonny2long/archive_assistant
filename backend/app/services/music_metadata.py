@@ -287,6 +287,26 @@ def track_number_evidence(metadata: dict | None, filename: str) -> dict:
     }
 
 
+def resolved_music_track_evidence(metadata: dict | None, filename: str = "") -> dict:
+    """Return normalized, persisted track evidence or derive it from the file."""
+    metadata = metadata or {}
+    stored = metadata.get("track_number_evidence") if isinstance(metadata, dict) else None
+    evidence = dict(stored) if isinstance(stored, dict) else track_number_evidence(metadata, filename)
+    resolved_track = _positive_int(evidence.get("resolved_track"))
+    disc = _positive_int(evidence.get("disc") or evidence.get("disc_number"), 1) or 1
+    if resolved_track is None:
+        derived = track_number_evidence(metadata, filename)
+        resolved_track = _positive_int(derived.get("resolved_track"))
+        if resolved_track is not None:
+            evidence = derived
+            disc = _positive_int(derived.get("disc"), 1) or 1
+    evidence["resolved_track"] = resolved_track
+    evidence["disc"] = disc
+    evidence["preferred_source"] = str(evidence.get("preferred_source") or "fallback_position")
+    evidence["warnings"] = list(dict.fromkeys(evidence.get("warnings") or []))
+    return evidence
+
+
 def _metadata_for_track_item(item) -> dict:
     if isinstance(item, dict):
         return item
@@ -400,8 +420,8 @@ def music_track_numbers(
     filename: str = "",
 ) -> tuple[int, int | None]:
     metadata = metadata or {}
-    evidence = metadata.get("track_number_evidence") if isinstance(metadata, dict) else None
-    if isinstance(evidence, dict) and evidence.get("resolved_track") is not None:
+    evidence = resolved_music_track_evidence(metadata, filename)
+    if evidence.get("resolved_track") is not None:
         return int(evidence.get("disc") or 1), int(evidence["resolved_track"])
     raw_disc = metadata.get("discnumber")
     raw_track = str(metadata.get("tracknumber") or "").strip()

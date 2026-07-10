@@ -103,6 +103,9 @@ class UniversalIngestionSummaryOut(BaseModel):
     media_class_counts: dict[str, int] = Field(default_factory=dict)
     worst_decision: str = "safe_group"
     action_summary: dict = Field(default_factory=dict)
+    source_origin_count: int = 0
+    resolved_source_origin_count: int = 0
+    source_origins_resolved: bool = False
 
 
 class SourceFragmentOut(BaseModel):

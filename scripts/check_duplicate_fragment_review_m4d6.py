@@ -25,6 +25,8 @@ from app.services.duplicate_fragment_review import (  # noqa: E402
     resolve_duplicate_fragment_group,
 )
 from app.services.mover import move_approved_batches  # noqa: E402
+from app.services.universal_ingestion_review import get_batch_universal_ingestion_review  # noqa: E402
+from app.services.universal_review_routing import get_batch_routing_decision  # noqa: E402
 from app.api.routes import approve_batch, batch_duplicate_fragment_review, _batch_to_summary  # noqa: E402
 
 
@@ -701,6 +703,108 @@ def test_resolved_filename_evidence_prevents_false_append_conflicts(db) -> None:
     assert db.get(IngestBatch, incoming.id).status == "merged"
 
 
+def test_fragment_append_refreshes_universal_review_from_resolved_tracks(db) -> None:
+    canonical = add_music_batch_with_tracks(
+        db,
+        artist="Unknown Artist",
+        album="Tha Carter II",
+        year="2005",
+        track_numbers=[1, 2, 3, 4, 5, 6, 7],
+        track_count_override=22,
+        tracknumber_overrides={number: "1" for number in [1, 2, 3, 4, 5, 6, 7]},
+    )
+    _set_resolved_filename_track_evidence(db, canonical)
+    _mark_appendable_canonical(db, canonical)
+
+    source_track_sets = [
+        [9, 10, 11, 12, 13],
+        [14, 15, 16, 17, 18],
+        [19, 21, 22],
+    ]
+    sources = []
+    for track_numbers in source_track_sets:
+        source = add_music_batch_with_tracks(
+            db,
+            artist="Unknown Artist",
+            album="Tha Carter II",
+            year="2005",
+            track_numbers=track_numbers,
+            track_count_override=22,
+            tracknumber_overrides={number: "1" for number in track_numbers},
+        )
+        _set_resolved_filename_track_evidence(db, source)
+        sources.append(source)
+
+    result = resolve_duplicate_fragment_group(
+        db,
+        sources[0].id,
+        "append_to_existing_canonical_batch",
+        canonical_batch_id=canonical.id,
+    )
+    assert result["canonical_batch_id"] == canonical.id
+    assert db.query(IngestFile).filter(IngestFile.batch_id == canonical.id).count() == 20
+    assert all(db.get(IngestBatch, source.id).status == "merged" for source in sources)
+
+    db.refresh(canonical)
+    metadata = canonical.metadata_json or {}
+    assert metadata["duplicate_fragment_review_state"] == "reviewed_merged"
+    assert metadata["duplicate_track_numbers"] == []
+    assert metadata["track_number_conflicts"] == []
+    assert metadata["missing_track_numbers"] == [8, 20]
+    assert metadata["completeness_status"] == "incomplete"
+    assert metadata["source_origin_count"] == 4
+    assert metadata["resolved_source_origin_count"] == 4
+    assert metadata["source_origins_resolved"] is True
+    track_rows = metadata["tracks"]
+    assert len(track_rows) == 20
+    assert sorted(row["track_number"] for row in track_rows) == [
+        1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22,
+    ]
+    assert all(row["track_number_source"] == "filename_prefix" for row in track_rows)
+
+    legacy_metadata = dict(canonical.metadata_json or {})
+    legacy_metadata.pop("source_origins_resolved", None)
+    legacy_metadata.pop("source_origin_count", None)
+    legacy_metadata.pop("resolved_source_origin_count", None)
+    legacy_metadata["tracks"] = [
+        {**row, "track_number": "1", "track_number_source": "embedded_tracknumber"}
+        for row in legacy_metadata["tracks"]
+    ]
+    canonical.metadata_json = legacy_metadata
+    db.commit()
+
+    review = get_batch_universal_ingestion_review(db, canonical.id, snapshot=True)
+    db.refresh(canonical)
+    repaired_metadata = canonical.metadata_json or {}
+    assert repaired_metadata["source_origins_resolved"] is True
+    assert sorted(row["track_number"] for row in repaired_metadata["tracks"]) == [
+        1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22,
+    ]
+    assert review["summary"]["candidate_count"] == 1
+    assert review["summary"]["member_count"] == 20
+    assert review["summary"]["source_origin_count"] == 4
+    assert review["summary"]["source_origins_resolved"] is True
+    flag_types = {flag["flag_type"] for flag in review["mixed_media_flags"]}
+    assert "track_number_conflict" not in flag_types
+    assert "merge_recommended" not in flag_types
+    assert "split_release_candidate" not in flag_types
+    assert "partial_track_set" in flag_types
+    assert review["summary"]["decision_counts"]["review_required"] == 0
+
+    routing = get_batch_routing_decision(db, canonical.id)
+    assert routing["decision"] == "music_editor_allowed"
+    assert "source_fragment_group_detected" not in routing["reasons"]
+    assert "reconstruction_review_required" not in routing["reasons"]
+
+    metadata = dict(canonical.metadata_json or {})
+    metadata["accepted_incomplete_album"] = True
+    canonical.metadata_json = metadata
+    canonical.metadata_confirmed = False
+    db.commit()
+    approval = approve_batch(canonical.id, db)
+    assert approval.status == "pending_review"
+    assert "metadata review" in approval.message.casefold()
+
 def test_resolved_same_track_conflict_still_blocks_append(db) -> None:
     canonical = add_music_batch_with_tracks(
         db,
@@ -799,6 +903,7 @@ def main() -> None:
         test_incremental_append_adds_only_new_files_and_blocks_incomplete_move,
         test_incremental_append_conflict_is_blocked,
         test_resolved_filename_evidence_prevents_false_append_conflicts,
+        test_fragment_append_refreshes_universal_review_from_resolved_tracks,
         test_resolved_same_track_conflict_still_blocks_append,
         test_resolved_same_track_duplicate_is_skipped,
         test_singletons_are_not_flagged,

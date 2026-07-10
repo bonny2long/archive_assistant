@@ -16,6 +16,8 @@ from app.models.media_metadata import (
     UniversalIngestionReviewAction,
 )
 from app.core.time import now_utc
+from app.services.duplicate_fragment_review import refresh_resolved_canonical_review_state
+from app.services.music_metadata import resolved_music_track_evidence
 from app.services.universal_ingestion import snapshot_universal_ingestion_boundary
 
 PHASE_NAME = "AA-M4D.2 — Universal Ingestion Review API + UI"
@@ -314,7 +316,9 @@ def get_batch_universal_ingestion_review(
     if batch is None:
         raise ValueError("Batch not found")
     if snapshot:
-        snapshot_universal_ingestion_boundary(db, batch)
+        refreshed_legacy_canonical = refresh_resolved_canonical_review_state(db, batch)
+        if not refreshed_legacy_canonical:
+            snapshot_universal_ingestion_boundary(db, batch)
         db.commit()
     if not db.query(SourceFragment.id).filter(SourceFragment.batch_id == batch_id).first():
         return _empty_payload(batch_id)
@@ -383,6 +387,11 @@ def get_batch_universal_ingestion_review(
             ingest_file = ingest_files.get(member.batch_file_id or -1)
             fields = _metadata_fields(ingest_file.metadata_json if ingest_file else None)
             evidence = member.evidence_json or {}
+            track_evidence = (
+                resolved_music_track_evidence(ingest_file.metadata_json, ingest_file.file_name)
+                if ingest_file and candidate.candidate_media_type == "music"
+                else {}
+            )
             member_payloads.append({
                 "id": member.id,
                 "candidate_id": member.candidate_id,
@@ -394,8 +403,8 @@ def get_batch_universal_ingestion_review(
                 "media_class": member.media_class,
                 "size_bytes": ingest_file.size_bytes if ingest_file else None,
                 "duration_seconds": _first(fields, "duration_seconds"),
-                "track_number": _first(fields, "track_number", "tracknumber"),
-                "disc_number": _first(fields, "disc_number", "discnumber"),
+                "track_number": track_evidence.get("resolved_track") or _first(fields, "track_number", "tracknumber"),
+                "disc_number": track_evidence.get("disc") or _first(fields, "disc_number", "discnumber"),
                 "season_number": evidence.get("season"),
                 "episode_number": evidence.get("episode"),
                 "title": _first(fields, "title"),
@@ -472,6 +481,9 @@ def get_batch_universal_ingestion_review(
             "media_class_counts": dict(media_class_counts),
             "worst_decision": worst_universal_decision([decision.decision for decision in decisions]),
             "action_summary": compute_review_action_summary(db, batch_id),
+            "source_origin_count": int((batch.metadata_json or {}).get("source_origin_count") or 0),
+            "resolved_source_origin_count": int((batch.metadata_json or {}).get("resolved_source_origin_count") or 0),
+            "source_origins_resolved": bool((batch.metadata_json or {}).get("source_origins_resolved")),
         },
         "source_fragments": source_fragments,
         "candidates": candidate_payloads,

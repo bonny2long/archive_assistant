@@ -359,12 +359,26 @@ export default function App() {
   const handleDuplicateReviewResolution = async (batchId: number, update: DuplicateFragmentResolutionRequest) => {
     const result = await api.resolveDuplicateFragmentReview(batchId, update);
     showToast(result.message);
-    await loadBatches();
+    const refreshedBatches = await loadBatches();
     if (result.canonical_batch_id) {
       try {
-        const detail = await api.getBatch(result.canonical_batch_id);
-        setDetails((previous) => ({ ...previous, [result.canonical_batch_id as number]: detail }));
-        setWorkspaceDetail((current) => current?.id === result.canonical_batch_id ? detail : current);
+        const canonicalId = result.canonical_batch_id;
+        const [detail] = await Promise.all([
+          api.getBatch(canonicalId),
+          api.getBatchUniversalIngestion(canonicalId, false),
+        ]);
+        setDetails((previous) => ({ ...previous, [canonicalId]: detail }));
+        if (update.action === "merge_into_one_batch" || update.action === "append_to_existing_canonical_batch") {
+          const canonicalSummary = refreshedBatches.find((batch) => batch.id === canonicalId) ?? null;
+          setDuplicateReviewBatch(null);
+          setDuplicateReview(null);
+          setDuplicateReviewError(null);
+          setWorkspaceBatch(canonicalSummary);
+          setWorkspaceDetail(canonicalSummary ? detail : null);
+          setWorkspaceError(null);
+        } else {
+          setWorkspaceDetail((current) => current?.id === canonicalId ? detail : current);
+        }
       } catch {
         // Dashboard refresh still succeeded; stale detail will reload when opened.
       }

@@ -17,6 +17,7 @@ from app.models.media_metadata import (
     MixedMediaFlag,
     SourceFragment,
 )
+from app.services.music_metadata import resolved_music_track_evidence
 
 PHASE_NAME = "AA-M4D.1 — Universal Media Ingestion Boundary + Fragment Reconstruction"
 
@@ -230,13 +231,15 @@ def _music_candidate_key(item: ClassifiedFile) -> tuple[str, dict[str, Any]]:
         group = item.evidence.get("fragment_group_key") or (parts[0] if parts else "loose-audio")
         key = f"music:custom:{_key_part(group)}"
         confidence = 0.45
+    track_evidence = resolved_music_track_evidence(item.ingest_file.metadata_json, item.ingest_file.file_name)
     return key, {
         "artist": artist,
         "album": album,
         "year": _field(fields, "date", "year"),
         "title": _field(fields, "title"),
-        "track_number": _field(fields, "track_number", "tracknumber"),
-        "disc_number": _field(fields, "disc_number", "discnumber"),
+        "track_number": track_evidence.get("resolved_track"),
+        "disc_number": track_evidence.get("disc"),
+        "track_number_source": track_evidence.get("preferred_source"),
         "release_type": _field(fields, "release_type"),
         "confidence": confidence,
     }
@@ -293,6 +296,11 @@ def _video_candidate_key(item: ClassifiedFile, media_type: str) -> tuple[str, di
     return key, {"title": title, "year": year.group(1) if year else None, "confidence": 0.76 if year else 0.5}
 
 def _sort_key(item: ClassifiedFile) -> str:
+    if item.media_class == "music_audio":
+        evidence = resolved_music_track_evidence(item.ingest_file.metadata_json, item.ingest_file.file_name)
+        disc = int(evidence.get("disc") or 1)
+        track = int(evidence.get("resolved_track") or 1_000_000)
+        return f"{disc:04d}:{track:08d}:{item.relative_path}"
     fields = _metadata_fields(item.ingest_file)
     disc = _field(fields, "disc_number", "discnumber") or "0"
     track = _field(fields, "track_number", "tracknumber") or _field(fields, "chapter") or "0"
@@ -384,8 +392,13 @@ def _detect_track_conflicts(candidates: Any) -> None:
         disc_values: set[str] = set()
         for member in candidate.members:
             fields = _metadata_fields(member.ingest_file)
-            track = _track_number(_field(fields, "track_number", "tracknumber", "chapter"))
-            disc = _track_number(_field(fields, "disc_number", "discnumber"))
+            if candidate.media_type == "music":
+                evidence = resolved_music_track_evidence(member.ingest_file.metadata_json, member.ingest_file.file_name)
+                track = _track_number(str(evidence.get("resolved_track") or ""))
+                disc = _track_number(str(evidence.get("disc") or "1"))
+            else:
+                track = _track_number(_field(fields, "track_number", "tracknumber", "chapter"))
+                disc = _track_number(_field(fields, "disc_number", "discnumber"))
             if disc:
                 disc_values.add(disc)
             if track:
@@ -537,6 +550,17 @@ def _persist_decisions_and_flags(
     classified: list[ClassifiedFile],
 ) -> list[FragmentReconstructionDecision]:
     rows: list[FragmentReconstructionDecision] = []
+    batch_metadata = batch.metadata_json or {}
+    source_origins_resolved = (
+        batch_metadata.get("source_origins_resolved") is True
+        and batch_metadata.get("duplicate_fragment_review_state") == "reviewed_merged"
+    )
+    resolved_single_identity = source_origins_resolved and len(candidates) == 1
+    missing_track_numbers = [
+        int(value)
+        for value in (batch_metadata.get("missing_track_numbers") or [])
+        if str(value).isdigit()
+    ]
     media_types = {candidate.media_type for candidate in candidates.values()}
     mixed_batch = len(media_types) > 1
     if mixed_batch:
@@ -557,8 +581,9 @@ def _persist_decisions_and_flags(
                 examples=sorted(classes),
             )
     fragment_group_keys = {item.evidence.get("fragment_group_key") for item in classified if item.evidence.get("fragment_group_key")}
-    for group_key in sorted(str(key) for key in fragment_group_keys):
-        _persist_flag(db, batch.id, "source_fragment_group_detected", "Sibling source fragments were detected and treated as evidence, not final grouping.", examples=[group_key])
+    if not source_origins_resolved:
+        for group_key in sorted(str(key) for key in fragment_group_keys):
+            _persist_flag(db, batch.id, "source_fragment_group_detected", "Sibling source fragments were detected and treated as evidence, not final grouping.", examples=[group_key])
     for draft in candidates.values():
         row = candidate_rows[draft.key]
         candidate_fragments = {member.fragment_path for member in draft.members}
@@ -568,11 +593,15 @@ def _persist_decisions_and_flags(
         if mixed_batch:
             flags.add("candidate_media_type_conflict")
             reasons.append("Candidate is part of a mixed-media batch")
-        if len(candidate_fragments) > 1 or candidate_group_keys:
+        if (len(candidate_fragments) > 1 or candidate_group_keys) and not resolved_single_identity:
             flags.add("merge_recommended")
             if draft.media_type in {"music", "audiobook"}:
                 flags.add("split_release_candidate")
             reasons.append("Candidate spans multiple source fragments")
+        if draft.media_type == "music" and missing_track_numbers:
+            flags.add("partial_track_set")
+            missing_label = " and ".join(str(value) for value in missing_track_numbers)
+            reasons.append(f"Partial track set - missing tracks {missing_label}")
         decision = "safe_group"
         severity = "info"
         score = min(0.98, max(0.1, draft.confidence))
@@ -594,7 +623,11 @@ def _persist_decisions_and_flags(
                 db,
                 batch.id,
                 flag,
-                _flag_message(flag),
+                (
+                    f"Partial track set - missing tracks {' and '.join(str(value) for value in missing_track_numbers)}."
+                    if flag == "partial_track_set"
+                    else _flag_message(flag)
+                ),
                 severity="error" if flag == "blocked_identity_conflict" else "review" if decision in {"review_required", "split_recommended", "blocked_conflict"} else "warning",
                 candidate_id=row.id,
                 examples=[member.relative_path for member in draft.members[:3]],
@@ -632,6 +665,7 @@ def _flag_message(flag: str) -> str:
         "movie_tv_ambiguous": "Video file could be movie or TV without stronger evidence.",
         "custom_media_low_metadata": "Audio identity has low metadata evidence.",
         "blocked_identity_conflict": "Identity conflict blocks safe grouping.",
+        "partial_track_set": "Partial track set requires metadata review.",
     }
     return messages.get(flag, flag.replace("_", " "))
 

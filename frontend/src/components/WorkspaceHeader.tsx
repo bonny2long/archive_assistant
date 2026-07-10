@@ -59,6 +59,13 @@ export default function WorkspaceHeader({
     ? "Create child batches"
     : "Approve backend-safe groups";
   const materializeLabel = `Create ${approvedCount} child batch${approvedCount === 1 ? "" : "es"}`;
+  const sourceOriginCount = ingestion?.summary.resolved_source_origin_count
+    ?? ingestion?.summary.source_origin_count
+    ?? 0;
+  const missingTrackValues = batch.metadata_json?.missing_track_numbers;
+  const missingTrackNumbers = (Array.isArray(missingTrackValues) ? missingTrackValues : [])
+    .map((value: unknown) => Number(value))
+    .filter((value: number) => Number.isInteger(value) && value > 0);
 
   return (
     <header className="review-workspace__header">
@@ -88,6 +95,14 @@ export default function WorkspaceHeader({
             {remainingCount} unresolved
           </span>
           <span>{batch.files.length} files</span>
+          {ingestion?.summary.source_origins_resolved && sourceOriginCount > 1 && (
+            <span><i className="ti ti-folders" /> Merged from {sourceOriginCount} source folders</span>
+          )}
+          {missingTrackNumbers.length > 0 && (
+            <span className="review-workspace__badge--warn">
+              Partial track set - missing tracks {missingTrackNumbers.join(" and ")}
+            </span>
+          )}
           <span>{decisionLabel(routing?.decision)}</span>
           {routing?.summary.chunk_identity_candidate_count ? (
             <span className="review-workspace__badge--warn">chunk identity risk</span>

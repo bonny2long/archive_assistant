@@ -312,6 +312,11 @@ def get_batch_routing_decision(
     decisions = db.query(FragmentReconstructionDecision).filter(FragmentReconstructionDecision.batch_id == batch_id).all()
     source_fragments = db.query(SourceFragment).filter(SourceFragment.batch_id == batch_id).all()
     source_fragment_count = len(source_fragments)
+    batch_metadata = batch.metadata_json or {}
+    source_origins_resolved = (
+        batch_metadata.get("source_origins_resolved") is True
+        and batch_metadata.get("duplicate_fragment_review_state") == "reviewed_merged"
+    )
 
     reasons: list[str] = []
     if any(decision.decision == "blocked_conflict" for decision in decisions):
@@ -353,7 +358,10 @@ def get_batch_routing_decision(
     if has_blocking_flags:
         _add_reason(reasons, "mixed_media_detected")
 
-    if source_fragment_count > 0 or any(flag.flag_type == "source_fragment_group_detected" for flag in flags):
+    if not source_origins_resolved and (
+        source_fragment_count > 0
+        or any(flag.flag_type == "source_fragment_group_detected" for flag in flags)
+    ):
         _add_reason(reasons, "source_fragment_group_detected")
 
     if embedded_album_value_count > 1:

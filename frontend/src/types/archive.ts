@@ -180,6 +180,9 @@ export type UniversalIngestionSummary = {
   media_class_counts: Record<string, number>;
   worst_decision: UniversalDecisionName;
   action_summary?: Record<string, unknown>;
+  source_origin_count?: number;
+  resolved_source_origin_count?: number;
+  source_origins_resolved?: boolean;
 };
 
 export type SourceFragment = {

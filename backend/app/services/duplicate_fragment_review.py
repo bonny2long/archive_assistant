@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.config import settings
 from app.core.time import now_utc
 from app.models.archive import IngestBatch, IngestFile
+from app.models.media_metadata import UniversalIngestionReviewAction
 from app.services.destination_authority import (
     build_music_library_destination,
     classify_music_destination_bucket,
@@ -17,8 +18,9 @@ from app.services.destination_authority import (
     sync_batch_destination_fields,
     validate_music_format_destination,
 )
-from app.services.music_metadata import music_track_numbers
+from app.services.music_metadata import resolved_music_track_evidence
 from app.services.parent_candidate_materialization import build_parent_candidate_summary
+from app.services.universal_ingestion import snapshot_universal_ingestion_boundary
 
 DUPLICATE_STATE_NONE = "none"
 DUPLICATE_STATE_POSSIBLE_DUPLICATE = "possible_duplicate"
@@ -287,27 +289,11 @@ def _track_key(ingest_file: IngestFile) -> tuple[str, str] | None:
 
 
 def _resolved_music_track_key(ingest_file: IngestFile) -> tuple[str, str] | None:
-    metadata = ingest_file.metadata_json or {}
-    evidence = metadata.get("track_number_evidence")
-    if isinstance(evidence, dict):
-        resolved_track = _track_number(evidence.get("resolved_track"))
-        if resolved_track:
-            resolved_disc = (
-                _track_number(evidence.get("disc") or evidence.get("disc_number"))
-                or _track_number(_metadata_value(metadata, "discnumber", "disc_number"))
-                or "1"
-            )
-            return resolved_disc, resolved_track
-
-    disc, track = music_track_numbers(metadata, ingest_file.file_name)
-    if track is not None:
-        return str(disc or 1), str(track)
-
-    filename_track = _filename_track_int(ingest_file)
-    if filename_track is not None:
-        disc = _track_number(_metadata_value(metadata, "discnumber", "disc_number")) or "1"
-        return disc, str(filename_track)
-
+    evidence = resolved_music_track_evidence(ingest_file.metadata_json, ingest_file.file_name)
+    resolved_track = _track_number(evidence.get("resolved_track"))
+    if resolved_track:
+        resolved_disc = _track_number(evidence.get("disc") or evidence.get("disc_number")) or "1"
+        return resolved_disc, resolved_track
     return _track_key(ingest_file)
 
 def _duration_seconds(ingest_file: IngestFile) -> float | None:
@@ -832,29 +818,23 @@ def _filename_track_int(ingest_file: IngestFile) -> int | None:
 
 
 def _music_track_completeness(audio_files: list[IngestFile], metadata: dict[str, Any]) -> dict[str, Any]:
-    embedded_by_track: dict[int, list[IngestFile]] = defaultdict(list)
-    filename_by_track: dict[int, list[IngestFile]] = defaultdict(list)
+    by_track: dict[int, list[IngestFile]] = defaultdict(list)
+    evidence_sources: set[str] = set()
     for ingest_file in audio_files:
-        key = _track_key(ingest_file)
+        key = _resolved_music_track_key(ingest_file)
         if key:
             track_number = _track_int(key[1])
             if track_number is not None:
-                embedded_by_track[track_number].append(ingest_file)
-        filename_track = _filename_track_int(ingest_file)
-        if filename_track is not None:
-            filename_by_track[filename_track].append(ingest_file)
+                by_track[track_number].append(ingest_file)
+        evidence = resolved_music_track_evidence(ingest_file.metadata_json, ingest_file.file_name)
+        evidence_sources.add(str(evidence.get("preferred_source") or "unknown"))
 
-    embedded_has_conflicts = any(len(files) > 1 for files in embedded_by_track.values())
-    filename_covers_all = sum(len(files) for files in filename_by_track.values()) == len(audio_files)
-    filename_numbers_are_unique = all(len(files) == 1 for files in filename_by_track.values())
-    use_filename_numbers = (
-        bool(audio_files)
-        and embedded_has_conflicts
-        and filename_covers_all
-        and filename_numbers_are_unique
-    )
-    by_track = filename_by_track if use_filename_numbers else embedded_by_track
-    track_number_source = "filename" if use_filename_numbers else "embedded"
+    if evidence_sources and all(source.startswith("filename") or source == "combined_disc_track_filename_prefix" for source in evidence_sources):
+        track_number_source = "filename"
+    elif evidence_sources == {"embedded_tracknumber"}:
+        track_number_source = "embedded"
+    else:
+        track_number_source = "resolved"
 
     present = sorted(by_track)
     duplicate_numbers = sorted(number for number, files in by_track.items() if len(files) > 1)
@@ -940,17 +920,28 @@ def _rebuild_canonical_metadata(
             ingest_file.detected_role = "music_track"
         metadata["track_count"] = len(audio_files)
         tracks = []
-        discs = set()
-        for index, ingest_file in enumerate(audio_files, start=1):
+        discs: set[int] = set()
+        ordered_audio_files = sorted(
+            audio_files,
+            key=lambda item: (
+                int(resolved_music_track_evidence(item.metadata_json, item.file_name).get("disc") or 1),
+                int(resolved_music_track_evidence(item.metadata_json, item.file_name).get("resolved_track") or 1_000_000),
+                item.file_name.casefold(),
+                item.id,
+            ),
+        )
+        for ingest_file in ordered_audio_files:
             file_metadata = ingest_file.metadata_json or {}
-            disc = str(file_metadata.get("discnumber") or file_metadata.get("disc_number") or "1").split("/")[0]
+            evidence = resolved_music_track_evidence(file_metadata, ingest_file.file_name)
+            disc = int(evidence.get("disc") or 1)
             discs.add(disc)
             tracks.append({
                 "title": file_metadata.get("title") or Path(ingest_file.file_name).stem,
-                "track_number": file_metadata.get("tracknumber") or file_metadata.get("track_number") or str(index),
-                "disc_number": file_metadata.get("discnumber") or file_metadata.get("disc_number") or "1",
+                "track_number": evidence.get("resolved_track"),
+                "disc_number": disc,
                 "file_name": ingest_file.file_name,
                 "file_id": ingest_file.id,
+                "track_number_source": evidence.get("preferred_source"),
             })
         metadata["tracks"] = tracks
         metadata["disc_count"] = max(1, len(discs))
@@ -974,7 +965,35 @@ def _rebuild_canonical_metadata(
         metadata["format"] = rebuilt_format
         canonical.metadata_json = metadata
         _validate_music_destination(rebuilt_format, destination_text)
-    warnings = list(metadata.get("metadata_warnings") or [])
+
+    origin_paths = {str(value) for value in (metadata.get("source_origin_paths") or []) if value}
+    if canonical.source_path:
+        origin_paths.add(str(canonical.source_path))
+    origin_paths.update(str(batch.source_path) for batch in source_batches if batch.source_path)
+    source_batch_ids = {int(value) for value in (metadata.get("source_origin_batch_ids") or []) if str(value).isdigit()}
+    source_batch_ids.add(canonical.id)
+    source_batch_ids.update(batch.id for batch in source_batches)
+    metadata["source_origin_paths"] = sorted(origin_paths)
+    metadata["source_origin_batch_ids"] = sorted(source_batch_ids)
+    metadata["source_origin_count"] = len(origin_paths)
+    metadata["resolved_source_origin_count"] = len(origin_paths)
+    metadata["source_origins_resolved"] = True
+
+    stale_warning_tokens = {
+        "track_number_conflict",
+        "track_number_conflict_detected",
+        "merge_recommended",
+        "split_release_candidate",
+    }
+    warnings = [
+        warning
+        for warning in (metadata.get("metadata_warnings") or [])
+        if str(warning).strip().casefold().replace(" ", "_") not in stale_warning_tokens
+    ]
+    if metadata.get("missing_track_numbers"):
+        warnings.append("partial_track_set")
+    else:
+        warnings = [warning for warning in warnings if warning != "partial_track_set"]
     warnings.append(f"duplicate_fragment_resolution_{action}")
     metadata["metadata_warnings"] = list(dict.fromkeys(warnings))
     metadata["merged_batch_ids"] = sorted({*(metadata.get("merged_batch_ids") or []), *[batch.id for batch in source_batches]})
@@ -986,6 +1005,76 @@ def _rebuild_canonical_metadata(
     canonical.approved_at = None
     canonical.approved_by = None
     canonical.updated_at = now_utc()
+
+
+def _clear_stale_universal_review_actions(db: Session, batch_id: int) -> None:
+    actions = (
+        db.query(UniversalIngestionReviewAction)
+        .filter(UniversalIngestionReviewAction.batch_id == batch_id)
+        .all()
+    )
+    for action in actions:
+        stale_ids = {
+            "candidate_id": action.candidate_id,
+            "source_fragment_id": action.source_fragment_id,
+            "target_candidate_id": action.target_candidate_id,
+        }
+        if not any(value is not None for value in stale_ids.values()):
+            continue
+        audit_note = f"Cleared after canonical rebuild; stale universal references: {stale_ids}"
+        action.note = f"{action.note}; {audit_note}" if action.note else audit_note
+        action.candidate_id = None
+        action.source_fragment_id = None
+        action.target_candidate_id = None
+        action.decision_status = "cleared"
+        action.updated_at = now_utc()
+
+
+def _refresh_canonical_universal_review(db: Session, canonical: IngestBatch) -> None:
+    _clear_stale_universal_review_actions(db, canonical.id)
+    db.flush()
+    snapshot_universal_ingestion_boundary(db, canonical)
+
+def refresh_resolved_canonical_review_state(db: Session, batch: IngestBatch) -> bool:
+    """Repair derived state for canonical batches resolved before AA-FLOW3.1."""
+    metadata = dict(batch.metadata_json or {})
+    if metadata.get("duplicate_fragment_review_state") != "reviewed_merged":
+        return False
+    if metadata.get("source_origins_resolved") is True:
+        return False
+
+    source_batch_ids = {
+        int(value)
+        for value in (metadata.get("merged_batch_ids") or [])
+        if str(value).isdigit() and int(value) != batch.id
+    }
+    for record in metadata.get("duplicate_fragment_resolution_audit") or []:
+        if not isinstance(record, dict):
+            continue
+        for key in ("source_batch_ids", "appended_source_batch_ids", "collapsed_batch_ids"):
+            source_batch_ids.update(
+                int(value)
+                for value in (record.get(key) or [])
+                if str(value).isdigit() and int(value) != batch.id
+            )
+    source_batches = (
+        db.query(IngestBatch)
+        .options(selectinload(IngestBatch.files))
+        .filter(IngestBatch.id.in_(source_batch_ids))
+        .all()
+        if source_batch_ids
+        else []
+    )
+    rebuilt_format, rebuilt_destination = _plan_music_merge_rebuild(batch, [batch])
+    _rebuild_canonical_metadata(
+        batch,
+        source_batches,
+        "state_refresh",
+        rebuilt_format=rebuilt_format,
+        rebuilt_destination=rebuilt_destination,
+    )
+    _refresh_canonical_universal_review(db, batch)
+    return True
 
 def resolve_duplicate_fragment_group(
     db: Session,
@@ -1056,6 +1145,7 @@ def resolve_duplicate_fragment_group(
             rebuilt_destination=rebuilt_destination,
         )
         _append_resolution_audit(canonical, record)
+        _refresh_canonical_universal_review(db, canonical)
         message = f"Merged {len(source_batches)} fragment batch(es) into batch {canonical.id}."
 
     elif action == "append_to_existing_canonical_batch":
@@ -1106,6 +1196,7 @@ def resolve_duplicate_fragment_group(
         canonical.metadata_json = canonical_metadata
         record = {**record, "track_completeness": canonical_metadata.get("track_completeness")}
         _append_resolution_audit(canonical, record)
+        _refresh_canonical_universal_review(db, canonical)
         message = f"Appended {len(appended_file_ids)} new file(s) to batch {canonical.id}; skipped {len(skipped_duplicate_file_ids)} duplicate file(s)."
     elif action == "mark_duplicate":
         duplicate_ids = set(duplicate_batch_ids or [batch.id for batch in batches if batch.id != canonical.id])
