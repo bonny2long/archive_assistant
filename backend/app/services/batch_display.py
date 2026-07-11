@@ -46,8 +46,21 @@ def _parent_review_secondary_name(parent_summary: dict) -> str:
     review_later = int(parent_summary.get("review_later_candidate_count") or 0)
     if parent_summary.get("parent_container_state") == "drained_parent":
         return f"{_plural(child_count or approved, 'child batch', 'child batches')} created, split complete"
+    if parent_summary.get("parent_media_extraction_complete"):
+        support_count = int(parent_summary.get("remaining_support_file_count") or 0)
+        parts = (
+            [_plural(child_count, "child batch", "child batches") + " created", "all media extracted"]
+            if child_count
+            else ["no primary media remains"]
+        )
+        if support_count:
+            parts.append(f"{_plural(support_count, 'support file')} for Cleaner")
+        return ", ".join(parts)
     if parent_summary.get("parent_container_state") == "partial_parent_container":
+        primary_count = int(parent_summary.get("remaining_primary_file_count") or 0)
         parts = [_plural(child_count, "child batch", "child batches") + " created"]
+        if primary_count:
+            parts.append(f"{_plural(primary_count, 'media file')} remaining")
         if remaining:
             parts.append(f"{remaining} unresolved")
         if review_later:
@@ -77,6 +90,17 @@ def build_batch_display_fields(batch: IngestBatch, parent_summary: dict | None =
                 "media_label": "Processed Container",
                 "primary_name": _parent_review_primary_name(batch, metadata),
                 "secondary_name": f"{_plural(child_count, 'child batch', 'child batches')} created; 0 active files",
+                "item_label": "child batches",
+                "item_count": child_count,
+                "edit_kind": None,
+            }
+        if parent_summary.get("parent_media_extraction_complete"):
+            child_count = int(parent_summary.get("child_batch_count") or 0)
+            return {
+                "media_category": "processed",
+                "media_label": "Processed Container",
+                "primary_name": _parent_review_primary_name(batch, metadata),
+                "secondary_name": _parent_review_secondary_name(parent_summary),
                 "item_label": "child batches",
                 "item_count": child_count,
                 "edit_kind": None,

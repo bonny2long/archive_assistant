@@ -50,7 +50,7 @@ type QaSummary = {
 };
 
 function isProcessedContainerBatch(batch: BatchSummary): boolean {
-  return Boolean(batch.parent_is_drained || batch.parent_container_state === "drained_parent" || batch.display_state === "drained_parent");
+  return Boolean(batch.parent_media_extraction_complete || batch.parent_is_drained || batch.parent_container_state === "drained_parent" || batch.display_state === "drained_parent");
 }
 
 function isPendingReviewBatch(batch: BatchSummary): boolean {
@@ -272,7 +272,7 @@ export default function App() {
   };
 
   const handleSelectAll = (checked: boolean) => {
-    setSelected(checked ? new Set(filtered.map((batch) => batch.id)) : new Set());
+    setSelected(checked ? new Set(filtered.filter((batch) => !isProcessedContainerBatch(batch)).map((batch) => batch.id)) : new Set());
   };
 
   const selectedBatches = batches.filter((batch) => selected.has(batch.id));

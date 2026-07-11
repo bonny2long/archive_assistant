@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import or_
+from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
 
 from app.models.archive import IngestBatch, IngestFile
@@ -18,6 +18,17 @@ PARENT_CONTAINER_ACTIVE = "active_parent_container"
 PARENT_CONTAINER_PARTIAL = "partial_parent_container"
 PARENT_CONTAINER_DRAINED = "drained_parent"
 PARENT_CONTAINER_TYPES = {"music_discography"}
+
+SUPPORT_FILE_EXTENSIONS = {
+    ".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tiff",
+    ".txt", ".log", ".cue", ".m3u", ".m3u8", ".nfo", ".sfv", ".md5", ".ffp",
+    ".json", ".xml", ".opf", ".srt", ".ass", ".vtt", ".sub", ".lrc",
+}
+SUPPORT_FILE_ROLES = {
+    "artwork", "cover_art", "album_artwork", "movie_artwork", "tv_artwork",
+    "audiobook_artwork", "book_artwork", "sidecar", "metadata_sidecar",
+    "playlist", "log", "subtitle",
+}
 
 MATERIALIZATION_DECISION_ACTIONS = {
     "approve_candidate",
@@ -65,6 +76,26 @@ def active_parent_file_count(db: Session, batch: IngestBatch) -> int:
     return get_active_parent_file_count(batch, db)
 
 
+def get_parent_file_inventory(batch: IngestBatch, db: Session) -> dict[str, int]:
+    if batch.id is None:
+        return {"total": 0, "primary": 0, "support": 0}
+    support_condition = or_(
+        func.lower(IngestFile.extension).in_(SUPPORT_FILE_EXTENSIONS),
+        func.lower(IngestFile.detected_role).in_(SUPPORT_FILE_ROLES),
+    )
+    total, support = db.query(
+        func.count(IngestFile.id),
+        func.coalesce(func.sum(case((support_condition, 1), else_=0)), 0),
+    ).filter(IngestFile.batch_id == batch.id).one()
+    total_count = int(total or 0)
+    support_count = int(support or 0)
+    return {
+        "total": total_count,
+        "primary": max(0, total_count - support_count),
+        "support": support_count,
+    }
+
+
 def _actual_child_batch_count(db: Session, parent_batch_id: int) -> int:
     batch = db.get(IngestBatch, parent_batch_id)
     return get_child_batch_count(batch, db) if batch else 0
@@ -88,16 +119,38 @@ def is_drained_parent(batch: IngestBatch, db: Session) -> bool:
     return get_parent_container_display_state(batch, db) == PARENT_CONTAINER_DRAINED
 
 
-def _parent_container_flags(state: str | None, active_file_count: int, child_batch_count: int) -> dict[str, Any]:
+def _parent_container_flags(
+    state: str | None,
+    active_file_count: int,
+    child_batch_count: int,
+    primary_file_count: int = 0,
+    support_file_count: int = 0,
+) -> dict[str, Any]:
+    media_extraction_complete = primary_file_count == 0 and (child_batch_count > 0 or support_file_count > 0)
+    extraction_state = (
+        "complete"
+        if state == PARENT_CONTAINER_DRAINED
+        else "media_extracted"
+        if media_extraction_complete and child_batch_count > 0
+        else "support_only"
+        if media_extraction_complete
+        else "in_progress"
+        if child_batch_count > 0
+        else "not_started"
+    )
     return {
         "parent_container_state": state,
         "display_state": state,
         "parent_is_drained": state == PARENT_CONTAINER_DRAINED,
+        "parent_media_extraction_complete": media_extraction_complete,
+        "parent_extraction_state": extraction_state,
         "approval_allowed": False if state else True,
         "move_ready": False,
-        "requires_review": state in {PARENT_CONTAINER_ACTIVE, PARENT_CONTAINER_PARTIAL},
+        "requires_review": state in {PARENT_CONTAINER_ACTIVE, PARENT_CONTAINER_PARTIAL} and not media_extraction_complete,
         "active_parent_file_count": active_file_count,
         "active_file_count": active_file_count,
+        "remaining_primary_file_count": primary_file_count,
+        "remaining_support_file_count": support_file_count,
         "parent_has_remaining_files": active_file_count > 0,
         "child_batch_count": child_batch_count,
     }
@@ -119,12 +172,16 @@ def empty_parent_candidate_summary() -> dict[str, Any]:
         "parent_container_state": None,
         "is_parent_review_container": False,
         "parent_is_drained": False,
+        "parent_media_extraction_complete": False,
+        "parent_extraction_state": None,
         "display_state": None,
         "approval_allowed": True,
         "move_ready": False,
         "requires_review": False,
         "active_parent_file_count": 0,
         "active_file_count": 0,
+        "remaining_primary_file_count": 0,
+        "remaining_support_file_count": 0,
         "child_batch_count": 0,
         "parent_has_remaining_files": False,
         "historical_scan_snapshot": False,
@@ -151,7 +208,10 @@ def build_parent_candidate_summary(db: Session | None, batch: IngestBatch) -> di
             "remaining_candidate_count": candidate_group_count,
         }
 
-    remaining_parent_file_count = get_active_parent_file_count(batch, db)
+    file_inventory = get_parent_file_inventory(batch, db) if explicit_parent_container else {"total": 0, "primary": 0, "support": 0}
+    remaining_parent_file_count = file_inventory["total"]
+    remaining_primary_file_count = file_inventory["primary"]
+    remaining_support_file_count = file_inventory["support"]
     actual_child_count = get_child_batch_count(batch, db)
     if explicit_parent_container:
         if actual_child_count > 0 and remaining_parent_file_count == 0:
@@ -174,7 +234,7 @@ def build_parent_candidate_summary(db: Session | None, batch: IngestBatch) -> di
             "needs_materialization": False,
             "parent_review_state": PARENT_SPLIT_COMPLETE,
             "is_parent_review_container": True,
-            **_parent_container_flags(PARENT_CONTAINER_DRAINED, 0, actual_child_count),
+            **_parent_container_flags(PARENT_CONTAINER_DRAINED, 0, actual_child_count, 0, 0),
             "historical_scan_snapshot": True,
         }
 
@@ -204,7 +264,7 @@ def build_parent_candidate_summary(db: Session | None, batch: IngestBatch) -> di
             "needs_materialization": False,
             "parent_review_state": parent_review_state,
             "is_parent_review_container": True,
-            **_parent_container_flags(state, remaining_parent_file_count, actual_child_count),
+            **_parent_container_flags(state, remaining_parent_file_count, actual_child_count, remaining_primary_file_count, remaining_support_file_count),
         }
 
     if parent_container_state and (actual_child_count > 0 or candidate_group_count == 0):
@@ -235,7 +295,7 @@ def build_parent_candidate_summary(db: Session | None, batch: IngestBatch) -> di
             "needs_materialization": False,
             "parent_review_state": parent_review_state,
             "is_parent_review_container": True,
-            **_parent_container_flags(parent_container_state, remaining_parent_file_count, actual_child_count),
+            **_parent_container_flags(parent_container_state, remaining_parent_file_count, actual_child_count, remaining_primary_file_count, remaining_support_file_count),
         }
     if batch.status == PARENT_SPLIT_COMPLETE:
         history_entries: list[dict[str, Any]] = []
@@ -276,7 +336,7 @@ def build_parent_candidate_summary(db: Session | None, batch: IngestBatch) -> di
             "needs_materialization": False,
             "parent_review_state": parent_review_state,
             "is_parent_review_container": True,
-            **_parent_container_flags(parent_container_state, remaining_parent_file_count, actual_child_count),
+            **_parent_container_flags(parent_container_state, remaining_parent_file_count, actual_child_count, remaining_primary_file_count, remaining_support_file_count),
         }
 
     if candidate_group_count <= 1:
@@ -360,5 +420,5 @@ def build_parent_candidate_summary(db: Session | None, batch: IngestBatch) -> di
         "needs_materialization": needs_materialization,
         "parent_review_state": parent_review_state,
         "is_parent_review_container": True,
-        **_parent_container_flags(parent_container_state or PARENT_CONTAINER_ACTIVE, remaining_parent_file_count, actual_child_count),
+        **_parent_container_flags(parent_container_state or PARENT_CONTAINER_ACTIVE, remaining_parent_file_count, actual_child_count, remaining_primary_file_count, remaining_support_file_count),
     }

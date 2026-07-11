@@ -20,9 +20,9 @@ from app.services.destination_authority import (
 )
 from app.services.parent_candidate_materialization import (
     PARENT_CONTAINER_DRAINED,
-    get_active_parent_file_count,
     get_child_batch_count,
     get_parent_container_display_state,
+    get_parent_file_inventory,
 )
 
 _SAFE_PART_PATTERN = re.compile(r'[<>:"/\\|?*]+')
@@ -42,10 +42,30 @@ SIDECAR_EXTENSIONS = {
 
 def _sync_parent_container_metadata(db: Session, parent_batch: IngestBatch, metadata: dict[str, Any]) -> tuple[int, int, str | None]:
     child_batch_count = get_child_batch_count(parent_batch, db)
-    active_parent_file_count = get_active_parent_file_count(parent_batch, db)
+    inventory = get_parent_file_inventory(parent_batch, db)
+    active_parent_file_count = inventory["total"]
+    remaining_primary_file_count = inventory["primary"]
+    remaining_support_file_count = inventory["support"]
     parent_container_state = get_parent_container_display_state(parent_batch, db)
+    media_extraction_complete = remaining_primary_file_count == 0 and (child_batch_count > 0 or remaining_support_file_count > 0)
+    extraction_state = (
+        "complete"
+        if parent_container_state == PARENT_CONTAINER_DRAINED
+        else "media_extracted"
+        if media_extraction_complete and child_batch_count > 0
+        else "support_only"
+        if media_extraction_complete
+        else "in_progress"
+        if child_batch_count > 0
+        else "not_started"
+    )
     metadata["child_batch_count"] = child_batch_count
     metadata["active_parent_file_count"] = active_parent_file_count
+    metadata["remaining_primary_file_count"] = remaining_primary_file_count
+    metadata["remaining_support_file_count"] = remaining_support_file_count
+    metadata["parent_media_extraction_complete"] = media_extraction_complete
+    metadata["parent_extraction_state"] = extraction_state
+    metadata["parent_source_reference"] = f"AA-P{parent_batch.id:04d}"
     metadata["parent_container_state"] = parent_container_state
     metadata["parent_has_remaining_files"] = active_parent_file_count > 0
     metadata["parent_is_drained"] = parent_container_state == PARENT_CONTAINER_DRAINED
@@ -54,6 +74,32 @@ def _sync_parent_container_metadata(db: Session, parent_batch: IngestBatch, meta
     metadata["child_candidate_count"] = child_batch_count
     metadata["parent_review_state"] = "split_complete" if parent_container_state == PARENT_CONTAINER_DRAINED else "review_in_progress"
     return child_batch_count, active_parent_file_count, parent_container_state
+
+
+def _parent_progress_payload(parent_batch: IngestBatch, metadata: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "parent_source_reference": metadata.get("parent_source_reference") or f"AA-P{parent_batch.id:04d}",
+        "remaining_primary_file_count": int(metadata.get("remaining_primary_file_count") or 0),
+        "remaining_support_file_count": int(metadata.get("remaining_support_file_count") or 0),
+        "child_batch_count": int(metadata.get("child_batch_count") or 0),
+        "parent_media_extraction_complete": bool(metadata.get("parent_media_extraction_complete", False)),
+        "parent_extraction_state": metadata.get("parent_extraction_state"),
+    }
+
+
+def _parent_progress_message(parent_batch: IngestBatch, metadata: dict[str, Any], remaining_release_count: int) -> str:
+    progress = _parent_progress_payload(parent_batch, metadata)
+    reference = progress["parent_source_reference"]
+    child_count = progress["child_batch_count"]
+    primary_count = progress["remaining_primary_file_count"]
+    support_count = progress["remaining_support_file_count"]
+    if progress["parent_extraction_state"] == "support_only":
+        return f"{reference} contains only {support_count} support file{'s' if support_count != 1 else ''}; no media child batch was created. These files remain for Cleaner."
+    if progress["parent_media_extraction_complete"]:
+        support_text = f" {support_count} support file{'s' if support_count != 1 else ''} remain for Cleaner." if support_count else ""
+        return f"All media from {reference} has been extracted into {child_count} child batch{'es' if child_count != 1 else ''}.{support_text}"
+    release_text = f" {remaining_release_count} release{'s' if remaining_release_count != 1 else ''} remain for later review." if remaining_release_count else ""
+    return f"{reference} has {child_count} child batch{'es' if child_count != 1 else ''} and {primary_count} media file{'s' if primary_count != 1 else ''} still attached.{release_text}"
 
 
 def safe_path_part(value: object, fallback: str = "Unknown") -> str:
@@ -819,9 +865,10 @@ def execute_split_discography_releases(db: Session, batch_id: int) -> dict[str, 
                 "created_count": 0,
                 "skipped_count": len(existing_children),
                 "remaining_parent_file_count": active_parent_file_count,
+                **_parent_progress_payload(parent_batch, batch_metadata),
                 "parent_status": parent_batch.status,
                 "parent_review_state": batch_metadata.get("parent_review_state") or parent_batch.status,
-                "message": "Child batches already exist.",
+                "message": f"Child batches already exist. {_parent_progress_message(parent_batch, batch_metadata, len(albums))}",
             }
 
     created_child_batch_ids: list[int] = []
@@ -913,9 +960,10 @@ def execute_split_discography_releases(db: Session, batch_id: int) -> dict[str, 
                 "created_count": 0,
                 "skipped_count": len(existing_children),
                 "remaining_parent_file_count": active_parent_file_count,
+                **_parent_progress_payload(parent_batch, batch_metadata),
                 "parent_status": parent_batch.status,
                 "parent_review_state": batch_metadata.get("parent_review_state") or parent_batch.status,
-                "message": "Child batches already exist.",
+                "message": f"Child batches already exist. {_parent_progress_message(parent_batch, batch_metadata, len(albums))}",
             }
         raise ValueError(
             "No child batches were created. Make sure releases marked Extract as child have source folders with attached files."
@@ -976,8 +1024,7 @@ def execute_split_discography_releases(db: Session, batch_id: int) -> dict[str, 
         message = f"No media child batches were created. {count} support-only folder{'s' if count != 1 else ''} remain on the parent for Cleaner."
     else:
         message = "No releases were marked Extract as child; parent decisions were saved."
-    if active_parent_file_count:
-        message += f" {active_parent_file_count} file{'s' if active_parent_file_count != 1 else ''} remain attached to the parent."
+    message += f" {_parent_progress_message(parent_batch, batch_metadata, len(remaining_albums))}"
 
     return {
         "parent_batch_id": parent_batch.id,
@@ -986,6 +1033,7 @@ def execute_split_discography_releases(db: Session, batch_id: int) -> dict[str, 
         "created_count": created_count,
         "skipped_count": skipped_count,
         "remaining_parent_file_count": batch_metadata["remaining_parent_file_count"],
+        **_parent_progress_payload(parent_batch, batch_metadata),
         "parent_status": parent_batch.status,
         "parent_review_state": batch_metadata["parent_review_state"],
         "message": message,

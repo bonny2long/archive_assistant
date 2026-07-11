@@ -327,11 +327,17 @@ class MaterializeApprovedCandidatesResponse(BaseModel):
 
 class SplitDiscographyReleasesResponse(BaseModel):
     parent_batch_id: int
+    parent_source_reference: str | None = None
     created_child_batch_ids: list[int] = Field(default_factory=list)
     existing_child_batch_ids: list[int] = Field(default_factory=list)
     created_count: int = 0
     skipped_count: int = 0
     remaining_parent_file_count: int = 0
+    remaining_primary_file_count: int = 0
+    remaining_support_file_count: int = 0
+    child_batch_count: int = 0
+    parent_media_extraction_complete: bool = False
+    parent_extraction_state: str | None = None
     parent_status: str
     parent_review_state: str
     message: str
@@ -391,6 +397,7 @@ class DuplicateFragmentResolutionResponse(BaseModel):
     message: str
 class BatchSummary(BaseModel):
     id: int
+    source_path: str | None = None
     detected_type: str
     status: str
     artist: str | None = None
@@ -496,12 +503,16 @@ class BatchSummary(BaseModel):
     parent_container_state: str | None = None
     is_parent_review_container: bool = False
     parent_is_drained: bool = False
+    parent_media_extraction_complete: bool = False
+    parent_extraction_state: str | None = None
     display_state: str | None = None
     approval_allowed: bool = True
     move_ready: bool = False
     requires_review: bool = False
     active_parent_file_count: int = 0
     active_file_count: int = 0
+    remaining_primary_file_count: int = 0
+    remaining_support_file_count: int = 0
     child_batch_count: int = 0
     parent_has_remaining_files: bool = False
     historical_scan_snapshot: bool = False

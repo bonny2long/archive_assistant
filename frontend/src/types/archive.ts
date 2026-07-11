@@ -352,6 +352,7 @@ export type DuplicateFragmentResolutionResponse = {
 };
 export type BatchSummary = {
   id: number;
+  source_path?: string | null;
   detected_type: string;
   status: string;
   artist?: string | null;
@@ -463,12 +464,16 @@ export type BatchSummary = {
   parent_container_state?: "active_parent_container" | "partial_parent_container" | "drained_parent" | string | null;
   is_parent_review_container?: boolean;
   parent_is_drained?: boolean;
+  parent_media_extraction_complete?: boolean;
+  parent_extraction_state?: "not_started" | "in_progress" | "media_extracted" | "support_only" | "complete" | string | null;
   display_state?: string | null;
   approval_allowed?: boolean;
   move_ready?: boolean;
   requires_review?: boolean;
   active_parent_file_count?: number;
   active_file_count?: number;
+  remaining_primary_file_count?: number;
+  remaining_support_file_count?: number;
   child_batch_count?: number;
   parent_has_remaining_files?: boolean;
   historical_scan_snapshot?: boolean;
@@ -1228,11 +1233,17 @@ export interface MaterializeApprovedCandidatesResult {
 
 export interface SplitDiscographyReleasesResult {
   parent_batch_id: number;
+  parent_source_reference?: string | null;
   created_child_batch_ids: number[];
   existing_child_batch_ids: number[];
   created_count: number;
   skipped_count: number;
   remaining_parent_file_count: number;
+  remaining_primary_file_count: number;
+  remaining_support_file_count: number;
+  child_batch_count: number;
+  parent_media_extraction_complete: boolean;
+  parent_extraction_state?: string | null;
   parent_status: string;
   parent_review_state: string;
   message: string;

@@ -14,7 +14,7 @@ const BLOCKING_APPROVAL_WARNINGS = new Set([
 ]);
 
 function isProcessedContainerBatch(batch: BatchSummary): boolean {
-  return Boolean(batch.parent_is_drained || batch.parent_container_state === "drained_parent" || batch.display_state === "drained_parent");
+  return Boolean(batch.parent_media_extraction_complete || batch.parent_is_drained || batch.parent_container_state === "drained_parent" || batch.display_state === "drained_parent");
 }
 type Props = {
   batches: BatchSummary[];
@@ -70,8 +70,9 @@ export default function BatchTable({
   onBulkReject,
 }: Props) {
   const [expanded, setExpanded] = useState<number | null>(null);
-  const allChecked = batches.length > 0 && batches.every((batch) => selected.has(batch.id));
-  const selectedBatches = batches.filter((batch) => selected.has(batch.id));
+  const selectableBatches = batches.filter((batch) => !isProcessedContainerBatch(batch));
+  const allChecked = selectableBatches.length > 0 && selectableBatches.every((batch) => selected.has(batch.id));
+  const selectedBatches = batches.filter((batch) => selected.has(batch.id) && !isProcessedContainerBatch(batch));
   const approvableCount = selectedBatches.filter(
     (batch) => !isProcessedContainerBatch(batch) && batch.status === "pending_review"
       && !batch.metadata_warnings.some(
@@ -93,11 +94,11 @@ export default function BatchTable({
 
   return (
     <div className="batch-table-wrap">
-      {selected.size > 0 && (
+      {selectedBatches.length > 0 && (
         <div className="selection-bar">
           <span>
-            {selected.size} selected
-            {approvableCount !== selected.size && ` · ${approvableCount} ready to approve`}
+            {selectedBatches.length} selected
+            {approvableCount !== selectedBatches.length && ` · ${approvableCount} ready to approve`}
           </span>
           {approvableCount > 0 && (
             <button className="btn btn--compact" disabled={bulkLoading} onClick={() => void onBulkApprove()}>

@@ -48,7 +48,7 @@ function isParentReviewContainer(batch: BatchSummary): boolean {
 }
 
 function isProcessedContainerRow(batch: BatchSummary): boolean {
-  return Boolean(batch.parent_is_drained || batch.parent_container_state === "drained_parent" || batch.display_state === "drained_parent");
+  return Boolean(batch.parent_media_extraction_complete || batch.parent_is_drained || batch.parent_container_state === "drained_parent" || batch.display_state === "drained_parent");
 }
 
 function requiresChildBatchReview(batch: BatchSummary): boolean {
@@ -77,7 +77,18 @@ function duplicateFragmentLabel(batch: BatchSummary): string | null {
   return "Possible duplicate";
 }
 
+function parentSourceReference(batch: BatchSummary): string {
+  return "AA-P" + String(batch.id).padStart(4, "0");
+}
+
+function sourceFolderName(batch: BatchSummary): string {
+  const normalized = (batch.source_path ?? "").replace(/\\/g, "/");
+  return normalized.split("/").filter(Boolean).pop() ?? "Source folder";
+}
+
 function getBatchStatusLabel(batch: BatchSummary): string {
+  if (batch.parent_extraction_state === "support_only") return "Support only";
+  if (batch.parent_media_extraction_complete && !batch.parent_is_drained) return "Media extracted";
   if (isProcessedContainerRow(batch)) return "Processed container";
   const duplicateLabel = duplicateFragmentLabel(batch);
   if (duplicateLabel) return duplicateLabel;
@@ -178,7 +189,7 @@ export default function BatchRow({
   const duplicateMatchCount = duplicateFragmentMatchCount(batch);
   const approveDisabled = batch.status !== "pending_review" || parentReviewContainer || childBatchReviewRequired || activeDuplicateReview;
   const approveTitle = drainedParent
-    ? "This intake container is drained. Review child batches instead."
+    ? "Media extraction is complete for this source. Review child batches instead."
     : parentReviewContainer
     ? "Parent containers are not move-ready. Review child batches or handle active files first."
     : childBatchReviewRequired
@@ -197,13 +208,22 @@ export default function BatchRow({
           <input
             aria-label={`Select batch ${batch.id}`}
             type="checkbox"
-            checked={selected}
+            checked={selected && !drainedParent}
+            disabled={drainedParent}
+            title={drainedParent ? "Processed source containers cannot be selected for media actions." : undefined}
             onChange={(event) => onSelect(batch.id, event.target.checked)}
           />
         </td>
         <td style={{ color: "var(--text-muted)" }}>{index}</td>
         <td><span className="media-type-label">{mediaLabel}</span></td>
-        <td title={primaryName}>{primaryName}</td>
+        <td title={parentReviewContainer ? parentSourceReference(batch) + " - " + (batch.source_path ?? primaryName) : primaryName}>
+          {primaryName}
+          {parentReviewContainer && (
+            <small className="row-artwork row-source-reference">
+              {parentSourceReference(batch)} · {sourceFolderName(batch)}
+            </small>
+          )}
+        </td>
         <td title={secondaryName}>
           {secondaryName}
           {quarantineReview && (
@@ -317,8 +337,8 @@ export default function BatchRow({
           )}
           <button
             className="btn-sm"
-            title="Send to recovery"
-            disabled={quarantineReview}
+            title={drainedParent ? "Processed source containers are retained as audit evidence." : "Send to recovery"}
+            disabled={quarantineReview || drainedParent}
             style={{ color: "var(--text-secondary)" }}
             onClick={(event) => { event.stopPropagation(); onRecovery(batch.id); }}
           >
@@ -339,7 +359,8 @@ export default function BatchRow({
           )}
           <button
             className="btn-sm"
-            title="Reject"
+            title={drainedParent ? "Processed source containers cannot be rejected." : "Reject"}
+            disabled={drainedParent}
             style={{ color: "var(--accent-red)" }}
             onClick={(event) => { event.stopPropagation(); onReject(batch.id); }}
           >

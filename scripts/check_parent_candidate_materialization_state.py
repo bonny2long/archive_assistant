@@ -570,6 +570,10 @@ def test_support_only_discography_release_stays_on_parent(db) -> None:
     result = execute_split_discography_releases(db, parent.id)
     assert result["created_count"] == 0
     assert "support-only folder" in result["message"]
+    assert result["remaining_primary_file_count"] == 0
+    assert result["remaining_support_file_count"] == 1
+    assert result["parent_media_extraction_complete"] is True
+    assert result["parent_extraction_state"] == "support_only"
     assert db.query(IngestBatch).filter(IngestBatch.detected_type == "music_album").count() == child_count_before
     assert db.query(IngestFile).filter(IngestFile.id == artwork.id, IngestFile.batch_id == parent.id).count() == 1
 
@@ -583,6 +587,93 @@ def test_support_only_discography_release_stays_on_parent(db) -> None:
     assert parent.metadata_json["discography_split_audit"][-1]["support_only_source_folders"] == ["Artwork Remainder"]
     assert parent.metadata_json["parent_is_drained"] is False
     assert parent.metadata_json["active_parent_file_count"] == 1
+    assert parent.metadata_json["parent_media_extraction_complete"] is True
+    assert parent.metadata_json["parent_extraction_state"] == "support_only"
+
+    summary = build_parent_candidate_summary(db, parent)
+    assert summary["parent_media_extraction_complete"] is True
+    assert summary["requires_review"] is False
+    display = build_batch_display_fields(parent, summary)
+    assert display["media_label"] == "Processed Container"
+    assert display["edit_kind"] is None
+    assert "no primary media remains" in display["secondary_name"]
+
+
+def test_media_complete_parent_with_support_remainder_is_processed(db) -> None:
+    safe = album_row("Extracted Release", "2024") | {
+        "release_decision": "extract_as_child",
+        "include": True,
+    }
+    support = album_row("Support Remainder", "2024") | {
+        "release_decision": "extract_as_child",
+        "include": True,
+    }
+    parent = IngestBatch(
+        source_kind="manual-drop",
+        source_path=str(PROJECT_ROOT / ".tmp" / "drive-download-progress-source"),
+        detected_type="music_discography",
+        status="pending_review",
+        confidence=0.82,
+        metadata_json={
+            "type": "music_discography",
+            "artist": "Progress Artist",
+            "albums": [safe, support],
+            "album_count": 2,
+            "release_count": 2,
+        },
+    )
+    db.add(parent)
+    db.flush()
+    audio = add_album_file(parent, safe, 1, role="discography_track")
+    artwork = IngestFile(
+        batch_id=parent.id,
+        file_path=str(Path(parent.source_path) / support["source_folder"] / "cover.jpg"),
+        file_name="cover.jpg",
+        extension=".jpg",
+        size_bytes=2048,
+        checksum="progress-support-cover",
+        detected_role="artwork",
+        metadata_json={"_discography_album": support},
+    )
+    db.add(artwork)
+    db.commit()
+
+    result = execute_split_discography_releases(db, parent.id)
+    assert result["created_count"] == 1
+    assert result["remaining_primary_file_count"] == 0
+    assert result["remaining_support_file_count"] == 1
+    assert result["child_batch_count"] == 1
+    assert result["parent_media_extraction_complete"] is True
+    assert result["parent_extraction_state"] == "media_extracted"
+    assert result["parent_source_reference"] == f"AA-P{parent.id:04d}"
+    assert "All media from" in result["message"]
+    assert db.query(IngestFile).filter(IngestFile.id == audio.id, IngestFile.batch_id != parent.id).count() == 1
+    assert db.query(IngestFile).filter(IngestFile.id == artwork.id, IngestFile.batch_id == parent.id).count() == 1
+
+    db.refresh(parent)
+    summary = build_parent_candidate_summary(db, parent)
+    assert summary["parent_container_state"] == "partial_parent_container"
+    assert summary["parent_media_extraction_complete"] is True
+    assert summary["parent_extraction_state"] == "media_extracted"
+    assert summary["remaining_primary_file_count"] == 0
+    assert summary["remaining_support_file_count"] == 1
+    assert summary["requires_review"] is False
+    assert summary["approval_allowed"] is False
+
+    display = build_batch_display_fields(parent, summary)
+    assert display["media_label"] == "Processed Container"
+    assert display["edit_kind"] is None
+    assert "all media extracted" in display["secondary_name"]
+    assert "support file" in display["secondary_name"]
+
+    api_summary = _batch_to_summary(parent, db=db)
+    assert api_summary.source_path == parent.source_path
+    assert api_summary.parent_media_extraction_complete is True
+    assert api_summary.parent_extraction_state == "media_extracted"
+    assert api_summary.remaining_primary_file_count == 0
+    assert api_summary.remaining_support_file_count == 1
+    assert api_summary.edit_kind is None
+
 
 def test_failed_materialization_does_not_complete_parent(db) -> None:
     good_release = album_row("Good Candidate", "2024")
@@ -672,6 +763,11 @@ def test_discography_release_decisions_leave_remainder_on_parent(db) -> None:
     result = execute_split_discography_releases(db, parent.id)
     assert result["created_count"] == 1
     assert result["parent_review_state"] == "review_in_progress"
+    assert result["remaining_primary_file_count"] == 3
+    assert result["remaining_support_file_count"] == 0
+    assert result["parent_media_extraction_complete"] is False
+    assert result["parent_extraction_state"] == "in_progress"
+    assert result["parent_source_reference"] == f"AA-P{parent.id:04d}"
     db.refresh(parent)
     assert parent.status == "pending_review"
     assert parent.metadata_json["parent_container_state"] == "partial_parent_container"
@@ -701,6 +797,10 @@ def test_discography_release_decisions_leave_remainder_on_parent(db) -> None:
     assert summary["parent_container_state"] == "partial_parent_container"
     assert summary["child_batch_count"] == 1
     assert summary["active_parent_file_count"] == 3
+    assert summary["remaining_primary_file_count"] == 3
+    assert summary["remaining_support_file_count"] == 0
+    assert summary["parent_media_extraction_complete"] is False
+    assert summary["parent_extraction_state"] == "in_progress"
     assert summary["materialized_child_count"] == 1
     assert summary["remaining_candidate_count"] == 3
 
@@ -738,6 +838,19 @@ def test_single_item_batch_stays_normal(db) -> None:
     assert display["item_label"] == "tracks"
 
 
+def test_parent_source_progress_ui_contract() -> None:
+    batch_row = (PROJECT_ROOT / "frontend" / "src" / "components" / "BatchRow.tsx").read_text(encoding="utf-8")
+    discography_editor = (PROJECT_ROOT / "frontend" / "src" / "components" / "DiscographyEditor.tsx").read_text(encoding="utf-8")
+    app = (PROJECT_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+
+    assert '"AA-P" + String(batch.id).padStart(4, "0")' in batch_row
+    assert "parent_media_extraction_complete" in batch_row
+    assert "Processed source containers cannot be selected" in batch_row
+    assert "remainingMediaFileCount" in discography_editor
+    assert "remainingSupportFileCount" in discography_editor
+    assert "discography-editor__source-progress" in discography_editor
+    assert "filtered.filter((batch) => !isProcessedContainerBatch(batch))" in app
+
 def main() -> None:
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
@@ -752,9 +865,11 @@ def main() -> None:
         test_split_complete_parent_counts_actual_children_without_history(db)
         test_discography_editor_rows_create_child_batches_without_candidates(db)
         test_support_only_discography_release_stays_on_parent(db)
+        test_media_complete_parent_with_support_remainder_is_processed(db)
         test_discography_release_decisions_leave_remainder_on_parent(db)
         test_failed_materialization_does_not_complete_parent(db)
         test_single_item_batch_stays_normal(db)
+        test_parent_source_progress_ui_contract()
         print("PASS - AA-QA1-FIX2.2 candidate-member-first materialization verified")
     finally:
         db.close()

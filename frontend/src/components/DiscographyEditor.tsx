@@ -185,6 +185,12 @@ export default function DiscographyEditor({
     unresolved: 0,
   }), [albums]);
   const extractableAlbumCount = releaseDecisionCounts.extract_as_child;
+  const sourceReference = "AA-P" + String(batch.id).padStart(4, "0");
+  const normalizedSourcePath = (batch.source_path ?? "").replace(/\\/g, "/");
+  const sourceFolderName = normalizedSourcePath.split("/").filter(Boolean).pop() ?? "Source folder";
+  const childBatchCount = batch.child_batch_count ?? 0;
+  const remainingMediaFileCount = batch.remaining_primary_file_count ?? batch.file_count ?? 0;
+  const remainingSupportFileCount = batch.remaining_support_file_count ?? 0;
 
   const buildUpdate = (): DiscographyMetadataUpdate => ({
     artist: artist.trim() || "Unknown Artist",
@@ -220,6 +226,12 @@ export default function DiscographyEditor({
             <span className="discography-editor__header-eyebrow">Music · Discography</span>
             <h2>Correct discography</h2>
             <p>Edit collection metadata, release decisions, and the move plan without changing audio tags.</p>
+            <div className="discography-editor__source-progress" title={batch.source_path ?? sourceFolderName}>
+              <span><strong>{sourceReference}</strong> · {sourceFolderName}</span>
+              <span>{childBatchCount} child batch{childBatchCount === 1 ? "" : "es"} created</span>
+              <span>{remainingMediaFileCount} media file{remainingMediaFileCount === 1 ? "" : "s"} remaining</span>
+              <span>{remainingSupportFileCount} support file{remainingSupportFileCount === 1 ? "" : "s"}</span>
+            </div>
           </div>
           <button type="button" className="btn-sm" disabled={saving} onClick={onClose}>
             <i className="ti ti-x" />

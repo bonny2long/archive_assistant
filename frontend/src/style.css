@@ -1,4 +1,4 @@
-﻿*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
   --bg-page:       #0B0D13;
@@ -4662,3 +4662,30 @@ button:focus-visible, input:focus-visible {
 }
 
 /* End AA-META1 */
+/* Parent source extraction progress */
+.row-source-reference {
+  max-width: 24rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--accent-blue);
+  font-family: var(--font-mono);
+}
+
+.discography-editor__source-progress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.8rem;
+  margin-top: 0.65rem;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.discography-editor__source-progress span {
+  white-space: nowrap;
+}
+
+.discography-editor__source-progress strong {
+  color: var(--accent-blue);
+  font-family: var(--font-mono);
+}

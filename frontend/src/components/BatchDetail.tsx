@@ -40,7 +40,7 @@ function hasSplitChildHistory(metadata: Record<string, unknown>): boolean {
 function isDrainedParentBatch(batch: IngestBatch): boolean {
   const metadata = batch.metadata_json ?? {};
   const parentState = typeof metadata.parent_container_state === "string" ? metadata.parent_container_state : metadata.display_state;
-  if (metadata.parent_is_drained === true || parentState === "drained_parent") return true;
+  if (metadata.parent_media_extraction_complete === true || metadata.parent_is_drained === true || parentState === "drained_parent") return true;
   const activeFileCount = Number(metadata.active_parent_file_count ?? batch.files?.length ?? 0);
   return batch.detected_type === "music_discography"
     && activeFileCount === 0
@@ -48,6 +48,12 @@ function isDrainedParentBatch(batch: IngestBatch): boolean {
 }
 
 function DrainedParentDetail({ batch, moveSummary }: { batch: IngestBatch; moveSummary?: BatchMoveSummary }) {
+  const metadata = batch.metadata_json ?? {};
+  const supportCount = Number(metadata.remaining_support_file_count ?? 0);
+  const childCount = Number(metadata.child_batch_count ?? 0);
+  const sourceReference = "AA-P" + String(batch.id).padStart(4, "0");
+  const normalizedSource = batch.source_path.replace(/\\/g, "/");
+  const sourceFolder = normalizedSource.split("/").filter(Boolean).pop() ?? batch.source_path;
   return (
     <div className="batch-detail batch-detail--drained-parent">
       <section className="library-card drained-parent-card">
@@ -55,8 +61,9 @@ function DrainedParentDetail({ batch, moveSummary }: { batch: IngestBatch; moveS
         <div>
           <div className="library-status__eyebrow">Processed intake container</div>
           <h2>{getBatchDisplayTitle(batch)}</h2>
-          <p>This intake folder has been split into child batches.</p>
-          <p>0 active files remain on this parent.</p>
+          <p><strong>{sourceReference}</strong> · {sourceFolder}</p>
+          <p>{childCount > 0 ? "All primary media from this intake folder has been extracted into child batches." : "No primary media remains in this intake folder."}</p>
+          <p>{supportCount > 0 ? supportCount + " support file" + (supportCount === 1 ? "" : "s") + " remain attached for Cleaner." : "0 active files remain on this parent."}</p>
           <p>Review the child batches from the dashboard.</p>
           <p>Physical source cleanup will be handled later by Cleaner.</p>
         </div>
