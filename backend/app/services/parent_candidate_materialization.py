@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.models.archive import IngestBatch, IngestFile
@@ -43,14 +44,17 @@ def is_parent_container_batch(batch: IngestBatch) -> bool:
 def get_child_batch_count(batch: IngestBatch, db: Session) -> int:
     if batch.id is None:
         return 0
-    count = 0
-    for child in db.query(IngestBatch).filter(IngestBatch.id != batch.id).all():
-        metadata = child.metadata_json or {}
-        if not isinstance(metadata, dict):
-            continue
-        if int(metadata.get("split_from_batch_id") or metadata.get("source_parent_batch_id") or 0) == batch.id:
-            count += 1
-    return count
+    return int(
+        db.query(IngestBatch.id)
+        .filter(
+            IngestBatch.id != batch.id,
+            or_(
+                IngestBatch.metadata_json["split_from_batch_id"].as_integer() == batch.id,
+                IngestBatch.metadata_json["source_parent_batch_id"].as_integer() == batch.id,
+            ),
+        )
+        .count()
+    )
 
 
 def get_active_parent_file_count(batch: IngestBatch, db: Session) -> int:
@@ -132,12 +136,36 @@ def build_parent_candidate_summary(db: Session | None, batch: IngestBatch) -> di
     if db is None:
         return empty_parent_candidate_summary()
 
+    metadata = batch.metadata_json or {}
+    candidate_ids = [
+        candidate_id
+        for (candidate_id,) in db.query(MediaIdentityCandidate.id)
+        .filter(MediaIdentityCandidate.batch_id == batch.id)
+        .all()
+    ]
+    candidate_group_count = len(candidate_ids)
+    explicit_parent_container = is_parent_container_batch(batch)
+    if not explicit_parent_container and candidate_group_count <= 1:
+        return empty_parent_candidate_summary() | {
+            "candidate_group_count": candidate_group_count,
+            "remaining_candidate_count": candidate_group_count,
+        }
+
     remaining_parent_file_count = get_active_parent_file_count(batch, db)
     actual_child_count = get_child_batch_count(batch, db)
-    parent_container_state = get_parent_container_display_state(batch, db)
-    metadata = batch.metadata_json or {}
+    if explicit_parent_container:
+        if actual_child_count > 0 and remaining_parent_file_count == 0:
+            parent_container_state = PARENT_CONTAINER_DRAINED
+        elif actual_child_count > 0 and remaining_parent_file_count > 0:
+            parent_container_state = PARENT_CONTAINER_PARTIAL
+        elif remaining_parent_file_count > 0:
+            parent_container_state = PARENT_CONTAINER_ACTIVE
+        else:
+            parent_container_state = None
+    else:
+        parent_container_state = None
 
-    if is_drained_parent(batch, db):
+    if parent_container_state == PARENT_CONTAINER_DRAINED:
         return empty_parent_candidate_summary() | {
             "candidate_group_count": actual_child_count,
             "materialized_child_count": actual_child_count,
@@ -150,13 +178,6 @@ def build_parent_candidate_summary(db: Session | None, batch: IngestBatch) -> di
             "historical_scan_snapshot": True,
         }
 
-    candidate_ids = [
-        candidate_id
-        for (candidate_id,) in db.query(MediaIdentityCandidate.id)
-        .filter(MediaIdentityCandidate.batch_id == batch.id)
-        .all()
-    ]
-    candidate_group_count = len(candidate_ids)
     metadata_parent_state = metadata.get("parent_review_state")
 
     if metadata_parent_state in {PARENT_PARTIALLY_MATERIALIZED, PARENT_SPLIT_COMPLETE}:

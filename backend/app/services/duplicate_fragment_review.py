@@ -5,12 +5,13 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
 from app.core.time import now_utc
 from app.models.archive import IngestBatch, IngestFile
-from app.models.media_metadata import UniversalIngestionReviewAction
+from app.models.media_metadata import MediaIdentityCandidate, UniversalIngestionReviewAction
 from app.services.destination_authority import (
     build_music_library_destination,
     classify_music_destination_bucket,
@@ -19,7 +20,7 @@ from app.services.destination_authority import (
     validate_music_format_destination,
 )
 from app.services.music_metadata import resolved_music_track_evidence
-from app.services.parent_candidate_materialization import build_parent_candidate_summary
+from app.services.parent_candidate_materialization import is_parent_container_batch
 from app.services.universal_ingestion import snapshot_universal_ingestion_boundary
 
 DUPLICATE_STATE_NONE = "none"
@@ -523,9 +524,22 @@ def _load_reviewable_batches(db: Session) -> list[IngestBatch]:
         .filter(IngestBatch.status.in_(REVIEWABLE_BATCH_STATUSES))
         .all()
     )
+    candidate_counts = {
+        int(batch_id): int(candidate_count)
+        for batch_id, candidate_count in (
+            db.query(
+                MediaIdentityCandidate.batch_id,
+                func.count(MediaIdentityCandidate.id),
+            )
+            .filter(MediaIdentityCandidate.batch_id.in_([batch.id for batch in batches]))
+            .group_by(MediaIdentityCandidate.batch_id)
+            .all()
+        )
+    } if batches else {}
     return [
         batch for batch in batches
-        if not build_parent_candidate_summary(db, batch)["is_parent_review_container"]
+        if not is_parent_container_batch(batch)
+        and candidate_counts.get(batch.id, 0) <= 1
         and not _has_resolved_duplicate_review_state(batch)
     ]
 
@@ -533,7 +547,8 @@ def _load_reviewable_batches(db: Session) -> list[IngestBatch]:
 def build_duplicate_fragment_review(db: Session, batch_id: int | None = None) -> dict[str, Any]:
     batches = [
         batch for batch in _load_reviewable_batches(db)
-        if _item_count(batch, batch.metadata_json or {}) > 0 or batch.suggested_destination
+        if (_item_count(batch, batch.metadata_json or {}) > 0 or batch.suggested_destination)
+        and _has_primary_scoped_media(batch)
     ]
     by_id = {batch.id: batch for batch in batches}
     by_identity: dict[str, list[int]] = defaultdict(list)
@@ -725,6 +740,16 @@ def _file_extension(ingest_file: IngestFile) -> str:
 
 def _is_music_audio_file(ingest_file: IngestFile) -> bool:
     return _file_extension(ingest_file) in AUDIO_EXTENSIONS or (ingest_file.detected_role or "") in AUDIO_ROLE_VALUES
+
+
+def _has_primary_scoped_media(batch: IngestBatch) -> bool:
+    metadata = batch.metadata_json or {}
+    if _media_type(batch, metadata) == "music_album":
+        files = batch.files or []
+        # A metadata-only row must remain reviewable so missing ownership is
+        # surfaced. Attached support files without audio are not an album.
+        return not files or any(_is_music_audio_file(ingest_file) for ingest_file in files)
+    return bool(batch.files or [])
 
 
 def _music_file_format(ingest_file: IngestFile) -> str | None:

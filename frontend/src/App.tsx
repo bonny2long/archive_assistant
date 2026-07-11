@@ -107,6 +107,7 @@ export default function App() {
   const [scanStatus, setScanStatus] = useState<ScanJobStatus | null>(null);
   const batchLoadRequestId = useRef(0);
   const hasLoadedBatchesRef = useRef(false);
+  const initialLoadStartedRef = useRef(false);
 
   const showToast = useCallback((msg: string, type: ToastState["type"] = "info") => {
     setToast({ msg, type });
@@ -168,6 +169,8 @@ export default function App() {
   }, [loadLibrarySummary]);
 
   useEffect(() => {
+    if (initialLoadStartedRef.current) return;
+    initialLoadStartedRef.current = true;
     void loadBatches({ resetCachedDetails: true, mode: "initial" });
     void api.health()
       .then((health) => setDevToolsEnabled(health.dev_tools_enabled))

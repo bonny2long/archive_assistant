@@ -532,6 +532,58 @@ def test_discography_editor_rows_create_child_batches_without_candidates(db) -> 
     ).count() == 4
 
 
+def test_support_only_discography_release_stays_on_parent(db) -> None:
+    release = album_row("Artwork Remainder", "2024") | {
+        "release_decision": "extract_as_child",
+        "include": True,
+    }
+    parent = IngestBatch(
+        source_kind="manual-drop",
+        source_path=str(PROJECT_ROOT / ".tmp" / "support-only-parent"),
+        detected_type="music_discography",
+        status="pending_review",
+        confidence=0.8,
+        metadata_json={
+            "type": "music_discography",
+            "artist": "Archive Artist",
+            "albums": [release],
+            "album_count": 1,
+            "release_count": 1,
+        },
+    )
+    db.add(parent)
+    db.flush()
+    artwork = IngestFile(
+        batch_id=parent.id,
+        file_path=str(Path(parent.source_path) / release["source_folder"] / "cover.jpg"),
+        file_name="cover.jpg",
+        extension=".jpg",
+        size_bytes=2048,
+        checksum="support-only-cover",
+        detected_role="artwork",
+        metadata_json={"_discography_album": release},
+    )
+    db.add(artwork)
+    db.commit()
+    child_count_before = db.query(IngestBatch).filter(IngestBatch.detected_type == "music_album").count()
+
+    result = execute_split_discography_releases(db, parent.id)
+    assert result["created_count"] == 0
+    assert "support-only folder" in result["message"]
+    assert db.query(IngestBatch).filter(IngestBatch.detected_type == "music_album").count() == child_count_before
+    assert db.query(IngestFile).filter(IngestFile.id == artwork.id, IngestFile.batch_id == parent.id).count() == 1
+
+    db.refresh(parent)
+    remainder = parent.metadata_json["albums"][0]
+    assert remainder["release_decision"] == "unresolved"
+    assert remainder["status"] == "support_only_remainder"
+    assert remainder["support_only_file_count"] == 1
+    assert remainder["support_only_files"] == ["cover.jpg"]
+    assert "support_files_without_media_owner" in remainder["warnings"]
+    assert parent.metadata_json["discography_split_audit"][-1]["support_only_source_folders"] == ["Artwork Remainder"]
+    assert parent.metadata_json["parent_is_drained"] is False
+    assert parent.metadata_json["active_parent_file_count"] == 1
+
 def test_failed_materialization_does_not_complete_parent(db) -> None:
     good_release = album_row("Good Candidate", "2024")
     broken_release = album_row("Broken Candidate", "2024")
@@ -699,6 +751,7 @@ def main() -> None:
         test_partial_materialization_keeps_unresolved_parent_remainder(db)
         test_split_complete_parent_counts_actual_children_without_history(db)
         test_discography_editor_rows_create_child_batches_without_candidates(db)
+        test_support_only_discography_release_stays_on_parent(db)
         test_discography_release_decisions_leave_remainder_on_parent(db)
         test_failed_materialization_does_not_complete_parent(db)
         test_single_item_batch_stays_normal(db)

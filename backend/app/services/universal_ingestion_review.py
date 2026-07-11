@@ -403,8 +403,16 @@ def get_batch_universal_ingestion_review(
                 "media_class": member.media_class,
                 "size_bytes": ingest_file.size_bytes if ingest_file else None,
                 "duration_seconds": _first(fields, "duration_seconds"),
-                "track_number": track_evidence.get("resolved_track") or _first(fields, "track_number", "tracknumber"),
-                "disc_number": track_evidence.get("disc") or _first(fields, "disc_number", "discnumber"),
+                "track_number": (
+                    str(track_evidence["resolved_track"])
+                    if track_evidence.get("resolved_track") is not None
+                    else _first(fields, "track_number", "tracknumber")
+                ),
+                "disc_number": (
+                    str(track_evidence["disc"])
+                    if track_evidence.get("disc") is not None
+                    else _first(fields, "disc_number", "discnumber")
+                ),
                 "season_number": evidence.get("season"),
                 "episode_number": evidence.get("episode"),
                 "title": _first(fields, "title"),

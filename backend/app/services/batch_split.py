@@ -152,6 +152,28 @@ def _partition_child_files(files_to_move: list[IngestFile]) -> dict[str, list[In
     }
 
 
+def _mark_support_only_remainder(album: dict[str, Any], files: list[IngestFile]) -> None:
+    parts = _partition_child_files(files)
+    support_files = [*parts["artwork"], *parts["sidecars"], *parts["other"]]
+    warnings = list(album.get("warnings") or [])
+    warnings.append("support_files_without_media_owner")
+    album["warnings"] = list(dict.fromkeys(warnings))
+    album["release_decision"] = "unresolved"
+    album["include"] = False
+    album["status"] = "support_only_remainder"
+    album["support_only_file_count"] = len(support_files)
+    album["support_only_files"] = [file.file_name for file in support_files]
+
+
+def _require_music_audio_files(files: list[IngestFile], source_folder: str) -> None:
+    if _partition_child_files(files)["audio"]:
+        return
+    raise ValueError(
+        f"Release '{source_folder}' contains only artwork, playlists, or sidecar files. "
+        "It remains attached to the parent for later Cleaner handling."
+    )
+
+
 def _embedded_fields(ingest_file: IngestFile) -> dict[str, Any]:
     meta = ingest_file.metadata_json or {}
     embedded = meta.get("embedded_metadata_fields")
@@ -805,6 +827,7 @@ def execute_split_discography_releases(db: Session, batch_id: int) -> dict[str, 
     created_child_batch_ids: list[int] = []
     skipped_child_batch_ids: list[int] = []
     skipped_sources: list[str] = []
+    support_only_source_folders: list[str] = []
     split_sources: set[str] = set()
     extracted_source_folders: list[str] = []
 
@@ -824,6 +847,11 @@ def execute_split_discography_releases(db: Session, batch_id: int) -> dict[str, 
         files_to_move = _files_for_source_folder(parent_batch.files, source_folder)
         if not files_to_move:
             skipped_sources.append(source_folder)
+            continue
+        if not _partition_child_files(files_to_move)["audio"]:
+            _mark_support_only_remainder(album, files_to_move)
+            skipped_sources.append(source_folder)
+            support_only_source_folders.append(source_folder)
             continue
 
         album_metadata = _build_album_batch_metadata(
@@ -871,7 +899,7 @@ def execute_split_discography_releases(db: Session, batch_id: int) -> dict[str, 
         split_sources.add(_norm_match(source_folder))
         extracted_source_folders.append(source_folder)
 
-    if not created_child_batch_ids and not skipped_child_batch_ids and extract_albums:
+    if not created_child_batch_ids and not skipped_child_batch_ids and extract_albums and not support_only_source_folders:
         existing_children = recover_split_child_batches(db, parent_batch)
         if existing_children:
             _, active_parent_file_count, parent_container_state = _sync_parent_container_metadata(db, parent_batch, batch_metadata)
@@ -912,6 +940,7 @@ def execute_split_discography_releases(db: Session, batch_id: int) -> dict[str, 
         "excluded_source_folders": _source_folders_for_decision(remaining_albums, "exclude"),
         "blocked_source_folders": _source_folders_for_decision(remaining_albums, "blocked"),
         "unresolved_source_folders": _source_folders_for_decision(remaining_albums, "unresolved"),
+        "support_only_source_folders": support_only_source_folders,
         "skipped_source_folders": skipped_sources,
         "split_at": timestamp.isoformat(),
     })
@@ -942,6 +971,9 @@ def execute_split_discography_releases(db: Session, batch_id: int) -> dict[str, 
         message = f"Created {created_count} child batch{'es' if created_count != 1 else ''} from releases marked Extract as child."
     elif skipped_child_batch_ids:
         message = "Release child batches already exist."
+    elif support_only_source_folders:
+        count = len(support_only_source_folders)
+        message = f"No media child batches were created. {count} support-only folder{'s' if count != 1 else ''} remain on the parent for Cleaner."
     else:
         message = "No releases were marked Extract as child; parent decisions were saved."
     if active_parent_file_count:
@@ -984,6 +1016,8 @@ def execute_split_candidate(db: Session, batch_id: int, candidate_id: int) -> di
         batch_metadata,
         identity_override,
     )
+
+    _require_music_audio_files(files_to_move, source_folder)
 
     timestamp = now_utc()
     album_metadata = _build_album_batch_metadata(

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.time import now_utc
@@ -12,6 +13,7 @@ from app.services.batch_split import (
     _album_from_candidate_and_files,
     _build_album_batch_metadata,
     _library_album_destination,
+    _partition_child_files,
     _suggested_metadata as _music_suggested_metadata,
 )
 from app.services.destination_authority import rebuild_music_batch_destination_from_attached_files
@@ -229,6 +231,23 @@ def _candidate_member_file_ids(db: Session, candidate_id: int) -> list[int]:
     return list(dict.fromkeys(ids))
 
 
+def _candidate_primary_file_ids(db: Session, candidate_id: int) -> set[int]:
+    return {
+        int(file_id)
+        for (file_id,) in (
+            db.query(CandidateMember.batch_file_id)
+            .filter(
+                CandidateMember.candidate_id == candidate_id,
+                CandidateMember.batch_file_id.isnot(None),
+                or_(
+                    CandidateMember.role_in_candidate.is_(None),
+                    CandidateMember.role_in_candidate != "support",
+                ),
+            )
+            .all()
+        )
+    }
+
 def _existing_child_from_candidate_files(db: Session, candidate: MediaIdentityCandidate, file_ids: list[int], parent_batch_id: int) -> int | None:
     if not file_ids:
         return None
@@ -255,6 +274,12 @@ def _candidate_parent_files(db: Session, parent_batch: IngestBatch, candidate: M
     ).all()
     if not files:
         raise MaterializationError("Candidate has no scoped files available for materialization.")
+    primary_file_ids = _candidate_primary_file_ids(db, candidate.id)
+    if not any(file.id in primary_file_ids for file in files):
+        raise MaterializationError(
+            "Candidate has only artwork, playlists, or sidecar files attached to the parent. "
+            "Support files remain on the parent for later Cleaner handling."
+        )
     return files
 
 
@@ -281,6 +306,11 @@ def _music_child_metadata(candidate: MediaIdentityCandidate, files: list[IngestF
 def _create_child_batch(db: Session, parent_batch: IngestBatch, candidate: MediaIdentityCandidate, files: list[IngestFile]) -> int:
     detected_type = _candidate_detected_type(candidate)
     if detected_type == "music_album":
+        if not _partition_child_files(files)["audio"]:
+            raise MaterializationError(
+                "Music child creation requires at least one attached audio file. "
+                "Support files remain on the parent for later Cleaner handling."
+            )
         metadata = _music_child_metadata(candidate, files, parent_batch)
         suggested_metadata = _music_suggested_metadata(metadata)
         suggested_destination = _library_album_destination(metadata)

@@ -88,6 +88,8 @@ def check_frontend_actions() -> None:
     assert_true("api.scanMusic" not in load_batches, "loadBatches must not scan ingest")
     assert_true("batchLoadRequestId" in load_batches, "loadBatches must ignore stale overlapping responses")
     assert_true("setBatchLoadError" in load_batches, "loadBatches must settle to an error state on failure")
+    assert_true("const initialLoadStartedRef = useRef(false)" in app, "Initial dashboard load must have a Strict Mode duplicate-request guard")
+    assert_true("if (initialLoadStartedRef.current) return;" in app, "Initial dashboard load must skip the duplicate Strict Mode effect")
 
     assert_true('await loadBatches({ mode: "refresh" })' in handle_refresh, "Refresh must reload existing DB/API batches")
     assert_true("api.scanMusic" not in handle_refresh, "Refresh must not scan ingest")

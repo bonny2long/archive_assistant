@@ -250,6 +250,67 @@ def test_multiple_source_folders_blocks_safely(db) -> None:
     assert db.query(IngestFile).filter(IngestFile.batch_id == parent.id).count() == 4
 
 
+def test_support_only_candidate_stays_on_parent(db) -> None:
+    release = album("Artwork Remainder", "Example Artist", "artwork-remainder", "2024")
+    parent = IngestBatch(
+        source_kind="manual-drop",
+        source_path=str(PROJECT_ROOT / ".tmp" / "m4d5-support-only"),
+        detected_type="music_discography",
+        status="pending_review",
+        confidence=0.82,
+        metadata_json={
+            "type": "music_discography",
+            "artist": "Example Artist",
+            "albums": [release],
+            "album_count": 1,
+            "release_count": 1,
+        },
+    )
+    artwork = IngestFile(
+        file_path=str(Path(parent.source_path) / release["source_folder"] / "cover.jpg"),
+        file_name="cover.jpg",
+        extension=".jpg",
+        size_bytes=2048,
+        checksum="support-only-cover",
+        detected_role="artwork",
+        metadata_json={"_discography_album": release},
+    )
+    parent.files.append(artwork)
+    db.add(parent)
+    db.commit()
+
+    candidate = MediaIdentityCandidate(
+        batch_id=parent.id,
+        candidate_key="music:example-artist:artwork-remainder",
+        candidate_media_type="music",
+        candidate_title=release["album"],
+        candidate_primary_creator=release["artist"],
+        candidate_year=release["year"],
+        candidate_confidence=0.91,
+        identity_evidence_json={},
+    )
+    db.add(candidate)
+    db.flush()
+    db.add(CandidateMember(
+        candidate_id=candidate.id,
+        batch_file_id=artwork.id,
+        relative_path=artwork.file_name,
+        media_class="artwork",
+        role_in_candidate="support",
+        sort_key=artwork.file_name,
+        evidence_json={},
+    ))
+    db.commit()
+
+    child_count = db.query(IngestBatch).filter(IngestBatch.detected_type == "music_album").count()
+    message = expect_value_error(lambda: execute_split_candidate(db, parent.id, candidate.id))
+    assert "only artwork" in message
+    assert db.query(IngestBatch).filter(IngestBatch.detected_type == "music_album").count() == child_count
+    assert db.query(IngestFile).filter(IngestFile.batch_id == parent.id).count() == 1
+    db.refresh(parent)
+    assert parent.status == "pending_review"
+
+
 def test_full_parent_completion_and_action_applied(db) -> None:
     releases = [
         album("First Album", "Artist One", "artist-one-first-album", "2020"),
@@ -335,6 +396,7 @@ def main() -> None:
         test_identity_override_does_not_need_album_match(db)
         test_missing_album_row_synthesizes_metadata(db)
         test_multiple_source_folders_blocks_safely(db)
+        test_support_only_candidate_stays_on_parent(db)
         test_full_parent_completion_and_action_applied(db)
         test_invalid_inputs(db)
 

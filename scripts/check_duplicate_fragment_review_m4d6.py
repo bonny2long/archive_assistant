@@ -18,6 +18,7 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from app.db.session import Base  # noqa: E402
 from app.models.archive import IngestBatch, IngestFile, MoveAction  # noqa: E402
+from app.schemas.archive import BatchUniversalIngestionOut  # noqa: E402
 from app.services.duplicate_fragment_review import (  # noqa: E402
     DuplicateFragmentResolutionError,
     build_duplicate_fragment_review,
@@ -554,6 +555,38 @@ def test_same_destination_creates_duplicate_conflict(db) -> None:
     assert "same destination" in matching[0]["reason"]
 
 
+def test_artwork_only_music_rows_do_not_form_duplicate_clusters(db) -> None:
+    rows = []
+    for suffix in ("a", "b"):
+        batch = add_music_batch(
+            db,
+            artist="Kanye West",
+            album="The College Dropout",
+            year="2004",
+            track_count=13,
+            attach_files=False,
+        )
+        db.add(IngestFile(
+            batch_id=batch.id,
+            file_path=str(Path(batch.source_path) / f"cover-{suffix}.jpg"),
+            file_name=f"cover-{suffix}.jpg",
+            extension=".jpg",
+            size_bytes=2048,
+            checksum=f"artwork-only-{suffix}",
+            detected_role="artwork",
+            metadata_json={"artwork_name": f"cover-{suffix}.jpg"},
+        ))
+        rows.append(batch)
+    db.commit()
+
+    review = build_duplicate_fragment_review(db)
+    clustered_ids = {
+        row["batch_id"]
+        for cluster in review["clusters"]
+        for row in cluster["batches"]
+    }
+    assert all(batch.id not in clustered_ids for batch in rows)
+
 def test_singletons_are_not_flagged(db) -> None:
     graduation = add_music_batch(db, artist="Kanye West", album="Graduation", year="2007", track_count=13)
     late = add_music_batch(db, artist="Kanye West", album="Late Registration", year="2005", track_count=21)
@@ -780,8 +813,15 @@ def test_fragment_append_refreshes_universal_review_from_resolved_tracks(db) -> 
     assert sorted(row["track_number"] for row in repaired_metadata["tracks"]) == [
         1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22,
     ]
+    validated_review = BatchUniversalIngestionOut.model_validate(review)
+    assert validated_review.summary.candidate_count == 1
     assert review["summary"]["candidate_count"] == 1
     assert review["summary"]["member_count"] == 20
+    assert all(
+        isinstance(member["track_number"], str)
+        for candidate in review["candidates"]
+        for member in candidate["members"]
+    )
     assert review["summary"]["source_origin_count"] == 4
     assert review["summary"]["source_origins_resolved"] is True
     flag_types = {flag["flag_type"] for flag in review["mixed_media_flags"]}
@@ -906,6 +946,7 @@ def main() -> None:
         test_fragment_append_refreshes_universal_review_from_resolved_tracks,
         test_resolved_same_track_conflict_still_blocks_append,
         test_resolved_same_track_duplicate_is_skipped,
+        test_artwork_only_music_rows_do_not_form_duplicate_clusters,
         test_singletons_are_not_flagged,
         test_edition_conflicts_are_grouped_not_fragmented,
     ]
