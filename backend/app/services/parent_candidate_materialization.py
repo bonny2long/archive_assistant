@@ -40,16 +40,18 @@ MATERIALIZATION_DECISION_ACTIONS = {
 
 def is_parent_container_batch(batch: IngestBatch) -> bool:
     metadata = batch.metadata_json or {}
-    if metadata.get("split_from_batch_id") or metadata.get("source_parent_batch_id"):
-        return False
     if batch.detected_type in PARENT_CONTAINER_TYPES:
         return True
-    return bool(
-        metadata.get("parent_review_state")
-        or metadata.get("materialization_history")
+    has_own_split_evidence = bool(
+        metadata.get("materialization_history")
         or metadata.get("split_history")
         or metadata.get("discography_split_audit")
     )
+    if has_own_split_evidence:
+        return True
+    if metadata.get("split_from_batch_id") or metadata.get("source_parent_batch_id"):
+        return False
+    return bool(metadata.get("parent_review_state"))
 
 
 def get_child_batch_count(batch: IngestBatch, db: Session) -> int:

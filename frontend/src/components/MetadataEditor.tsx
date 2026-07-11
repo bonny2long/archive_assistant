@@ -15,6 +15,7 @@ type Props = {
   batch: BatchSummary;
   saving: boolean;
   onSave: (update: BatchMetadataUpdate) => Promise<void>;
+  onChangeToAudiobook: () => Promise<void>;
   onClose: () => void;
 };
 
@@ -291,6 +292,7 @@ export default function MusicAlbumReviewEditor({
   batch,
   saving,
   onSave,
+  onChangeToAudiobook,
   onClose,
 }: Props) {
   const [artist, setArtist] = useState(() => metadataValue(batch, "artist"));
@@ -405,9 +407,20 @@ export default function MusicAlbumReviewEditor({
               {batch.track_count} tracks{DIVIDER}{batch.disc_count} disc{batch.disc_count === 1 ? "" : "s"}{DIVIDER}{batch.format ?? "Unknown format"}{DIVIDER}Confidence {Math.round((batch.confidence ?? 0) * 100)}%
             </p>
           </div>
-          <button type="button" className="btn-sm" title="Close" onClick={onClose}>
-            <i className="ti ti-x" />
-          </button>
+          <div className="metadata-cockpit__header-actions">
+            <button
+              type="button"
+              className="btn btn--compact"
+              disabled={saving}
+              title="Reclassify this scoped batch as an audiobook"
+              onClick={() => void onChangeToAudiobook()}
+            >
+              <i className="ti ti-book-2" /> Change to Audiobook
+            </button>
+            <button type="button" className="btn-sm" title="Close" onClick={onClose}>
+              <i className="ti ti-x" />
+            </button>
+          </div>
         </div>
 
         <div className="editor-shell__body metadata-cockpit__body">

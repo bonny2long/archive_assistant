@@ -561,6 +561,10 @@ class IngestBatchOut(BaseModel):
     class Config:
         from_attributes = True
 
+class BatchMediaTypeUpdate(BaseModel):
+    target_detected_type: Literal["music_album", "audiobook"]
+
+
 class BatchMetadataUpdate(BaseModel):
     artist: str = Field(min_length=1)
     album: str = Field(min_length=1)

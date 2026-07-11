@@ -38,7 +38,7 @@ type Props = {
   onQuarantine: (id: number) => void;
   onRestoreQuarantine: (id: number) => void;
   onEdit: (batch: BatchSummary) => void;
-  onOpenWorkspace: (batch: BatchSummary) => void;
+  onOpenWorkspace: (batch: BatchSummary, forceUniversal?: boolean) => void;
   onBulkApprove: () => Promise<void>;
   onBulkReject: () => Promise<void>;
 };

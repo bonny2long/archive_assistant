@@ -23,6 +23,7 @@ type Props = {
   batch: BatchSummary;
   saving: boolean;
   onMetadataSave: (update: BatchMetadataUpdate) => Promise<void>;
+  onMediaTypeChange: (target: "music_album" | "audiobook") => Promise<void>;
   onDiscographySave: (update: DiscographyMetadataUpdate) => Promise<void>;
   onDiscographyCreateChildren: (update: DiscographyMetadataUpdate) => Promise<void>;
   onMovieSave: (update: MovieMetadataUpdate) => Promise<void>;
@@ -40,6 +41,7 @@ export default function MediaReviewRouter({
   batch,
   saving,
   onMetadataSave,
+  onMediaTypeChange,
   onDiscographySave,
   onDiscographyCreateChildren,
   onMovieSave,
@@ -70,6 +72,7 @@ export default function MediaReviewRouter({
         batch={batch}
         saving={saving}
         onSave={onMetadataSave}
+        onChangeToAudiobook={() => onMediaTypeChange("audiobook")}
         onClose={onClose}
       />
     );

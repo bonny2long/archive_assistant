@@ -147,6 +147,8 @@ export const api = {
     request<MetadataEnrichmentPreview>("/batches/" + id + "/metadata-enrichment/preview", "POST", undefined, 60000),
   applyMetadataEnrichment: (id: number, releaseId: string) =>
     request<MetadataEnrichmentApplyResponse>("/batches/" + id + "/metadata-enrichment/apply", "POST", { release_id: releaseId }, 60000),
+  updateBatchMediaType: (id: number, targetDetectedType: "music_album" | "audiobook") =>
+    request<BatchSummary>(`/batches/${id}/media-type`, "PATCH", { target_detected_type: targetDetectedType }),
   updateBatchMetadata: (id: number, update: BatchMetadataUpdate) =>
     request<BatchSummary>(`/batches/${id}/metadata`, "PATCH", update),
   updateDiscographyMetadata: (id: number, update: DiscographyMetadataUpdate) =>

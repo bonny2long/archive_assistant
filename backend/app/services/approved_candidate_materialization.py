@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.config import settings
 from app.core.time import now_utc
 from app.models.archive import IngestBatch, IngestFile
 from app.models.media_metadata import CandidateMember, MediaIdentityCandidate, UniversalIngestionReviewAction
@@ -16,6 +17,7 @@ from app.services.batch_split import (
     _partition_child_files,
     _suggested_metadata as _music_suggested_metadata,
 )
+from app.services.audiobook_metadata import audiobook_destination
 from app.services.destination_authority import rebuild_music_batch_destination_from_attached_files
 from app.services.parent_candidate_materialization import (
     PARENT_CONTAINER_DRAINED,
@@ -79,8 +81,8 @@ def _existing_child_batch_id(db: Session, parent_batch: IngestBatch, candidate_i
     return None
 
 
-def _candidate_detected_type(candidate: MediaIdentityCandidate) -> str:
-    value = (candidate.candidate_media_type or "unknown").casefold()
+def _candidate_detected_type(candidate: MediaIdentityCandidate, target_media_class: str | None = None) -> str:
+    value = (target_media_class or candidate.candidate_media_type or "unknown").casefold()
     if "music" in value or "audio_track" in value or "discography_track" in value:
         return "music_album"
     if "audiobook" in value or value == "audio":
@@ -96,6 +98,24 @@ def _candidate_detected_type(candidate: MediaIdentityCandidate) -> str:
     if "art" in value:
         return "unknown_type"
     return "unknown_type"
+
+
+def _active_media_class_override(db: Session, candidate: MediaIdentityCandidate) -> str | None:
+    row = (
+        db.query(UniversalIngestionReviewAction.target_media_class)
+        .filter(
+            UniversalIngestionReviewAction.batch_id == candidate.batch_id,
+            UniversalIngestionReviewAction.candidate_id == candidate.id,
+            UniversalIngestionReviewAction.action_type == "override_media_class",
+            UniversalIngestionReviewAction.decision_status != "cleared",
+        )
+        .order_by(
+            UniversalIngestionReviewAction.updated_at.desc(),
+            UniversalIngestionReviewAction.id.desc(),
+        )
+        .first()
+    )
+    return str(row[0]) if row and row[0] else None
 
 
 def _candidate_source_folder(candidate: MediaIdentityCandidate, files: list[IngestFile]) -> str:
@@ -118,8 +138,8 @@ def _is_generic_audio_file(file: IngestFile) -> bool:
     return ext in GENERIC_AUDIO_EXTENSIONS or role in {"audio", "audio_track", "music_audio", "music_track", "discography_track"}
 
 
-def _candidate_metadata(candidate: MediaIdentityCandidate, files: list[IngestFile], parent_batch: IngestBatch) -> dict[str, Any]:
-    detected_type = _candidate_detected_type(candidate)
+def _candidate_metadata(candidate: MediaIdentityCandidate, files: list[IngestFile], parent_batch: IngestBatch, detected_type: str | None = None) -> dict[str, Any]:
+    detected_type = detected_type or _candidate_detected_type(candidate)
     title = candidate.candidate_title or "Unknown Title"
     creator = candidate.candidate_primary_creator or "Unknown Creator"
     metadata: dict[str, Any] = {
@@ -304,7 +324,7 @@ def _music_child_metadata(candidate: MediaIdentityCandidate, files: list[IngestF
 
 
 def _create_child_batch(db: Session, parent_batch: IngestBatch, candidate: MediaIdentityCandidate, files: list[IngestFile]) -> int:
-    detected_type = _candidate_detected_type(candidate)
+    detected_type = _candidate_detected_type(candidate, _active_media_class_override(db, candidate))
     if detected_type == "music_album":
         if not _partition_child_files(files)["audio"]:
             raise MaterializationError(
@@ -315,9 +335,18 @@ def _create_child_batch(db: Session, parent_batch: IngestBatch, candidate: Media
         suggested_metadata = _music_suggested_metadata(metadata)
         suggested_destination = _library_album_destination(metadata)
     else:
-        metadata = _candidate_metadata(candidate, files, parent_batch)
+        metadata = _candidate_metadata(candidate, files, parent_batch, detected_type)
         suggested_metadata = _suggested_metadata(candidate, detected_type)
-        suggested_destination = None
+        suggested_destination = (
+            str(audiobook_destination(
+                audiobooks_root=settings.audiobooks_dir,
+                author=str(candidate.candidate_primary_creator or "Unknown Author"),
+                title=str(candidate.candidate_title or "Unknown Title"),
+                year=candidate.candidate_year,
+            ))
+            if detected_type == "audiobook"
+            else None
+        )
 
     timestamp = now_utc()
     child_batch = IngestBatch(
@@ -340,6 +369,10 @@ def _create_child_batch(db: Session, parent_batch: IngestBatch, candidate: Media
     child_batch.files = list(files)
     if detected_type == "music_album":
         rebuild_music_batch_destination_from_attached_files(child_batch, db)
+    elif detected_type == "audiobook":
+        for ingest_file in files:
+            if _is_generic_audio_file(ingest_file):
+                ingest_file.detected_role = "audiobook_audio"
     _append_materialization_history(parent_batch, candidate, child_batch, len(files))
     _mark_candidate_materialized(db, parent_batch.id, candidate.id)
     parent_batch.updated_at = timestamp

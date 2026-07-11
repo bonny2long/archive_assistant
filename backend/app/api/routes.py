@@ -11,6 +11,7 @@ from app.schemas.archive import (
     BulkApproveResponse,
     BatchMoveSummary,
     BatchMetadataQualityOut,
+    BatchMediaTypeUpdate,
     BatchMetadataUpdate,
     MetadataEnrichmentApplyRequest,
     MetadataEnrichmentApplyResponse,
@@ -96,6 +97,10 @@ from app.services.candidate_move_plan_preview import build_candidate_move_plan_p
 from app.services.destination_authority import rebuild_music_batch_destination_from_attached_files
 from app.services.batch_split import execute_split_candidate, execute_split_discography_releases, recover_split_child_batches
 from app.services.approved_candidate_materialization import materialize_approved_candidates
+from app.services.media_type_correction import (
+    apply_fully_scoped_media_class_override,
+    correct_batch_media_type,
+)
 from app.services.universal_review_routing import get_batch_routing_decision
 from app.services.universal_ingestion_review import (
     clear_review_action,
@@ -616,7 +621,16 @@ def create_universal_ingestion_action(
     db: Session = Depends(get_db),
 ):
     try:
-        return create_or_update_review_action(db, batch_id, update.model_dump())
+        payload = update.model_dump()
+        action = create_or_update_review_action(db, batch_id, payload)
+        if payload.get("action_type") == "override_media_class":
+            apply_fully_scoped_media_class_override(
+                db,
+                batch_id,
+                payload.get("candidate_id"),
+                payload.get("target_media_class"),
+            )
+        return action
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -719,6 +733,27 @@ def apply_batch_metadata_enrichment(
         detail = str(exc) or "Metadata enrichment apply failed."
         status_code = 404 if detail == "Batch not found." else 400
         raise HTTPException(status_code=status_code, detail=detail) from exc
+
+
+@router.patch("/batches/{batch_id}/media-type", response_model=BatchSummary)
+def update_batch_media_type(
+    batch_id: int,
+    update: BatchMediaTypeUpdate,
+    db: Session = Depends(get_db),
+):
+    try:
+        batch = correct_batch_media_type(db, batch_id, update.target_detected_type)
+        return _batch_to_summary(
+            batch,
+            db=db,
+            action_message=f"Media type changed to {update.target_detected_type.replace('_', ' ')}.",
+        )
+    except ValueError as exc:
+        detail = str(exc)
+        raise HTTPException(
+            status_code=404 if detail == "Batch not found" else 400,
+            detail=detail,
+        ) from exc
 
 
 @router.patch("/batches/{batch_id}/metadata", response_model=BatchSummary)

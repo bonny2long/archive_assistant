@@ -310,8 +310,8 @@ export default function App() {
       });
     }
   };
-  const handleOpenWorkspace = async (batch: BatchSummary) => {
-    if (hasActiveDuplicateReview(batch)) {
+  const handleOpenWorkspace = async (batch: BatchSummary, forceUniversal = false) => {
+    if (!forceUniversal && hasActiveDuplicateReview(batch)) {
       setWorkspaceBatch(null);
       setWorkspaceDetail(null);
       setWorkspaceError(null);
@@ -401,6 +401,14 @@ export default function App() {
   };
   const handleWorkspaceAction = async (batchId: number, update: UniversalReviewActionUpdate) => {
     await api.createUniversalIngestionAction(batchId, update);
+    if (update.action_type === "override_media_class") {
+      const detail = await api.getBatch(batchId);
+      setDetails((previous) => ({ ...previous, [batchId]: detail }));
+      setWorkspaceDetail((current) => current?.id === batchId ? detail : current);
+      const refreshedBatches = await loadBatches({ mode: "refresh" });
+      const refreshedSummary = refreshedBatches.find((batch) => batch.id === batchId);
+      if (refreshedSummary) setWorkspaceBatch(refreshedSummary);
+    }
   };
 
   const handleWorkspaceClearAction = async (batchId: number, actionId: number) => {
@@ -515,6 +523,25 @@ export default function App() {
     } catch (saveError: unknown) {
       showToast(
         saveError instanceof Error ? saveError.message : "Metadata update failed",
+        "error",
+      );
+    } finally {
+      setSavingMetadata(false);
+    }
+  };
+
+  const handleMediaTypeChange = async (target: "music_album" | "audiobook") => {
+    if (!editingBatch) return;
+    const batchId = editingBatch.id;
+    setSavingMetadata(true);
+    try {
+      const result = await api.updateBatchMediaType(batchId, target);
+      showToast(result.action_message ?? ("Media type changed to " + target.replace("_", " ")));
+      setEditingBatch(result);
+      await loadBatches({ mode: "refresh" });
+    } catch (saveError: unknown) {
+      showToast(
+        saveError instanceof Error ? saveError.message : "Media type correction failed",
         "error",
       );
     } finally {
@@ -937,7 +964,7 @@ export default function App() {
           onQuarantine={(id) => void handleQuarantine(id)}
           onRestoreQuarantine={(id) => void handleRestoreQuarantine(id)}
           onEdit={setEditingBatch}
-          onOpenWorkspace={(batch) => void handleOpenWorkspace(batch)}
+          onOpenWorkspace={(batch, forceUniversal) => void handleOpenWorkspace(batch, forceUniversal)}
           onBulkApprove={() => {
             setShowBulkApprove(true);
             return Promise.resolve();
@@ -1062,6 +1089,7 @@ export default function App() {
           batch={editingBatch}
           saving={savingMetadata}
           onMetadataSave={handleMetadataSave}
+          onMediaTypeChange={handleMediaTypeChange}
           onDiscographySave={handleDiscographySave}
           onDiscographyCreateChildren={handleDiscographyCreateChildren}
           onMovieSave={handleMovieSave}

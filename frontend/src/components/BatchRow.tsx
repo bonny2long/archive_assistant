@@ -26,7 +26,7 @@ type Props = {
   onQuarantine: (id: number) => void;
   onRestoreQuarantine: (id: number) => void;
   onEdit: (batch: BatchSummary) => void;
-  onOpenWorkspace: (batch: BatchSummary) => void;
+  onOpenWorkspace: (batch: BatchSummary, forceUniversal?: boolean) => void;
 };
 
 function confidenceColor(percent: number): string {
@@ -179,13 +179,17 @@ export default function BatchRow({
   const childBatchReviewRequired = requiresChildBatchReview(batch);
   const drainedParent = isProcessedContainerRow(batch);
   const splitCompleteParent = drainedParent;
-  const isDiscographySplitChild =
+  const isMaterializedReviewChild =
     batch.detected_type === "music_album"
-    && batch.review_origin === "multi_artist_discography_split";
-  const canOpenWorkspace = batch.status !== "moved" && !quarantineReview && !splitCompleteParent && !isDiscographySplitChild;
-  const shouldOpenEditorFromWorkspaceButton = isDiscographySplitChild && batch.status !== "moved" && !quarantineReview;
+    && ["multi_artist_discography_split", "approved_candidate_materialization"].includes(batch.review_origin ?? "");
+  const reviewWorkspaceFirst = isMaterializedReviewChild || childBatchReviewRequired;
   const duplicateLabel = duplicateFragmentLabel(batch);
   const activeDuplicateReview = hasActiveDuplicateFragmentReview(batch);
+  const canOpenWorkspace =
+    batch.status !== "moved"
+    && !quarantineReview
+    && !splitCompleteParent
+    && (!isMaterializedReviewChild || activeDuplicateReview);
   const duplicateMatchCount = duplicateFragmentMatchCount(batch);
   const approveDisabled = batch.status !== "pending_review" || parentReviewContainer || childBatchReviewRequired || activeDuplicateReview;
   const approveTitle = drainedParent
@@ -297,7 +301,7 @@ export default function BatchRow({
           </button>}
           <button
             className="btn-sm"
-            title={childBatchReviewRequired ? "Create child batches before metadata review" : "Edit metadata"}
+            title={reviewWorkspaceFirst ? "Review source groups or correct the media type" : "Edit metadata"}
             disabled={
               batch.status === "moved"
               || quarantineReview
@@ -306,8 +310,8 @@ export default function BatchRow({
             style={{ color: "var(--accent-blue)" }}
             onClick={(event) => {
               event.stopPropagation();
-              if (childBatchReviewRequired) {
-                onOpenWorkspace(batch);
+              if (reviewWorkspaceFirst) {
+                onOpenWorkspace(batch, true);
                 return;
               }
               onEdit(batch);
@@ -323,16 +327,6 @@ export default function BatchRow({
               onClick={(event) => { event.stopPropagation(); onOpenWorkspace(batch); }}
             >
               <i className={`ti ${activeDuplicateReview ? "ti-layers-intersect" : "ti-layout-sidebar"}`} />
-            </button>
-          )}
-          {shouldOpenEditorFromWorkspaceButton && (
-            <button
-              className="btn-sm"
-              title="Open Metadata Editor"
-              style={{ color: "var(--accent-blue)" }}
-              onClick={(event) => { event.stopPropagation(); onEdit(batch); }}
-            >
-              <i className="ti ti-layout-sidebar" />
             </button>
           )}
           <button

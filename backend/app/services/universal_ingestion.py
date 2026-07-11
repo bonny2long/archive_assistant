@@ -17,7 +17,11 @@ from app.models.media_metadata import (
     MixedMediaFlag,
     SourceFragment,
 )
-from app.services.music_metadata import resolved_music_track_evidence
+from app.services.music_metadata import (
+    parse_discography_parent_folder,
+    parse_music_folder_name,
+    resolved_music_track_evidence,
+)
 
 PHASE_NAME = "AA-M4D.1 — Universal Media Ingestion Boundary + Fragment Reconstruction"
 
@@ -43,6 +47,7 @@ FRAGMENT_PATTERNS = [
 SXXEYY_RE = re.compile(r"\bS(?P<season>\d{1,2})E(?P<episode>\d{1,3})\b", re.IGNORECASE)
 YEAR_RE = re.compile(r"\b(19\d{2}|20\d{2})\b")
 TRACK_RE = re.compile(r"(?:^|\D)(?P<track>\d{1,3})(?:\D|$)")
+DISC_FOLDER_RE = re.compile(r"^(?:cd|disc|disk|part)\s*0*\d+\b", re.IGNORECASE)
 
 
 @dataclass
@@ -90,6 +95,38 @@ def _path_parts(path: str) -> list[str]:
     return [part for part in path.replace("\\", "/").split("/") if part]
 
 
+def _discography_release_folder(ingest_file: IngestFile) -> tuple[str | None, str | None]:
+    """Return the real release folder beneath a stored discography container.
+
+    Older split metadata sometimes stored the outer discography directory as the
+    release source for every file. The physical file path remains authoritative
+    evidence for grouping, including files collected from several drive chunks.
+    """
+    metadata = ingest_file.metadata_json or {}
+    album_metadata = metadata.get("_discography_album")
+    if not isinstance(album_metadata, dict):
+        return None, None
+    container = str(album_metadata.get("source_folder") or "").strip()
+    if not container:
+        return None, None
+    parts = _path_parts(str(ingest_file.file_path))
+    matches = [
+        index
+        for index, part in enumerate(parts[:-1])
+        if part.casefold() == container.casefold()
+    ]
+    if not matches:
+        physical_parent = parts[-2] if len(parts) > 1 else None
+        if physical_parent and not DISC_FOLDER_RE.match(physical_parent):
+            return physical_parent, container
+        return container, container
+    index = matches[-1]
+    nested = parts[index + 1] if index + 1 < len(parts) - 1 else None
+    if not nested or DISC_FOLDER_RE.match(nested):
+        return container, container
+    return nested, container
+
+
 def relative_path_for(batch: IngestBatch, ingest_file: IngestFile) -> str:
     file_path = Path(str(ingest_file.file_path))
     try:
@@ -134,6 +171,13 @@ def classify_media_file(ingest_file: IngestFile, relative_path: str | None = Non
     extension = (ingest_file.extension or Path(ingest_file.file_name).suffix).casefold()
     name = Path(ingest_file.file_name).stem.casefold()
     evidence: dict[str, Any] = {"extension": extension}
+    stored_role = str(ingest_file.detected_role or "").casefold()
+    if (
+        stored_role in {"audiobook_audio", "audiobook_track", "audiobook_chapter"}
+        and extension in AUDIO_EXTENSIONS | AUDIOBOOK_EXTENSIONS
+    ):
+        evidence["manual_or_scoped_audiobook_role"] = True
+        return "audiobook_audio", evidence
     if extension in AUDIOBOOK_EXTENSIONS:
         evidence["audiobook_extension"] = True
         return "audiobook_audio", evidence
@@ -204,6 +248,21 @@ def classify_batch_files(batch: IngestBatch) -> list[ClassifiedFile]:
         rel = relative_path_for(batch, ingest_file)
         fragment_path, group_key, label, index = _fragment_info(rel)
         media_class, evidence = classify_media_file(ingest_file, rel)
+        if media_class == "music_audio":
+            release_folder, discography_folder = _discography_release_folder(ingest_file)
+            review_origin = str((batch.metadata_json or {}).get("review_origin") or "")
+            if not release_folder and review_origin in {
+                "multi_artist_discography_split",
+                "approved_candidate_materialization",
+            }:
+                path_parts = _path_parts(str(ingest_file.file_path))
+                physical_parent = path_parts[-2] if len(path_parts) > 1 else None
+                if physical_parent and not DISC_FOLDER_RE.match(physical_parent):
+                    release_folder = physical_parent
+                    discography_folder = path_parts[-3] if len(path_parts) > 2 else None
+            if release_folder:
+                evidence["release_source_folder"] = release_folder
+                evidence["discography_source_folder"] = discography_folder
         if group_key:
             evidence["fragment_group_key"] = group_key
             evidence["fragment_label"] = label
@@ -221,9 +280,36 @@ def _track_number(value: str | None) -> str | None:
 
 def _music_candidate_key(item: ClassifiedFile) -> tuple[str, dict[str, Any]]:
     fields = _metadata_fields(item.ingest_file)
-    artist = _field(fields, "album_artist", "albumartist", "artist")
-    album = _field(fields, "album", "release")
-    if artist and album:
+    release_folder = _norm(item.evidence.get("release_source_folder"))
+    discography_folder = _norm(item.evidence.get("discography_source_folder"))
+    folder = parse_music_folder_name(release_folder) if release_folder else {}
+    folder_artist = _norm(folder.get("artist")) if folder else None
+    if folder_artist and YEAR_RE.fullmatch(folder_artist):
+        folder_artist = None
+    parent_artist = (
+        _norm(parse_discography_parent_folder(discography_folder).get("artist"))
+        if (
+            discography_folder
+            and _key_part(discography_folder) != _key_part(release_folder)
+        )
+        else None
+    )
+    artist = (
+        folder_artist
+        or parent_artist
+        or _field(fields, "album_artist", "albumartist", "artist")
+    )
+    album = (_norm(folder.get("album")) if folder else None) or _field(
+        fields, "album", "release",
+    )
+    year = _norm(folder.get("year")) if folder else None
+    if release_folder:
+        key = (
+            f"music:source:{_key_part(discography_folder)}:"
+            f"{_key_part(release_folder)}"
+        )
+        confidence = 0.92
+    elif artist and album:
         key = f"music:{_key_part(artist)}:{_key_part(album)}"
         confidence = 0.88
     else:
@@ -235,12 +321,14 @@ def _music_candidate_key(item: ClassifiedFile) -> tuple[str, dict[str, Any]]:
     return key, {
         "artist": artist,
         "album": album,
-        "year": _field(fields, "date", "year"),
+        "year": year or _field(fields, "date", "year"),
         "title": _field(fields, "title"),
         "track_number": track_evidence.get("resolved_track"),
         "disc_number": track_evidence.get("disc"),
         "track_number_source": track_evidence.get("preferred_source"),
         "release_type": _field(fields, "release_type"),
+        "source_folder": release_folder,
+        "discography_source_folder": discography_folder,
         "confidence": confidence,
     }
 
@@ -345,7 +433,15 @@ def build_candidate_drafts(classified: list[ClassifiedFile]) -> dict[str, Candid
             series_index=_norm(evidence.get("series_index")),
             release_type=_norm(evidence.get("release_type")),
             confidence=float(evidence.get("confidence") or 0.55),
-            evidence={"phase": PHASE_NAME, "identity": evidence},
+            evidence={
+                "phase": PHASE_NAME,
+                "identity": evidence,
+                **(
+                    {"source_folder": str(evidence["source_folder"])}
+                    if evidence.get("source_folder")
+                    else {}
+                ),
+            },
         ))
         draft.members.append(item)
         if item.evidence.get("ambiguous_pdf_role"):

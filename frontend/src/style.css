@@ -2604,6 +2604,11 @@ button:focus-visible, input:focus-visible {
 .metadata-cockpit__header {
   align-items: flex-start;
 }
+.metadata-cockpit__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
 .metadata-cockpit__eyebrow {
   display: block;
   margin-bottom: 4px;
