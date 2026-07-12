@@ -532,6 +532,9 @@ export default function App() {
 
   const handleMediaTypeChange = async (target: "music_album" | "audiobook") => {
     if (!editingBatch) return;
+    const targetLabel = target === "audiobook" ? "Audiobook" : "Music album";
+    const confirmed = window.confirm(`Change this entire scoped batch to ${targetLabel}? This updates the batch type, file roles, and destination. It does not move or retag files.`);
+    if (!confirmed) return;
     const batchId = editingBatch.id;
     setSavingMetadata(true);
     try {

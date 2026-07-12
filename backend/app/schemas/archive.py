@@ -563,6 +563,12 @@ class IngestBatchOut(BaseModel):
 
 class BatchMediaTypeUpdate(BaseModel):
     target_detected_type: Literal["music_album", "audiobook"]
+    confirmed: bool = False
+
+
+class BatchMediaTypeRecoveryRepairRequest(BaseModel):
+    target_detected_type: Literal["music_album", "music_discography", "audiobook"] | None = None
+    confirmed: bool = False
 
 
 class BatchMetadataUpdate(BaseModel):

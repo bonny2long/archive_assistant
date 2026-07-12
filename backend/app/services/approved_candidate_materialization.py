@@ -24,7 +24,7 @@ from app.services.parent_candidate_materialization import (
     PARENT_REVIEW_IN_PROGRESS,
     PARENT_SPLIT_COMPLETE,
     build_parent_candidate_summary,
-    get_active_parent_file_count,
+    get_parent_file_inventory,
     get_child_batch_count,
     get_parent_container_display_state,
 )
@@ -466,7 +466,8 @@ def materialize_approved_candidates(db: Session, batch_id: int) -> dict[str, Any
         })
         metadata["partial_materialization_audit"] = partial_audit
         child_batch_count = get_child_batch_count(parent_batch, db)
-        active_parent_file_count = get_active_parent_file_count(parent_batch, db)
+        parent_file_inventory = get_parent_file_inventory(parent_batch, db)
+        active_parent_file_count = parent_file_inventory["total"]
         parent_container_state = get_parent_container_display_state(parent_batch, db)
         metadata["child_candidate_count"] = len(candidate_id_set)
         metadata["materialized_child_count"] = child_batch_count
@@ -477,11 +478,14 @@ def materialize_approved_candidates(db: Session, batch_id: int) -> dict[str, Any
         metadata["active_parent_file_count"] = active_parent_file_count
         metadata["parent_container_state"] = parent_container_state
         metadata["parent_has_remaining_files"] = active_parent_file_count > 0
+        metadata["parent_primary_file_count"] = parent_file_inventory["primary"]
+        metadata["parent_support_file_count"] = parent_file_inventory["support"]
+        metadata["parent_media_extraction_complete"] = parent_file_inventory["primary"] == 0
         metadata["parent_is_drained"] = parent_container_state == PARENT_CONTAINER_DRAINED
         metadata["unresolved_candidate_count"] = len(unresolved_candidate_ids)
         if active_parent_file_count > 0 and metadata["unresolved_candidate_count"] == 0:
             metadata["unresolved_candidate_count"] = 1
-        parent_complete = parent_container_state == PARENT_CONTAINER_DRAINED
+        parent_complete = child_batch_count > 0 and parent_file_inventory["primary"] == 0
         parent_batch.status = PARENT_SPLIT_COMPLETE if parent_complete else "pending_review"
         metadata["parent_review_state"] = PARENT_SPLIT_COMPLETE if parent_complete else PARENT_REVIEW_IN_PROGRESS
         parent_batch.metadata_json = metadata

@@ -1039,6 +1039,71 @@ def execute_split_discography_releases(db: Session, batch_id: int) -> dict[str, 
         "message": message,
     }
 
+def _execute_candidate_type_override_split(
+    db: Session,
+    parent_batch: IngestBatch,
+    candidate: MediaIdentityCandidate,
+) -> dict[str, Any] | None:
+    """Materialize an overridden or non-music candidate without mutating the parent."""
+    from app.services.approved_candidate_materialization import (
+        _active_media_class_override,
+        _candidate_detected_type,
+        _materialize_candidate,
+    )
+
+    target_override = _active_media_class_override(db, candidate)
+    effective_type = _candidate_detected_type(candidate, target_override)
+    if effective_type == "music_album" and target_override is None:
+        return None
+
+    original_file_count = len(parent_batch.files)
+    child_batch_id, _created = _materialize_candidate(db, parent_batch, candidate)
+    child_batch = (
+        db.query(IngestBatch)
+        .options(selectinload(IngestBatch.files))
+        .filter(IngestBatch.id == child_batch_id)
+        .first()
+    )
+    if child_batch is None:
+        raise ValueError("Candidate child batch could not be loaded")
+
+    timestamp = now_utc()
+    metadata = dict(parent_batch.metadata_json or {})
+    inventory = get_parent_file_inventory(parent_batch, db)
+    child_batch_count = get_child_batch_count(parent_batch, db)
+    parent_state = get_parent_container_display_state(parent_batch, db)
+    metadata.update({
+        "child_batch_count": child_batch_count,
+        "active_parent_file_count": inventory["total"],
+        "remaining_parent_file_count": inventory["total"],
+        "parent_primary_file_count": inventory["primary"],
+        "parent_support_file_count": inventory["support"],
+        "parent_has_remaining_files": inventory["total"] > 0,
+        "parent_media_extraction_complete": inventory["primary"] == 0,
+        "parent_container_state": parent_state,
+        "parent_is_drained": parent_state == PARENT_CONTAINER_DRAINED,
+    })
+    parent_batch.status = "split_complete" if inventory["primary"] == 0 else "pending_review"
+    parent_batch.metadata_json = metadata
+    parent_batch.updated_at = timestamp
+    db.commit()
+    db.refresh(parent_batch)
+    db.refresh(child_batch)
+
+    suggested = child_batch.suggested_metadata or {}
+    return {
+        "parent_batch_id": parent_batch.id,
+        "child_batch_id": child_batch.id,
+        "moved_file_count": max(0, original_file_count - inventory["total"]),
+        "remaining_parent_file_count": inventory["total"],
+        "parent_status": parent_batch.status,
+        "child_detected_type": child_batch.detected_type,
+        "child_status": child_batch.status,
+        "suggested_destination": child_batch.suggested_destination,
+        "artist": suggested.get("artist") or suggested.get("author"),
+        "album": suggested.get("album") or suggested.get("title"),
+    }
+
 def execute_split_candidate(db: Session, batch_id: int, candidate_id: int) -> dict[str, Any]:
     parent_batch = db.query(IngestBatch).options(selectinload(IngestBatch.files)).filter(IngestBatch.id == batch_id).first()
     if parent_batch is None:
@@ -1054,6 +1119,10 @@ def execute_split_candidate(db: Session, batch_id: int, candidate_id: int) -> di
     ).first()
     if candidate is None:
         raise ValueError("Candidate not found for this batch")
+
+    overridden_split = _execute_candidate_type_override_split(db, parent_batch, candidate)
+    if overridden_split is not None:
+        return overridden_split
 
     batch_metadata = deepcopy(parent_batch.metadata_json or {})
     identity_override = _latest_identity_override(db, batch_id, candidate_id)

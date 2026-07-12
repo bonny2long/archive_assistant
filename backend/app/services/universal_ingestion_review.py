@@ -248,8 +248,8 @@ def _validate_action_payload(db: Session, batch_id: int, payload: dict[str, Any]
             raise ValueError("target_candidate_id does not belong to this batch")
     if action_type in {"approve_candidate", "mark_review_later", "override_identity", "split_candidate", "exclude_from_move_plan", "block_candidate"} and candidate_id is None:
         raise ValueError(f"{action_type} requires candidate_id")
-    if action_type == "override_media_class" and not target_media_class:
-        raise ValueError("override_media_class requires target_media_class")
+    if action_type == "override_media_class" and (candidate_id is None or not target_media_class):
+        raise ValueError("override_media_class requires candidate_id and target_media_class")
     if action_type == "merge_candidates" and (candidate_id is None or target_candidate_id is None or int(candidate_id) == int(target_candidate_id)):
         raise ValueError("merge_candidates requires a different target_candidate_id")
 

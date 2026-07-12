@@ -12,6 +12,7 @@ from app.schemas.archive import (
     BatchMoveSummary,
     BatchMetadataQualityOut,
     BatchMediaTypeUpdate,
+    BatchMediaTypeRecoveryRepairRequest,
     BatchMetadataUpdate,
     MetadataEnrichmentApplyRequest,
     MetadataEnrichmentApplyResponse,
@@ -98,8 +99,9 @@ from app.services.destination_authority import rebuild_music_batch_destination_f
 from app.services.batch_split import execute_split_candidate, execute_split_discography_releases, recover_split_child_batches
 from app.services.approved_candidate_materialization import materialize_approved_candidates
 from app.services.media_type_correction import (
-    apply_fully_scoped_media_class_override,
     correct_batch_media_type,
+    inspect_batch_media_type_recovery,
+    repair_batch_media_type_from_audit,
 )
 from app.services.universal_review_routing import get_batch_routing_decision
 from app.services.universal_ingestion_review import (
@@ -622,15 +624,7 @@ def create_universal_ingestion_action(
 ):
     try:
         payload = update.model_dump()
-        action = create_or_update_review_action(db, batch_id, payload)
-        if payload.get("action_type") == "override_media_class":
-            apply_fully_scoped_media_class_override(
-                db,
-                batch_id,
-                payload.get("candidate_id"),
-                payload.get("target_media_class"),
-            )
-        return action
+        return create_or_update_review_action(db, batch_id, payload)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -742,7 +736,12 @@ def update_batch_media_type(
     db: Session = Depends(get_db),
 ):
     try:
-        batch = correct_batch_media_type(db, batch_id, update.target_detected_type)
+        batch = correct_batch_media_type(
+            db,
+            batch_id,
+            update.target_detected_type,
+            confirmed=update.confirmed,
+        )
         return _batch_to_summary(
             batch,
             db=db,
@@ -755,6 +754,32 @@ def update_batch_media_type(
             detail=detail,
         ) from exc
 
+
+@router.get("/batches/{batch_id}/media-type-recovery")
+def get_batch_media_type_recovery(batch_id: int, db: Session = Depends(get_db)):
+    try:
+        return inspect_batch_media_type_recovery(db, batch_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/batches/{batch_id}/media-type-recovery/repair", response_model=BatchSummary)
+def repair_batch_media_type(
+    batch_id: int,
+    update: BatchMediaTypeRecoveryRepairRequest,
+    db: Session = Depends(get_db),
+):
+    try:
+        batch = repair_batch_media_type_from_audit(
+            db,
+            batch_id,
+            target_detected_type=update.target_detected_type,
+            confirmed=update.confirmed,
+        )
+        return _batch_to_summary(batch, db=db, action_message="Media type recovery completed.")
+    except ValueError as exc:
+        detail = str(exc)
+        raise HTTPException(status_code=404 if detail == "Batch not found" else 400, detail=detail) from exc
 
 @router.patch("/batches/{batch_id}/metadata", response_model=BatchSummary)
 def update_batch_metadata(batch_id: int, update: BatchMetadataUpdate, db: Session = Depends(get_db)):
