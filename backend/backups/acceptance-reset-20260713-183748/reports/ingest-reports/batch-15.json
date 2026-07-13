@@ -1,0 +1,2797 @@
+{
+  "artist": "drive-download-20260628T012539Z-3-004",
+  "review_type": "music_discography",
+  "review_mode": "item_list",
+  "metadata_assist_version": "v2.066",
+  "accepted_unknown_discography_artist": false,
+  "lookup_later": false,
+  "collection_type": "discography",
+  "album_count": 3,
+  "release_count": 3,
+  "track_count": 113,
+  "artwork_count": 0,
+  "artwork_files": [],
+  "ignored_sidecar_count": 2,
+  "ignored_sidecar_files": [
+    "Lil Wayne - Discography 1999-2023 [FLAC] 88\\1999 - Tha Block Is Hot\\auCDtect.txt",
+    "The Weeknd Discography 2012-2022 (FLAC) vtwin88cube\\2012 - Trilogy\\Disc 3 - Echoes Of Silence\\DR7.txt"
+  ],
+  "format_summary": [
+    "FLAC",
+    "MP3"
+  ],
+  "albums": [
+    {
+      "source_folder": "Lil Wayne - Discography 1999-2023 [FLAC] 88",
+      "artist": "drive-download-20260628T012539Z-3-004",
+      "album": "Discography-2023 88",
+      "year": "1999",
+      "genre": "Rap/Hip-Hop",
+      "genre_source": "track tags",
+      "format": "FLAC",
+      "track_count": 52,
+      "disc_count": 1,
+      "artwork_count": 0,
+      "artwork_files": [],
+      "ignored_sidecar_count": 1,
+      "ignored_sidecar_files": [
+        "auCDtect.txt"
+      ],
+      "release_type": "album",
+      "include": true,
+      "status": "warning",
+      "warnings": [
+        "folder_artist_mismatch",
+        "release_tag_removed",
+        "album_title_from_folder_cleanup",
+        "track_number_conflict_detected"
+      ],
+      "track_number_conflicts": {
+        "conflict_count": 15,
+        "duplicate_embedded_track_numbers": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          21
+        ],
+        "filename_embedded_mismatch_count": 0,
+        "missing_tracknumber_but_filename_available_count": 0,
+        "invalid_tracknumber_count": 0,
+        "filename_preferred_count": 45,
+        "ambiguous_count": 0
+      },
+      "release_tags_removed": [
+        "[FLAC]"
+      ],
+      "metadata_candidates": {
+        "album_artist": [
+          {
+            "field": "album_artist",
+            "value": "Lil Wayne",
+            "source": "audio_tag_albumartist",
+            "source_label": "Embedded album artist tag",
+            "confidence": 0.92,
+            "confidence_label": "high",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          },
+          {
+            "field": "album_artist",
+            "value": "drive-download-20260628T012539Z-3-004",
+            "source": "parent_folder_name",
+            "source_label": "Parent folder name",
+            "confidence": 0.72,
+            "confidence_label": "medium",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ],
+        "album_title": [
+          {
+            "field": "album_title",
+            "value": "Discography-2023 88",
+            "source": "folder_name",
+            "source_label": "Release folder name",
+            "confidence": 0.9,
+            "confidence_label": "high",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          },
+          {
+            "field": "album_title",
+            "value": "Funeral",
+            "source": "audio_tag_album",
+            "source_label": "Embedded album tag",
+            "confidence": 0.9,
+            "confidence_label": "high",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ],
+        "year": [
+          {
+            "field": "year",
+            "value": "1999",
+            "source": "folder_name",
+            "source_label": "Release folder name",
+            "confidence": 0.9,
+            "confidence_label": "high",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          },
+          {
+            "field": "year",
+            "value": "2020",
+            "source": "audio_tag_date",
+            "source_label": "Embedded date tag",
+            "confidence": 0.82,
+            "confidence_label": "medium",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ],
+        "genre": [
+          {
+            "field": "genre",
+            "value": "Rap/Hip-Hop",
+            "source": "audio_tag_genre",
+            "source_label": "Embedded genre tag",
+            "confidence": 0.72,
+            "confidence_label": "medium",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ]
+      },
+      "track_candidates": [
+        {
+          "field": "track_title",
+          "value": "Big Tigger Live On The Radio",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "8",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "On The Block #1",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "5",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Who Wanna",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "13",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "On The Block #2",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "14",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Walk Out",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "21",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "American Star",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "1",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Prom Queen",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "2",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Da Da Da",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "4",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "On Fire",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "7",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Drop The World",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "8",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "One Way Trip",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "10",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Die For You",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "13",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Gonorrhea",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "1",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "I Am Not A Human Being",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "4",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "I'm Single",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "5",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Right Above It",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "7",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Popular",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "8",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "YM Banger",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "11",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "YM Salute",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "12",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Glory",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "1",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "He\u2019s Dead",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "2",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "London Roads",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "5",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Murda",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "8",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Thinking Bout You",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "9",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Without You",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "10",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Pull Up",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "12",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Living Right",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "13",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Mama Mia",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "3",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "I Do It",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "4",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Dreams",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "5",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Clap For Em",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "7",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Bing James",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "8",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Not Me",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "9",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Trust Nobody",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "10",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Know You Know",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "11",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "I Don\u2019t Sleep",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "14",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Sights And Silencers",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "15",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Bastard (Satan\u2019s Kid)",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "17",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Piano Trap",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "19",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Darkside",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "21",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "T.O.",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "23",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Wayne\u2019s World",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "24",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Lollipop",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "2",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "A Milli",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "3",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Bedrock",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "4",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "How To Love",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "6",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Right Above It",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "7",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "She Will",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "9",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Mona Lisa",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "13",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "No Worries",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "15",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Fireman",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "16",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Mr. Carter",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "18",
+          "disc_number": "1"
+        }
+      ],
+      "accepted_unknown_album_artist": false,
+      "accepted_unknown_album_title": false,
+      "accepted_unknown_year": false,
+      "lookup_later": false,
+      "release_profile": {
+        "release_title": {
+          "envelope_version": 1,
+          "value": "Discography-2023 88",
+          "source": "folder_inference",
+          "confidence": 0.9,
+          "reason": "Release title inferred from folder/review metadata.",
+          "approval_state": "pending",
+          "approved": false,
+          "approved_at": null,
+          "approved_by": null,
+          "updated_at": "2026-07-11T04:19:13.801485Z"
+        },
+        "year": {
+          "envelope_version": 1,
+          "value": "1999",
+          "source": "folder_inference",
+          "confidence": 0.85,
+          "reason": "Release year inferred from folder/review metadata.",
+          "approval_state": "pending",
+          "approved": false,
+          "approved_at": null,
+          "approved_by": null,
+          "updated_at": "2026-07-11T04:19:13.801499Z"
+        },
+        "release_type": {
+          "envelope_version": 1,
+          "value": "album",
+          "source": "folder_inference",
+          "confidence": 0.8,
+          "reason": "Release type inferred from release grouping.",
+          "approval_state": "pending",
+          "approved": false,
+          "approved_at": null,
+          "approved_by": null,
+          "updated_at": "2026-07-11T04:19:13.801509Z"
+        }
+      },
+      "inheritance_summary": {
+        "inherited_field_count": 0,
+        "missing_field_count": 20,
+        "embedded_evidence_field_count": 0,
+        "explanations": [
+          {
+            "field": "primary_genre",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "genre",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "subgenres",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "moods",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "energy",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "era",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "region",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "scene",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "language",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "release_type",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "secondary_types",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_compilation",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_mixtape",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_live",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_remix",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_demo",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_instrumental",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_deluxe",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_bonus_track",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "related_artists",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          }
+        ]
+      }
+    },
+    {
+      "source_folder": "Star Wars The Old Republic Revan",
+      "artist": "drive-download-20260628T012539Z-3-004",
+      "album": "Star Wars The Old Republic Revan",
+      "year": null,
+      "genre": "Other",
+      "genre_source": "track tags",
+      "format": "MP3",
+      "track_count": 51,
+      "disc_count": 5,
+      "artwork_count": 0,
+      "artwork_files": [],
+      "ignored_sidecar_count": 0,
+      "ignored_sidecar_files": [],
+      "release_type": "album",
+      "include": true,
+      "status": "warning",
+      "warnings": [
+        "album_missing_year"
+      ],
+      "track_number_conflicts": {
+        "conflict_count": 0,
+        "duplicate_embedded_track_numbers": [],
+        "filename_embedded_mismatch_count": 0,
+        "missing_tracknumber_but_filename_available_count": 0,
+        "invalid_tracknumber_count": 0,
+        "filename_preferred_count": 0,
+        "ambiguous_count": 0
+      },
+      "release_tags_removed": [],
+      "metadata_candidates": {
+        "album_title": [
+          {
+            "field": "album_title",
+            "value": "Star Wars The Old Republic Revan",
+            "source": "folder_name",
+            "source_label": "Release folder name",
+            "confidence": 0.9,
+            "confidence_label": "high",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          },
+          {
+            "field": "album_title",
+            "value": "Unknown Album (11/19/2011 3:09:44 PM)",
+            "source": "audio_tag_album",
+            "source_label": "Embedded album tag",
+            "confidence": 0.35,
+            "confidence_label": "low",
+            "applied": false,
+            "ignored": true,
+            "notes": [
+              "generic embedded tag"
+            ]
+          }
+        ],
+        "album_artist": [
+          {
+            "field": "album_artist",
+            "value": "drive-download-20260628T012539Z-3-004",
+            "source": "parent_folder_name",
+            "source_label": "Parent folder name",
+            "confidence": 0.72,
+            "confidence_label": "medium",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ],
+        "year": [
+          {
+            "field": "year",
+            "value": "Unkn",
+            "source": "audio_tag_date",
+            "source_label": "Embedded date tag",
+            "confidence": 0.35,
+            "confidence_label": "low",
+            "applied": false,
+            "ignored": true,
+            "notes": [
+              "generic embedded tag"
+            ]
+          }
+        ],
+        "genre": [
+          {
+            "field": "genre",
+            "value": "Other",
+            "source": "audio_tag_genre",
+            "source_label": "Embedded genre tag",
+            "confidence": 0.72,
+            "confidence_label": "medium",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ]
+      },
+      "track_candidates": [
+        {
+          "field": "track_title",
+          "value": "01 Track 1",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "1",
+          "disc_number": 2
+        },
+        {
+          "field": "track_title",
+          "value": "02 Track 2",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "2",
+          "disc_number": 2
+        },
+        {
+          "field": "track_title",
+          "value": "03 Track 3",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "3",
+          "disc_number": 2
+        },
+        {
+          "field": "track_title",
+          "value": "04 Track 4",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "4",
+          "disc_number": 2
+        },
+        {
+          "field": "track_title",
+          "value": "05 Track 5",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "5",
+          "disc_number": 2
+        },
+        {
+          "field": "track_title",
+          "value": "06 Track 6",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "6",
+          "disc_number": 2
+        },
+        {
+          "field": "track_title",
+          "value": "07 Track 7",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "7",
+          "disc_number": 2
+        },
+        {
+          "field": "track_title",
+          "value": "08 Track 8",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "8",
+          "disc_number": 2
+        },
+        {
+          "field": "track_title",
+          "value": "09 Track 9",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "9",
+          "disc_number": 2
+        },
+        {
+          "field": "track_title",
+          "value": "11 Track 11",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "11",
+          "disc_number": 2
+        },
+        {
+          "field": "track_title",
+          "value": "12 Track 12",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "12",
+          "disc_number": 2
+        },
+        {
+          "field": "track_title",
+          "value": "14 Track 14",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "14",
+          "disc_number": 2
+        },
+        {
+          "field": "track_title",
+          "value": "15 Track 15",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "15",
+          "disc_number": 2
+        },
+        {
+          "field": "track_title",
+          "value": "16 Track 16",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "16",
+          "disc_number": 2
+        },
+        {
+          "field": "track_title",
+          "value": "01 Track 1",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "1",
+          "disc_number": 3
+        },
+        {
+          "field": "track_title",
+          "value": "02 Track 2",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "2",
+          "disc_number": 3
+        },
+        {
+          "field": "track_title",
+          "value": "03 Track 3",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "3",
+          "disc_number": 3
+        },
+        {
+          "field": "track_title",
+          "value": "04 Track 4",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "4",
+          "disc_number": 3
+        },
+        {
+          "field": "track_title",
+          "value": "09 Track 9",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "9",
+          "disc_number": 3
+        },
+        {
+          "field": "track_title",
+          "value": "12 Track 12",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "12",
+          "disc_number": 3
+        },
+        {
+          "field": "track_title",
+          "value": "15 Track 15",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "15",
+          "disc_number": 3
+        },
+        {
+          "field": "track_title",
+          "value": "17 Track 17",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "17",
+          "disc_number": 3
+        },
+        {
+          "field": "track_title",
+          "value": "02 Track 2",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "2",
+          "disc_number": 6
+        },
+        {
+          "field": "track_title",
+          "value": "03 Track 3",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "3",
+          "disc_number": 6
+        },
+        {
+          "field": "track_title",
+          "value": "04 Track 4",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "4",
+          "disc_number": 6
+        },
+        {
+          "field": "track_title",
+          "value": "05 Track 5",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "5",
+          "disc_number": 6
+        },
+        {
+          "field": "track_title",
+          "value": "06 Track 6",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "6",
+          "disc_number": 6
+        },
+        {
+          "field": "track_title",
+          "value": "07 Track 7",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "7",
+          "disc_number": 6
+        },
+        {
+          "field": "track_title",
+          "value": "08 Track 8",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "8",
+          "disc_number": 6
+        },
+        {
+          "field": "track_title",
+          "value": "11 Track 11",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "11",
+          "disc_number": 6
+        },
+        {
+          "field": "track_title",
+          "value": "13 Track 13",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "13",
+          "disc_number": 6
+        },
+        {
+          "field": "track_title",
+          "value": "14 Track 14",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "14",
+          "disc_number": 6
+        },
+        {
+          "field": "track_title",
+          "value": "15 Track 15",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "15",
+          "disc_number": 6
+        },
+        {
+          "field": "track_title",
+          "value": "17 Track 17",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "17",
+          "disc_number": 6
+        },
+        {
+          "field": "track_title",
+          "value": "19 Track 19",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "19",
+          "disc_number": 6
+        },
+        {
+          "field": "track_title",
+          "value": "01 Track 1",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "1",
+          "disc_number": 7
+        },
+        {
+          "field": "track_title",
+          "value": "03 Track 3",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "3",
+          "disc_number": 7
+        },
+        {
+          "field": "track_title",
+          "value": "04 Track 4",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "4",
+          "disc_number": 7
+        },
+        {
+          "field": "track_title",
+          "value": "05 Track 5",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "5",
+          "disc_number": 7
+        },
+        {
+          "field": "track_title",
+          "value": "06 Track 6",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "6",
+          "disc_number": 7
+        },
+        {
+          "field": "track_title",
+          "value": "09 Track 9",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "9",
+          "disc_number": 7
+        },
+        {
+          "field": "track_title",
+          "value": "10 Track 10",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "10",
+          "disc_number": 7
+        },
+        {
+          "field": "track_title",
+          "value": "11 Track 11",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "11",
+          "disc_number": 7
+        },
+        {
+          "field": "track_title",
+          "value": "13 Track 13",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "13",
+          "disc_number": 7
+        },
+        {
+          "field": "track_title",
+          "value": "14 Track 14",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "14",
+          "disc_number": 7
+        },
+        {
+          "field": "track_title",
+          "value": "15 Track 15",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "15",
+          "disc_number": 7
+        },
+        {
+          "field": "track_title",
+          "value": "16 Track 16",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "16",
+          "disc_number": 7
+        },
+        {
+          "field": "track_title",
+          "value": "17 Track 17",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "17",
+          "disc_number": 7
+        },
+        {
+          "field": "track_title",
+          "value": "18 Track 18",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "18",
+          "disc_number": 7
+        },
+        {
+          "field": "track_title",
+          "value": "02 Track 2",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "2",
+          "disc_number": 9
+        },
+        {
+          "field": "track_title",
+          "value": "19 Track 19",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "19",
+          "disc_number": 9
+        }
+      ],
+      "accepted_unknown_album_artist": false,
+      "accepted_unknown_album_title": false,
+      "accepted_unknown_year": false,
+      "lookup_later": false,
+      "release_profile": {
+        "release_title": {
+          "envelope_version": 1,
+          "value": "Star Wars The Old Republic Revan",
+          "source": "folder_inference",
+          "confidence": 0.9,
+          "reason": "Release title inferred from folder/review metadata.",
+          "approval_state": "pending",
+          "approved": false,
+          "approved_at": null,
+          "approved_by": null,
+          "updated_at": "2026-07-11T04:19:13.801744Z"
+        },
+        "release_type": {
+          "envelope_version": 1,
+          "value": "album",
+          "source": "folder_inference",
+          "confidence": 0.8,
+          "reason": "Release type inferred from release grouping.",
+          "approval_state": "pending",
+          "approved": false,
+          "approved_at": null,
+          "approved_by": null,
+          "updated_at": "2026-07-11T04:19:13.801755Z"
+        }
+      },
+      "inheritance_summary": {
+        "inherited_field_count": 0,
+        "missing_field_count": 20,
+        "embedded_evidence_field_count": 0,
+        "explanations": [
+          {
+            "field": "primary_genre",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "genre",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "subgenres",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "moods",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "energy",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "era",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "region",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "scene",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "language",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "release_type",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "secondary_types",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_compilation",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_mixtape",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_live",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_remix",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_demo",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_instrumental",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_deluxe",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_bonus_track",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "related_artists",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          }
+        ]
+      }
+    },
+    {
+      "source_folder": "The Weeknd Discography 2012-2022 (FLAC) vtwin88cube",
+      "artist": "drive-download-20260628T012539Z-3-004",
+      "album": "The Weeknd Discography-2022 vtwin88cube",
+      "year": "2012",
+      "genre": "R&B",
+      "genre_source": "track tags",
+      "format": "FLAC",
+      "track_count": 10,
+      "disc_count": 1,
+      "artwork_count": 0,
+      "artwork_files": [],
+      "ignored_sidecar_count": 1,
+      "ignored_sidecar_files": [
+        "DR7.txt"
+      ],
+      "release_type": "album",
+      "include": true,
+      "status": "warning",
+      "warnings": [
+        "suspicious_year",
+        "release_tag_removed",
+        "album_title_from_folder_cleanup",
+        "track_number_conflict_detected"
+      ],
+      "track_number_conflicts": {
+        "conflict_count": 1,
+        "duplicate_embedded_track_numbers": [
+          4
+        ],
+        "filename_embedded_mismatch_count": 0,
+        "missing_tracknumber_but_filename_available_count": 0,
+        "invalid_tracknumber_count": 0,
+        "filename_preferred_count": 2,
+        "ambiguous_count": 0
+      },
+      "release_tags_removed": [
+        "(FLAC)"
+      ],
+      "metadata_candidates": {
+        "album_title": [
+          {
+            "field": "album_title",
+            "value": "Dawn FM (Explicit)",
+            "source": "audio_tag_album",
+            "source_label": "Embedded album tag",
+            "confidence": 0.9,
+            "confidence_label": "high",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          },
+          {
+            "field": "album_title",
+            "value": "The Weeknd Discography-2022 vtwin88cube",
+            "source": "folder_name",
+            "source_label": "Release folder name",
+            "confidence": 0.9,
+            "confidence_label": "high",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ],
+        "year": [
+          {
+            "field": "year",
+            "value": "2012",
+            "source": "folder_name",
+            "source_label": "Release folder name",
+            "confidence": 0.9,
+            "confidence_label": "high",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          },
+          {
+            "field": "year",
+            "value": "2022",
+            "source": "audio_tag_date",
+            "source_label": "Embedded date tag",
+            "confidence": 0.82,
+            "confidence_label": "medium",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ],
+        "album_artist": [
+          {
+            "field": "album_artist",
+            "value": "The Weeknd",
+            "source": "audio_tag_albumartist",
+            "source_label": "Embedded album artist tag",
+            "confidence": 0.92,
+            "confidence_label": "high",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          },
+          {
+            "field": "album_artist",
+            "value": "drive-download-20260628T012539Z-3-004",
+            "source": "parent_folder_name",
+            "source_label": "Parent folder name",
+            "confidence": 0.72,
+            "confidence_label": "medium",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ],
+        "genre": [
+          {
+            "field": "genre",
+            "value": "R&B",
+            "source": "audio_tag_genre",
+            "source_label": "Embedded genre tag",
+            "confidence": 0.72,
+            "confidence_label": "medium",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ]
+      },
+      "track_candidates": [
+        {
+          "field": "track_title",
+          "value": "Wasted Times",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "03",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "I Was Never There",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "04",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Dawn FM",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "01",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Take My Breath",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "04",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Sacrifice",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "05",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Don\u2019t Break My Heart",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "13",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "I Heard You\u2019re Married",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "14",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Less Than Zero",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "15",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Starry Eyes",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "08",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "What You Need",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "02",
+          "disc_number": "1"
+        }
+      ],
+      "accepted_unknown_album_artist": false,
+      "accepted_unknown_album_title": false,
+      "accepted_unknown_year": false,
+      "lookup_later": false,
+      "release_profile": {
+        "release_title": {
+          "envelope_version": 1,
+          "value": "The Weeknd Discography-2022 vtwin88cube",
+          "source": "folder_inference",
+          "confidence": 0.9,
+          "reason": "Release title inferred from folder/review metadata.",
+          "approval_state": "pending",
+          "approved": false,
+          "approved_at": null,
+          "approved_by": null,
+          "updated_at": "2026-07-11T04:19:13.801975Z"
+        },
+        "year": {
+          "envelope_version": 1,
+          "value": "2012",
+          "source": "folder_inference",
+          "confidence": 0.85,
+          "reason": "Release year inferred from folder/review metadata.",
+          "approval_state": "pending",
+          "approved": false,
+          "approved_at": null,
+          "approved_by": null,
+          "updated_at": "2026-07-11T04:19:13.801985Z"
+        },
+        "release_type": {
+          "envelope_version": 1,
+          "value": "album",
+          "source": "folder_inference",
+          "confidence": 0.8,
+          "reason": "Release type inferred from release grouping.",
+          "approval_state": "pending",
+          "approved": false,
+          "approved_at": null,
+          "approved_by": null,
+          "updated_at": "2026-07-11T04:19:13.801995Z"
+        }
+      },
+      "inheritance_summary": {
+        "inherited_field_count": 0,
+        "missing_field_count": 20,
+        "embedded_evidence_field_count": 0,
+        "explanations": [
+          {
+            "field": "primary_genre",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "genre",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "subgenres",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "moods",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "energy",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "era",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "region",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "scene",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "language",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "release_type",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "secondary_types",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_compilation",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_mixtape",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_live",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_remix",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_demo",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_instrumental",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_deluxe",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_bonus_track",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "related_artists",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          }
+        ]
+      }
+    }
+  ],
+  "parent_cleanup": {
+    "artist": "drive-download-20260628T012539Z-3-004",
+    "clean_collection_name": "drive-download-20260628T012539Z-3-004 Discography",
+    "removed_tokens": [],
+    "year_range": null,
+    "format_hint": null,
+    "warnings": []
+  },
+  "artist_source": "cleaned parent folder",
+  "metadata_quality": "good",
+  "metadata_warnings": [
+    "discography_grouping_used",
+    "track_number_conflict_detected",
+    "mixed_formats"
+  ],
+  "confidence": 1.0,
+  "metadata_candidates": {
+    "album_artist": [
+      {
+        "field": "album_artist",
+        "value": "drive-download-20260628T012539Z-3-004",
+        "source": "parent_folder_name",
+        "source_label": "Discography folder name",
+        "confidence": 0.9,
+        "confidence_label": "high",
+        "applied": false,
+        "ignored": false,
+        "notes": []
+      }
+    ]
+  },
+  "artist_profile": {
+    "artist": {
+      "envelope_version": 1,
+      "value": "drive-download-20260628T012539Z-3-004",
+      "source": "manual",
+      "confidence": 1.0,
+      "reason": "Approved discography artist profile value.",
+      "approval_state": "approved",
+      "approved": true,
+      "approved_at": null,
+      "approved_by": "local_admin",
+      "updated_at": "2026-07-11T04:19:13.801418Z"
+    }
+  },
+  "inheritance_summary": {
+    "inherited_field_count": 0,
+    "missing_field_count": 60,
+    "embedded_evidence_field_count": 0,
+    "explanations": [
+      {
+        "field": "primary_genre",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "genre",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "subgenres",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "moods",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "energy",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "era",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "region",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "scene",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "language",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "release_type",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "secondary_types",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_compilation",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_mixtape",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_live",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_remix",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_demo",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_instrumental",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_deluxe",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_bonus_track",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "related_artists",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "primary_genre",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "genre",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "subgenres",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "moods",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "energy",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "era",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "region",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "scene",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "language",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "release_type",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "secondary_types",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_compilation",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_mixtape",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_live",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_remix",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_demo",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_instrumental",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_deluxe",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_bonus_track",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "related_artists",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "primary_genre",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "genre",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "subgenres",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "moods",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "energy",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "era",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "region",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "scene",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "language",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "release_type",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "secondary_types",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_compilation",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_mixtape",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_live",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_remix",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_demo",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_instrumental",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_deluxe",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_bonus_track",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "related_artists",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      }
+    ]
+  },
+  "blocking_review_items": [],
+  "non_blocking_review_items": [
+    {
+      "type": "discography_grouping_used",
+      "message": "Discography grouping used"
+    },
+    {
+      "type": "track_number_conflict_detected",
+      "message": "Embedded track numbers conflict with filename order; filename order will be used for destination numbering."
+    },
+    {
+      "type": "mixed_formats",
+      "message": "Mixed formats"
+    },
+    {
+      "type": "album_missing_year",
+      "message": "Included release is missing a year and may be reviewed later.",
+      "source_folder": "Star Wars The Old Republic Revan"
+    }
+  ],
+  "review_confirmed": false,
+  "generated_at": "2026-07-11T04:19:16.133448Z"
+}

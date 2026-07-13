@@ -1,0 +1,21 @@
+{
+  "name": "Aphex Twin - Drukqs (2001) [FLAC] {31174-2 CD}",
+  "reason": "Mixed unsupported file types",
+  "file_count": 6,
+  "folder_count": 3,
+  "size_bytes": 42278,
+  "sample_files": [
+    "CD1\\Aphex Twin - Drukqs (CD1).cue",
+    "CD1\\Aphex Twin - Drukqs (CD1).log",
+    "CD1\\Aphex Twin - Drukqs (CD1).m3u",
+    "CD2\\Aphex Twin - Drukqs (CD2).cue",
+    "CD2\\Aphex Twin - Drukqs (CD2).log",
+    "CD2\\Aphex Twin - Drukqs (CD2).m3u"
+  ],
+  "recommended_action": "Move to quarantine",
+  "metadata_quality": "unsupported",
+  "metadata_warnings": [
+    "quarantine_review_required"
+  ],
+  "generated_at": "2026-07-11T04:13:36.702507Z"
+}

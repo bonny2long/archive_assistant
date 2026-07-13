@@ -1,0 +1,31 @@
+﻿{
+    "created_at":  "2026-07-13T18:37:48.9605426-05:00",
+    "database_source":  "C:\\Users\\BonnyMakaniankhondo\\Documents\\GitHub\\NAS\\archive-assistant-scaffold\\archive-assistant-scaffold\\backend\\archive_assistant.db",
+    "database_backup":  "C:\\Users\\BonnyMakaniankhondo\\Documents\\GitHub\\NAS\\archive-assistant-scaffold\\archive-assistant-scaffold\\backend\\backups\\acceptance-reset-20260713-183748\\archive_assistant.db",
+    "reports":  [
+                    {
+                        "source":  "C:\\Users\\BonnyMakaniankhondo\\Documents\\GitHub\\NAS\\nas-data\\_REPORTS\\archive-assistant\\ingest-reports",
+                        "backup":  "C:\\Users\\BonnyMakaniankhondo\\Documents\\GitHub\\NAS\\archive-assistant-scaffold\\archive-assistant-scaffold\\backend\\backups\\acceptance-reset-20260713-183748\\reports\\ingest-reports",
+                        "json_files":  39,
+                        "bytes":  1388314
+                    },
+                    {
+                        "source":  "C:\\Users\\BonnyMakaniankhondo\\Documents\\GitHub\\NAS\\nas-data\\_REPORTS\\archive-assistant\\move-logs",
+                        "backup":  "C:\\Users\\BonnyMakaniankhondo\\Documents\\GitHub\\NAS\\archive-assistant-scaffold\\archive-assistant-scaffold\\backend\\backups\\acceptance-reset-20260713-183748\\reports\\move-logs",
+                        "json_files":  0,
+                        "bytes":  null
+                    },
+                    {
+                        "source":  "C:\\Users\\BonnyMakaniankhondo\\Documents\\GitHub\\NAS\\nas-data\\_REPORTS\\archive-assistant\\quarantine-reports",
+                        "backup":  "C:\\Users\\BonnyMakaniankhondo\\Documents\\GitHub\\NAS\\archive-assistant-scaffold\\archive-assistant-scaffold\\backend\\backups\\acceptance-reset-20260713-183748\\reports\\quarantine-reports",
+                        "json_files":  0,
+                        "bytes":  null
+                    },
+                    {
+                        "source":  "C:\\Users\\BonnyMakaniankhondo\\Documents\\GitHub\\NAS\\nas-data\\_REPORTS\\move_manifests",
+                        "backup":  "C:\\Users\\BonnyMakaniankhondo\\Documents\\GitHub\\NAS\\archive-assistant-scaffold\\archive-assistant-scaffold\\backend\\backups\\acceptance-reset-20260713-183748\\reports\\move-manifests",
+                        "json_files":  0,
+                        "bytes":  null
+                    }
+                ]
+}

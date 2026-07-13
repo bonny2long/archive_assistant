@@ -1,0 +1,787 @@
+{
+  "artist": "Daft Punk",
+  "album": "Random Access Memories (1)",
+  "year": "2023",
+  "genre": "Electronic",
+  "disc_count": 2,
+  "track_count": 22,
+  "format": "FLAC",
+  "tracks": [
+    {
+      "title": "Give Life Back To Music",
+      "track_number": "1",
+      "disc_number": "1"
+    },
+    {
+      "title": "The Game Of Love",
+      "track_number": "2",
+      "disc_number": "1"
+    },
+    {
+      "title": "Giorgio By Moroder",
+      "track_number": "3",
+      "disc_number": "1"
+    },
+    {
+      "title": "Within",
+      "track_number": "4",
+      "disc_number": "1"
+    },
+    {
+      "title": "Instant Crush",
+      "track_number": "5",
+      "disc_number": "1"
+    },
+    {
+      "title": "Lose Yourself To Dance",
+      "track_number": "6",
+      "disc_number": "1"
+    },
+    {
+      "title": "Touch",
+      "track_number": "7",
+      "disc_number": "1"
+    },
+    {
+      "title": "Get Lucky",
+      "track_number": "8",
+      "disc_number": "1"
+    },
+    {
+      "title": "Beyond",
+      "track_number": "9",
+      "disc_number": "1"
+    },
+    {
+      "title": "Motherboard",
+      "track_number": "10",
+      "disc_number": "1"
+    },
+    {
+      "title": "Fragments Of Time",
+      "track_number": "11",
+      "disc_number": "1"
+    },
+    {
+      "title": "Doin\u2019 It Right",
+      "track_number": "12",
+      "disc_number": "1"
+    },
+    {
+      "title": "Contact",
+      "track_number": "13",
+      "disc_number": "1"
+    },
+    {
+      "title": "folder",
+      "track_number": "1",
+      "disc_number": 1
+    },
+    {
+      "title": "folder",
+      "track_number": "1",
+      "disc_number": 1
+    },
+    {
+      "title": "Jolly Roger",
+      "track_number": "1",
+      "disc_number": 1
+    },
+    {
+      "title": "Horizon Ouverture",
+      "track_number": "1",
+      "disc_number": "2"
+    },
+    {
+      "title": "Horizon (Japan CD)",
+      "track_number": "2",
+      "disc_number": "2"
+    },
+    {
+      "title": "GLBTM (Studio Outtakes)",
+      "track_number": "3",
+      "disc_number": "2"
+    },
+    {
+      "title": "Infinity Repeating (2013 Demo)",
+      "track_number": "4",
+      "disc_number": "2"
+    },
+    {
+      "title": "GL (Early Take)",
+      "track_number": "5",
+      "disc_number": "2"
+    },
+    {
+      "title": "Prime (2012 Unfinished)",
+      "track_number": "6",
+      "disc_number": "2"
+    },
+    {
+      "title": "LYTD (Vocoder Tests)",
+      "track_number": "7",
+      "disc_number": "2"
+    },
+    {
+      "title": "The Writing Of Fragments Of Time",
+      "track_number": "8",
+      "disc_number": "2"
+    },
+    {
+      "title": "Touch (2021 Epilogue)",
+      "track_number": "9",
+      "disc_number": "2"
+    }
+  ],
+  "metadata_quality": "good",
+  "metadata_warnings": [
+    "release_folder_grouping_used",
+    "mixed_embedded_metadata_detected",
+    "track_album_mismatch_detected"
+  ],
+  "confidence": 1.0,
+  "artwork_count": 3,
+  "artwork_files": [
+    "folder.jpg",
+    "folder.jpg",
+    "Jolly Roger.png"
+  ],
+  "ignored_sidecar_count": 12,
+  "ignored_sidecar_files": [
+    "CD 1\\auCDtect.txt",
+    "CD 1\\Daft Punk - Random Access Memories (1) (Columbia 9658801032 - 2023).log",
+    "CD 1\\Daft Punk - Random Access Memories (1).accurip",
+    "CD 1\\Daft Punk - Random Access Memories (1).cue",
+    "CD 1\\Daft Punk - Random Access Memories (1).m3u",
+    "CD 1\\DR8.txt",
+    "CD 2\\auCDtect.txt",
+    "CD 2\\Daft Punk - Random Access Memories (2) (Columbia 9658801032 - 2023).log",
+    "CD 2\\Daft Punk - Random Access Memories (2).accurip",
+    "CD 2\\Daft Punk - Random Access Memories (2).cue",
+    "CD 2\\Daft Punk - Random Access Memories (2).m3u",
+    "CD 2\\DR9.txt"
+  ],
+  "review_type": "music_album",
+  "review_mode": "single_item",
+  "metadata_assist_version": "v2.066",
+  "metadata_candidates": {
+    "album_artist": [
+      {
+        "field": "album_artist",
+        "value": "Daft Punk",
+        "source": "audio_tag_albumartist",
+        "source_label": "Embedded album artist tag",
+        "confidence": 0.92,
+        "confidence_label": "high",
+        "applied": false,
+        "ignored": false,
+        "notes": []
+      },
+      {
+        "field": "album_artist",
+        "value": "ready",
+        "source": "parent_folder_name",
+        "source_label": "Parent folder name",
+        "confidence": 0.72,
+        "confidence_label": "medium",
+        "applied": false,
+        "ignored": false,
+        "notes": []
+      }
+    ],
+    "album_title": [
+      {
+        "field": "album_title",
+        "value": "Random Access Memories (1)",
+        "source": "audio_tag_album",
+        "source_label": "Embedded album tag",
+        "confidence": 0.9,
+        "confidence_label": "high",
+        "applied": false,
+        "ignored": false,
+        "notes": []
+      },
+      {
+        "field": "album_title",
+        "value": "Random Access Memories (10th Anniversary) 88",
+        "source": "folder_name",
+        "source_label": "Release folder name",
+        "confidence": 0.9,
+        "confidence_label": "high",
+        "applied": false,
+        "ignored": false,
+        "notes": []
+      }
+    ],
+    "year": [
+      {
+        "field": "year",
+        "value": "2023",
+        "source": "audio_tag_date",
+        "source_label": "Embedded date tag",
+        "confidence": 0.82,
+        "confidence_label": "medium",
+        "applied": false,
+        "ignored": false,
+        "notes": []
+      }
+    ],
+    "genre": [
+      {
+        "field": "genre",
+        "value": "Electronic",
+        "source": "audio_tag_genre",
+        "source_label": "Embedded genre tag",
+        "confidence": 0.72,
+        "confidence_label": "medium",
+        "applied": false,
+        "ignored": false,
+        "notes": []
+      }
+    ]
+  },
+  "track_candidates": [
+    {
+      "field": "track_title",
+      "value": "Give Life Back To Music",
+      "source": "audio_tag_title",
+      "source_label": "Embedded track title tag",
+      "confidence": 0.85,
+      "confidence_label": "high",
+      "applied": false,
+      "ignored": false,
+      "notes": [],
+      "track_number": "1",
+      "disc_number": "1"
+    },
+    {
+      "field": "track_title",
+      "value": "The Game Of Love",
+      "source": "audio_tag_title",
+      "source_label": "Embedded track title tag",
+      "confidence": 0.85,
+      "confidence_label": "high",
+      "applied": false,
+      "ignored": false,
+      "notes": [],
+      "track_number": "2",
+      "disc_number": "1"
+    },
+    {
+      "field": "track_title",
+      "value": "Giorgio By Moroder",
+      "source": "audio_tag_title",
+      "source_label": "Embedded track title tag",
+      "confidence": 0.85,
+      "confidence_label": "high",
+      "applied": false,
+      "ignored": false,
+      "notes": [],
+      "track_number": "3",
+      "disc_number": "1"
+    },
+    {
+      "field": "track_title",
+      "value": "Within",
+      "source": "audio_tag_title",
+      "source_label": "Embedded track title tag",
+      "confidence": 0.85,
+      "confidence_label": "high",
+      "applied": false,
+      "ignored": false,
+      "notes": [],
+      "track_number": "4",
+      "disc_number": "1"
+    },
+    {
+      "field": "track_title",
+      "value": "Instant Crush",
+      "source": "audio_tag_title",
+      "source_label": "Embedded track title tag",
+      "confidence": 0.85,
+      "confidence_label": "high",
+      "applied": false,
+      "ignored": false,
+      "notes": [],
+      "track_number": "5",
+      "disc_number": "1"
+    },
+    {
+      "field": "track_title",
+      "value": "Lose Yourself To Dance",
+      "source": "audio_tag_title",
+      "source_label": "Embedded track title tag",
+      "confidence": 0.85,
+      "confidence_label": "high",
+      "applied": false,
+      "ignored": false,
+      "notes": [],
+      "track_number": "6",
+      "disc_number": "1"
+    },
+    {
+      "field": "track_title",
+      "value": "Touch",
+      "source": "audio_tag_title",
+      "source_label": "Embedded track title tag",
+      "confidence": 0.85,
+      "confidence_label": "high",
+      "applied": false,
+      "ignored": false,
+      "notes": [],
+      "track_number": "7",
+      "disc_number": "1"
+    },
+    {
+      "field": "track_title",
+      "value": "Get Lucky",
+      "source": "audio_tag_title",
+      "source_label": "Embedded track title tag",
+      "confidence": 0.85,
+      "confidence_label": "high",
+      "applied": false,
+      "ignored": false,
+      "notes": [],
+      "track_number": "8",
+      "disc_number": "1"
+    },
+    {
+      "field": "track_title",
+      "value": "Beyond",
+      "source": "audio_tag_title",
+      "source_label": "Embedded track title tag",
+      "confidence": 0.85,
+      "confidence_label": "high",
+      "applied": false,
+      "ignored": false,
+      "notes": [],
+      "track_number": "9",
+      "disc_number": "1"
+    },
+    {
+      "field": "track_title",
+      "value": "Motherboard",
+      "source": "audio_tag_title",
+      "source_label": "Embedded track title tag",
+      "confidence": 0.85,
+      "confidence_label": "high",
+      "applied": false,
+      "ignored": false,
+      "notes": [],
+      "track_number": "10",
+      "disc_number": "1"
+    },
+    {
+      "field": "track_title",
+      "value": "Fragments Of Time",
+      "source": "audio_tag_title",
+      "source_label": "Embedded track title tag",
+      "confidence": 0.85,
+      "confidence_label": "high",
+      "applied": false,
+      "ignored": false,
+      "notes": [],
+      "track_number": "11",
+      "disc_number": "1"
+    },
+    {
+      "field": "track_title",
+      "value": "Doin\u2019 It Right",
+      "source": "audio_tag_title",
+      "source_label": "Embedded track title tag",
+      "confidence": 0.85,
+      "confidence_label": "high",
+      "applied": false,
+      "ignored": false,
+      "notes": [],
+      "track_number": "12",
+      "disc_number": "1"
+    },
+    {
+      "field": "track_title",
+      "value": "Contact",
+      "source": "audio_tag_title",
+      "source_label": "Embedded track title tag",
+      "confidence": 0.85,
+      "confidence_label": "high",
+      "applied": false,
+      "ignored": false,
+      "notes": [],
+      "track_number": "13",
+      "disc_number": "1"
+    },
+    {
+      "field": "track_title",
+      "value": "Horizon Ouverture",
+      "source": "audio_tag_title",
+      "source_label": "Embedded track title tag",
+      "confidence": 0.85,
+      "confidence_label": "high",
+      "applied": false,
+      "ignored": false,
+      "notes": [],
+      "track_number": "1",
+      "disc_number": "2"
+    },
+    {
+      "field": "track_title",
+      "value": "Horizon (Japan CD)",
+      "source": "audio_tag_title",
+      "source_label": "Embedded track title tag",
+      "confidence": 0.85,
+      "confidence_label": "high",
+      "applied": false,
+      "ignored": false,
+      "notes": [],
+      "track_number": "2",
+      "disc_number": "2"
+    },
+    {
+      "field": "track_title",
+      "value": "GLBTM (Studio Outtakes)",
+      "source": "audio_tag_title",
+      "source_label": "Embedded track title tag",
+      "confidence": 0.85,
+      "confidence_label": "high",
+      "applied": false,
+      "ignored": false,
+      "notes": [],
+      "track_number": "3",
+      "disc_number": "2"
+    },
+    {
+      "field": "track_title",
+      "value": "Infinity Repeating (2013 Demo)",
+      "source": "audio_tag_title",
+      "source_label": "Embedded track title tag",
+      "confidence": 0.85,
+      "confidence_label": "high",
+      "applied": false,
+      "ignored": false,
+      "notes": [],
+      "track_number": "4",
+      "disc_number": "2"
+    },
+    {
+      "field": "track_title",
+      "value": "GL (Early Take)",
+      "source": "audio_tag_title",
+      "source_label": "Embedded track title tag",
+      "confidence": 0.85,
+      "confidence_label": "high",
+      "applied": false,
+      "ignored": false,
+      "notes": [],
+      "track_number": "5",
+      "disc_number": "2"
+    },
+    {
+      "field": "track_title",
+      "value": "Prime (2012 Unfinished)",
+      "source": "audio_tag_title",
+      "source_label": "Embedded track title tag",
+      "confidence": 0.85,
+      "confidence_label": "high",
+      "applied": false,
+      "ignored": false,
+      "notes": [],
+      "track_number": "6",
+      "disc_number": "2"
+    },
+    {
+      "field": "track_title",
+      "value": "LYTD (Vocoder Tests)",
+      "source": "audio_tag_title",
+      "source_label": "Embedded track title tag",
+      "confidence": 0.85,
+      "confidence_label": "high",
+      "applied": false,
+      "ignored": false,
+      "notes": [],
+      "track_number": "7",
+      "disc_number": "2"
+    },
+    {
+      "field": "track_title",
+      "value": "The Writing Of Fragments Of Time",
+      "source": "audio_tag_title",
+      "source_label": "Embedded track title tag",
+      "confidence": 0.85,
+      "confidence_label": "high",
+      "applied": false,
+      "ignored": false,
+      "notes": [],
+      "track_number": "8",
+      "disc_number": "2"
+    },
+    {
+      "field": "track_title",
+      "value": "Touch (2021 Epilogue)",
+      "source": "audio_tag_title",
+      "source_label": "Embedded track title tag",
+      "confidence": 0.85,
+      "confidence_label": "high",
+      "applied": false,
+      "ignored": false,
+      "notes": [],
+      "track_number": "9",
+      "disc_number": "2"
+    }
+  ],
+  "accepted_unknown_album_artist": false,
+  "accepted_unknown_album_title": false,
+  "accepted_unknown_year": false,
+  "lookup_later": false,
+  "artwork_candidates": [
+    {
+      "field": "artwork",
+      "value": "folder.jpg",
+      "source": "music_sidecar_artwork",
+      "source_label": "Music sidecar artwork",
+      "confidence": 0.9,
+      "confidence_label": "high",
+      "applied": false,
+      "ignored": false,
+      "notes": []
+    },
+    {
+      "field": "artwork",
+      "value": "folder.jpg",
+      "source": "music_sidecar_artwork",
+      "source_label": "Music sidecar artwork",
+      "confidence": 0.9,
+      "confidence_label": "high",
+      "applied": false,
+      "ignored": false,
+      "notes": []
+    },
+    {
+      "field": "artwork",
+      "value": "Jolly Roger.png",
+      "source": "music_sidecar_artwork",
+      "source_label": "Music sidecar artwork",
+      "confidence": 0.9,
+      "confidence_label": "high",
+      "applied": false,
+      "ignored": false,
+      "notes": []
+    }
+  ],
+  "track_number_conflicts": {
+    "conflict_count": 0,
+    "duplicate_embedded_track_numbers": [],
+    "filename_embedded_mismatch_count": 0,
+    "missing_tracknumber_but_filename_available_count": 0,
+    "invalid_tracknumber_count": 0,
+    "filename_preferred_count": 0,
+    "ambiguous_count": 0
+  },
+  "artist_profile": {
+    "artist": {
+      "envelope_version": 1,
+      "value": "Daft Punk",
+      "source": "manual",
+      "confidence": 1.0,
+      "reason": "Approved discography artist profile value.",
+      "approval_state": "approved",
+      "approved": true,
+      "approved_at": null,
+      "approved_by": "local_admin",
+      "updated_at": "2026-07-11T04:19:27.973366Z"
+    },
+    "genre": {
+      "envelope_version": 1,
+      "value": "Electronic",
+      "source": "manual",
+      "confidence": 1.0,
+      "reason": "Approved discography artist profile genre.",
+      "approval_state": "approved",
+      "approved": true,
+      "approved_at": null,
+      "approved_by": "local_admin",
+      "updated_at": "2026-07-11T04:19:27.973410Z"
+    }
+  },
+  "release_profile": {
+    "release_title": {
+      "envelope_version": 1,
+      "value": "Random Access Memories (1)",
+      "source": "folder_inference",
+      "confidence": 0.9,
+      "reason": "Release title inferred from folder/review metadata.",
+      "approval_state": "pending",
+      "approved": false,
+      "approved_at": null,
+      "approved_by": null,
+      "updated_at": "2026-07-11T04:19:27.973455Z"
+    },
+    "year": {
+      "envelope_version": 1,
+      "value": "2023",
+      "source": "folder_inference",
+      "confidence": 0.85,
+      "reason": "Release year inferred from folder/review metadata.",
+      "approval_state": "pending",
+      "approved": false,
+      "approved_at": null,
+      "approved_by": null,
+      "updated_at": "2026-07-11T04:19:27.973467Z"
+    },
+    "genre": {
+      "envelope_version": 1,
+      "value": "Electronic",
+      "source": "artist_profile",
+      "confidence": 0.95,
+      "reason": "Inherited genre from approved artist profile.",
+      "approval_state": "inherited",
+      "approved": true,
+      "approved_at": null,
+      "approved_by": "local_admin",
+      "updated_at": "2026-07-11T04:19:27.973530Z"
+    }
+  },
+  "inheritance_summary": {
+    "inherited_field_count": 1,
+    "missing_field_count": 19,
+    "embedded_evidence_field_count": 0,
+    "explanations": [
+      {
+        "field": "primary_genre",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "genre",
+        "source": "artist_profile",
+        "reason": "Inherited genre from approved artist profile.",
+        "inherited": true
+      },
+      {
+        "field": "subgenres",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "moods",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "energy",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "era",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "region",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "scene",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "language",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "release_type",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "secondary_types",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_compilation",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_mixtape",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_live",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_remix",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_demo",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_instrumental",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_deluxe",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_bonus_track",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "related_artists",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      }
+    ]
+  },
+  "blocking_review_items": [],
+  "non_blocking_review_items": [
+    {
+      "type": "release_folder_grouping_used",
+      "message": "Release folder grouping used"
+    },
+    {
+      "type": "mixed_embedded_metadata_detected",
+      "message": "Mixed embedded metadata detected"
+    },
+    {
+      "type": "track_album_mismatch_detected",
+      "message": "Track album mismatch detected"
+    }
+  ],
+  "review_confirmed": false,
+  "generated_at": "2026-07-11T04:19:28.526389Z"
+}

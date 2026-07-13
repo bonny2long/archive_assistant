@@ -1,0 +1,329 @@
+{
+  "artist": "Kanye West",
+  "album": "Yeezus",
+  "year": "2013-01-01",
+  "genre": "Rap",
+  "disc_count": 1,
+  "track_count": 2,
+  "format": "FLAC",
+  "tracks": [
+    {
+      "title": "Blood On The Leaves (Album Version (Explicit))",
+      "track_number": "7",
+      "disc_number": 1
+    },
+    {
+      "title": "Bound 2 (Album Version (Explicit))",
+      "track_number": "10",
+      "disc_number": 1
+    }
+  ],
+  "metadata_quality": "good",
+  "metadata_warnings": [
+    "release_folder_grouping_used"
+  ],
+  "confidence": 1.0,
+  "artwork_count": 0,
+  "artwork_files": [],
+  "ignored_sidecar_count": 0,
+  "ignored_sidecar_files": [],
+  "review_type": "music_album",
+  "review_mode": "single_item",
+  "metadata_assist_version": "v2.066",
+  "metadata_candidates": {
+    "album_artist": [
+      {
+        "field": "album_artist",
+        "value": "Kanye West",
+        "source": "audio_tag_albumartist",
+        "source_label": "Embedded album artist tag",
+        "confidence": 0.92,
+        "confidence_label": "high",
+        "applied": false,
+        "ignored": false,
+        "notes": []
+      }
+    ],
+    "album_title": [
+      {
+        "field": "album_title",
+        "value": "Yeezus",
+        "source": "folder_name",
+        "source_label": "Release folder name",
+        "confidence": 0.9,
+        "confidence_label": "high",
+        "applied": false,
+        "ignored": false,
+        "notes": []
+      }
+    ],
+    "year": [
+      {
+        "field": "year",
+        "value": "2013",
+        "source": "folder_name",
+        "source_label": "Release folder name",
+        "confidence": 0.9,
+        "confidence_label": "high",
+        "applied": false,
+        "ignored": false,
+        "notes": []
+      }
+    ],
+    "genre": [
+      {
+        "field": "genre",
+        "value": "Rap",
+        "source": "audio_tag_genre",
+        "source_label": "Embedded genre tag",
+        "confidence": 0.72,
+        "confidence_label": "medium",
+        "applied": false,
+        "ignored": false,
+        "notes": []
+      }
+    ]
+  },
+  "track_candidates": [
+    {
+      "field": "track_title",
+      "value": "Blood On The Leaves (Album Version (Explicit))",
+      "source": "audio_tag_title",
+      "source_label": "Embedded track title tag",
+      "confidence": 0.85,
+      "confidence_label": "high",
+      "applied": false,
+      "ignored": false,
+      "notes": [],
+      "track_number": "7",
+      "disc_number": 1
+    },
+    {
+      "field": "track_title",
+      "value": "Bound 2 (Album Version (Explicit))",
+      "source": "audio_tag_title",
+      "source_label": "Embedded track title tag",
+      "confidence": 0.85,
+      "confidence_label": "high",
+      "applied": false,
+      "ignored": false,
+      "notes": [],
+      "track_number": "10",
+      "disc_number": 1
+    }
+  ],
+  "accepted_unknown_album_artist": false,
+  "accepted_unknown_album_title": false,
+  "accepted_unknown_year": false,
+  "lookup_later": false,
+  "artwork_candidates": [],
+  "track_number_conflicts": {
+    "conflict_count": 0,
+    "duplicate_embedded_track_numbers": [],
+    "filename_embedded_mismatch_count": 0,
+    "missing_tracknumber_but_filename_available_count": 0,
+    "invalid_tracknumber_count": 0,
+    "filename_preferred_count": 0,
+    "ambiguous_count": 0
+  },
+  "artist_profile": {
+    "artist": {
+      "envelope_version": 1,
+      "value": "Kanye West",
+      "source": "manual",
+      "confidence": 1.0,
+      "reason": "Approved discography artist profile value.",
+      "approval_state": "approved",
+      "approved": true,
+      "approved_at": null,
+      "approved_by": "local_admin",
+      "updated_at": "2026-07-11T04:19:29.398044Z"
+    },
+    "genre": {
+      "envelope_version": 1,
+      "value": "Rap",
+      "source": "manual",
+      "confidence": 1.0,
+      "reason": "Approved discography artist profile genre.",
+      "approval_state": "approved",
+      "approved": true,
+      "approved_at": null,
+      "approved_by": "local_admin",
+      "updated_at": "2026-07-11T04:19:29.398087Z"
+    }
+  },
+  "release_profile": {
+    "release_title": {
+      "envelope_version": 1,
+      "value": "Yeezus",
+      "source": "folder_inference",
+      "confidence": 0.9,
+      "reason": "Release title inferred from folder/review metadata.",
+      "approval_state": "pending",
+      "approved": false,
+      "approved_at": null,
+      "approved_by": null,
+      "updated_at": "2026-07-11T04:19:29.398133Z"
+    },
+    "year": {
+      "envelope_version": 1,
+      "value": "2013-01-01",
+      "source": "folder_inference",
+      "confidence": 0.85,
+      "reason": "Release year inferred from folder/review metadata.",
+      "approval_state": "pending",
+      "approved": false,
+      "approved_at": null,
+      "approved_by": null,
+      "updated_at": "2026-07-11T04:19:29.398145Z"
+    },
+    "genre": {
+      "envelope_version": 1,
+      "value": "Rap",
+      "source": "artist_profile",
+      "confidence": 0.95,
+      "reason": "Inherited genre from approved artist profile.",
+      "approval_state": "inherited",
+      "approved": true,
+      "approved_at": null,
+      "approved_by": "local_admin",
+      "updated_at": "2026-07-11T04:19:29.398205Z"
+    }
+  },
+  "inheritance_summary": {
+    "inherited_field_count": 1,
+    "missing_field_count": 19,
+    "embedded_evidence_field_count": 0,
+    "explanations": [
+      {
+        "field": "primary_genre",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "genre",
+        "source": "artist_profile",
+        "reason": "Inherited genre from approved artist profile.",
+        "inherited": true
+      },
+      {
+        "field": "subgenres",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "moods",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "energy",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "era",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "region",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "scene",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "language",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "release_type",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "secondary_types",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_compilation",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_mixtape",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_live",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_remix",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_demo",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_instrumental",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_deluxe",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_bonus_track",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "related_artists",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      }
+    ]
+  },
+  "blocking_review_items": [],
+  "non_blocking_review_items": [
+    {
+      "type": "release_folder_grouping_used",
+      "message": "Release folder grouping used"
+    }
+  ],
+  "review_confirmed": false,
+  "generated_at": "2026-07-11T04:19:29.480590Z"
+}

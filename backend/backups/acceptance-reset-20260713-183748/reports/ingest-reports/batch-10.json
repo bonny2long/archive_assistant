@@ -1,0 +1,25 @@
+{
+  "name": "Pink Floyd - The Wall (2007 Remaster) [FLAC] 88",
+  "reason": "Mixed unsupported file types",
+  "file_count": 12,
+  "folder_count": 3,
+  "size_bytes": 96030,
+  "sample_files": [
+    "CD 1\\auCDtect.txt",
+    "CD 1\\DR13.txt",
+    "CD 1\\Pink Floyd - The Wall (1) (UK - EMI 50999 511267 2 8 - 2007).log",
+    "CD 1\\Pink Floyd - The Wall (1).accurip",
+    "CD 1\\Pink Floyd - The Wall (1).cue",
+    "CD 1\\Pink Floyd - The Wall (1).m3u",
+    "CD 2\\auCDtect.txt",
+    "CD 2\\DR12.txt",
+    "CD 2\\Pink Floyd - The Wall (2) (UK - EMI 50999 511267 2 8 - 2007).log",
+    "CD 2\\Pink Floyd - The Wall (2).accurip"
+  ],
+  "recommended_action": "Move to quarantine",
+  "metadata_quality": "unsupported",
+  "metadata_warnings": [
+    "quarantine_review_required"
+  ],
+  "generated_at": "2026-07-11T04:13:37.165449Z"
+}

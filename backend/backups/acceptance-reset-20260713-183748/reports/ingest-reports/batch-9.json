@@ -1,0 +1,25 @@
+{
+  "name": "Nipsey Hussle - Discography (2010-2018) Mp3 320kbps [PMEDIA] \u2b50\ufe0f",
+  "reason": "No supported audio files found",
+  "file_count": 10,
+  "folder_count": 5,
+  "size_bytes": 168520,
+  "sample_files": [
+    "Gorillaz - Demon Days.torrent",
+    "Gorillaz - Essentials.torrent",
+    "Gorillaz - G Sides.torrent",
+    "Gorillaz - Gorillaz.torrent",
+    "Gorillaz - Humanz (Super Deluxe).torrent",
+    "Gorillaz - Plastic Beach (Deluxe).torrent",
+    "Gorillaz - Rarities.torrent",
+    "Gorillaz - The Now Now FLAC.torrent",
+    "Gorillaz - The Now Now.torrent",
+    "Gorillaz - The Singles Collection 2001-2011.torrent"
+  ],
+  "recommended_action": "Move to quarantine",
+  "metadata_quality": "unsupported",
+  "metadata_warnings": [
+    "quarantine_review_required"
+  ],
+  "generated_at": "2026-07-11T04:13:37.089985Z"
+}

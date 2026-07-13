@@ -1,0 +1,352 @@
+{
+  "artist": "Unknown Artist",
+  "album": "A Tribe Called Quest - Midnight Marauders",
+  "year": "Unknown Ye",
+  "genre": "Unknown",
+  "disc_count": 1,
+  "track_count": 2,
+  "format": "MP3",
+  "tracks": [
+    {
+      "title": "Electric Relaxation",
+      "track_number": "1",
+      "disc_number": 1
+    },
+    {
+      "title": "Lyrics To Go",
+      "track_number": "1",
+      "disc_number": 1
+    }
+  ],
+  "metadata_quality": "weak",
+  "metadata_warnings": [
+    "artist_missing",
+    "year_invalid",
+    "genre_missing",
+    "release_folder_grouping_used",
+    "track_album_mismatch_detected",
+    "track_number_conflict_detected"
+  ],
+  "confidence": 0.6,
+  "artwork_count": 0,
+  "artwork_files": [],
+  "ignored_sidecar_count": 0,
+  "ignored_sidecar_files": [],
+  "review_type": "music_album",
+  "review_mode": "single_item",
+  "metadata_assist_version": "v2.066",
+  "metadata_candidates": {
+    "album_artist": [
+      {
+        "field": "album_artist",
+        "value": "A Tribe Called Quest",
+        "source": "folder_name",
+        "source_label": "Release folder name",
+        "confidence": 0.9,
+        "confidence_label": "high",
+        "applied": false,
+        "ignored": false,
+        "notes": []
+      },
+      {
+        "field": "album_artist",
+        "value": "ready",
+        "source": "parent_folder_name",
+        "source_label": "Parent folder name",
+        "confidence": 0.72,
+        "confidence_label": "medium",
+        "applied": false,
+        "ignored": false,
+        "notes": []
+      }
+    ],
+    "album_title": [
+      {
+        "field": "album_title",
+        "value": "A Tribe Called Quest - Midnight Marauders",
+        "source": "audio_tag_album",
+        "source_label": "Embedded album tag",
+        "confidence": 0.9,
+        "confidence_label": "high",
+        "applied": false,
+        "ignored": false,
+        "notes": []
+      },
+      {
+        "field": "album_title",
+        "value": "Midnight Marauders",
+        "source": "folder_name",
+        "source_label": "Release folder name",
+        "confidence": 0.9,
+        "confidence_label": "high",
+        "applied": false,
+        "ignored": false,
+        "notes": []
+      }
+    ],
+    "year": [
+      {
+        "field": "year",
+        "value": "Unkn",
+        "source": "audio_tag_date",
+        "source_label": "Embedded date tag",
+        "confidence": 0.35,
+        "confidence_label": "low",
+        "applied": false,
+        "ignored": true,
+        "notes": [
+          "generic embedded tag"
+        ]
+      }
+    ]
+  },
+  "track_candidates": [
+    {
+      "field": "track_title",
+      "value": "Electric Relaxation",
+      "source": "audio_tag_title",
+      "source_label": "Embedded track title tag",
+      "confidence": 0.85,
+      "confidence_label": "high",
+      "applied": false,
+      "ignored": false,
+      "notes": [],
+      "track_number": "1",
+      "disc_number": 1
+    },
+    {
+      "field": "track_title",
+      "value": "Lyrics To Go",
+      "source": "audio_tag_title",
+      "source_label": "Embedded track title tag",
+      "confidence": 0.85,
+      "confidence_label": "high",
+      "applied": false,
+      "ignored": false,
+      "notes": [],
+      "track_number": "1",
+      "disc_number": 1
+    }
+  ],
+  "accepted_unknown_album_artist": false,
+  "accepted_unknown_album_title": false,
+  "accepted_unknown_year": false,
+  "lookup_later": false,
+  "artwork_candidates": [],
+  "track_number_conflicts": {
+    "conflict_count": 3,
+    "duplicate_embedded_track_numbers": [
+      1
+    ],
+    "filename_embedded_mismatch_count": 2,
+    "missing_tracknumber_but_filename_available_count": 0,
+    "invalid_tracknumber_count": 0,
+    "filename_preferred_count": 2,
+    "ambiguous_count": 0
+  },
+  "artist_profile": {
+    "artist": {
+      "envelope_version": 1,
+      "value": "Unknown Artist",
+      "source": "manual",
+      "confidence": 1.0,
+      "reason": "Approved discography artist profile value.",
+      "approval_state": "approved",
+      "approved": true,
+      "approved_at": null,
+      "approved_by": "local_admin",
+      "updated_at": "2026-07-11T04:19:27.823497Z"
+    }
+  },
+  "release_profile": {
+    "release_title": {
+      "envelope_version": 1,
+      "value": "A Tribe Called Quest - Midnight Marauders",
+      "source": "folder_inference",
+      "confidence": 0.9,
+      "reason": "Release title inferred from folder/review metadata.",
+      "approval_state": "pending",
+      "approved": false,
+      "approved_at": null,
+      "approved_by": null,
+      "updated_at": "2026-07-11T04:19:27.823565Z"
+    },
+    "year": {
+      "envelope_version": 1,
+      "value": "Unknown Ye",
+      "source": "folder_inference",
+      "confidence": 0.85,
+      "reason": "Release year inferred from folder/review metadata.",
+      "approval_state": "pending",
+      "approved": false,
+      "approved_at": null,
+      "approved_by": null,
+      "updated_at": "2026-07-11T04:19:27.823580Z"
+    }
+  },
+  "inheritance_summary": {
+    "inherited_field_count": 0,
+    "missing_field_count": 20,
+    "embedded_evidence_field_count": 0,
+    "explanations": [
+      {
+        "field": "primary_genre",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "genre",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "subgenres",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "moods",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "energy",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "era",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "region",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "scene",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "language",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "release_type",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "secondary_types",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_compilation",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_mixtape",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_live",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_remix",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_demo",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_instrumental",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_deluxe",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_bonus_track",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "related_artists",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      }
+    ]
+  },
+  "blocking_review_items": [
+    {
+      "type": "artist_missing",
+      "message": "Artist is required before approval."
+    }
+  ],
+  "non_blocking_review_items": [
+    {
+      "type": "artist_missing",
+      "message": "Artist missing"
+    },
+    {
+      "type": "year_invalid",
+      "message": "Year invalid"
+    },
+    {
+      "type": "genre_missing",
+      "message": "Genre missing"
+    },
+    {
+      "type": "release_folder_grouping_used",
+      "message": "Release folder grouping used"
+    },
+    {
+      "type": "track_album_mismatch_detected",
+      "message": "Track album mismatch detected"
+    },
+    {
+      "type": "track_number_conflict_detected",
+      "message": "Embedded track numbers conflict with filename order; filename order will be used for destination numbering."
+    },
+    {
+      "type": "year_missing",
+      "message": "Year is missing. It may be accepted as unknown and reviewed later."
+    }
+  ],
+  "review_confirmed": false,
+  "generated_at": "2026-07-11T04:19:27.933175Z"
+}

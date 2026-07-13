@@ -1,0 +1,19 @@
+{
+  "name": "Gregory Alan Isakov...This Empty Northern Hemisphere(2009)[FLAC]",
+  "reason": "Mixed unsupported file types",
+  "file_count": 4,
+  "folder_count": 1,
+  "size_bytes": 7211,
+  "sample_files": [
+    "Gregory Alan Isakov - This Empty Northern Hemisphere.m3u",
+    "This Empty Northern Hemisphere.CUE",
+    "This Empty Northern Hemisphere.log",
+    "Torrent downloaded from Demonoid.me.txt"
+  ],
+  "recommended_action": "Move to quarantine",
+  "metadata_quality": "unsupported",
+  "metadata_warnings": [
+    "quarantine_review_required"
+  ],
+  "generated_at": "2026-07-11T04:13:36.929745Z"
+}

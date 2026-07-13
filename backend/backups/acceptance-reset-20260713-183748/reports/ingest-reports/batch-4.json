@@ -1,0 +1,17 @@
+{
+  "name": "Deadmau5 - 2009 - For Lack of a Better Name",
+  "reason": "Mixed unsupported file types",
+  "file_count": 2,
+  "folder_count": 1,
+  "size_bytes": 9760,
+  "sample_files": [
+    "For Lack of a Better Name.cue",
+    "For Lack of a Better Name.log"
+  ],
+  "recommended_action": "Move to quarantine",
+  "metadata_quality": "unsupported",
+  "metadata_warnings": [
+    "quarantine_review_required"
+  ],
+  "generated_at": "2026-07-11T04:13:36.817711Z"
+}

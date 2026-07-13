@@ -1,0 +1,20 @@
+{
+  "name": "John Coltrane - Stardust (1958, 1988, Prestige-Japan)",
+  "reason": "Mixed unsupported file types",
+  "file_count": 5,
+  "folder_count": 2,
+  "size_bytes": 9172,
+  "sample_files": [
+    "foo_dr.txt",
+    "John Coltrane - Stardust.log",
+    "John Coltrane - Stardust.m3u",
+    "Stardust.accurip",
+    "Stardust.cue"
+  ],
+  "recommended_action": "Move to quarantine",
+  "metadata_quality": "unsupported",
+  "metadata_warnings": [
+    "quarantine_review_required"
+  ],
+  "generated_at": "2026-07-11T04:13:36.975160Z"
+}

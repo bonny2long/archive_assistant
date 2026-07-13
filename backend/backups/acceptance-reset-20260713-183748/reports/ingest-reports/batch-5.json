@@ -1,0 +1,21 @@
+{
+  "name": "Foo Fighters - The Colour And The Shape (10th Anniversary) [FLAC] 88",
+  "reason": "Mixed unsupported file types",
+  "file_count": 6,
+  "folder_count": 1,
+  "size_bytes": 29841,
+  "sample_files": [
+    "auCDtect.txt",
+    "DR6.txt",
+    "Foo Fighters - The Colour And The Shape (10th Anniversary) (88697 09183 2).log",
+    "Foo Fighters - The Colour And The Shape (10th Anniversary).accurip",
+    "Foo Fighters - The Colour And The Shape (10th Anniversary).cue",
+    "Foo Fighters - The Colour And The Shape (10th Anniversary).m3u"
+  ],
+  "recommended_action": "Move to quarantine",
+  "metadata_quality": "unsupported",
+  "metadata_warnings": [
+    "quarantine_review_required"
+  ],
+  "generated_at": "2026-07-11T04:13:36.890655Z"
+}

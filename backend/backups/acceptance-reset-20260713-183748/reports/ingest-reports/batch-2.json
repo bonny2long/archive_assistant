@@ -1,0 +1,17 @@
+{
+  "name": "Bastille - Bad Blood (2013) [FLAC]",
+  "reason": "Mixed unsupported file types",
+  "file_count": 2,
+  "folder_count": 1,
+  "size_bytes": 13158,
+  "sample_files": [
+    "Bad Blood.cue",
+    "Bad Blood.log"
+  ],
+  "recommended_action": "Move to quarantine",
+  "metadata_quality": "unsupported",
+  "metadata_warnings": [
+    "quarantine_review_required"
+  ],
+  "generated_at": "2026-07-11T04:13:36.737273Z"
+}

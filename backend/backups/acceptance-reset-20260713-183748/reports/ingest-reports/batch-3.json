@@ -1,0 +1,18 @@
+{
+  "name": "Bill Evans - Alone (Again) (1975)",
+  "reason": "Mixed unsupported file types",
+  "file_count": 3,
+  "folder_count": 2,
+  "size_bytes": 8911,
+  "sample_files": [
+    "Alone (Again).cue",
+    "Bill Evans - Alone (Again).log",
+    "Bill Evans - Alone (Again).m3u"
+  ],
+  "recommended_action": "Move to quarantine",
+  "metadata_quality": "unsupported",
+  "metadata_warnings": [
+    "quarantine_review_required"
+  ],
+  "generated_at": "2026-07-11T04:13:36.781661Z"
+}

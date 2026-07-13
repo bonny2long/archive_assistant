@@ -1,0 +1,3524 @@
+{
+  "artist": "drive-download-20260628T012539Z-3-002",
+  "review_type": "music_discography",
+  "review_mode": "item_list",
+  "metadata_assist_version": "v2.066",
+  "accepted_unknown_discography_artist": false,
+  "lookup_later": false,
+  "collection_type": "discography",
+  "album_count": 7,
+  "release_count": 7,
+  "track_count": 42,
+  "artwork_count": 26,
+  "artwork_files": [
+    "00-Jay-Z-The.Blueprint.III-(Retail)-2009-[NoFS]-BACK.jpg",
+    "cover.jpg",
+    "cover.jpg",
+    "cover.jpg",
+    "cover.jpg",
+    "cover.jpg",
+    "cover.jpg",
+    "cover.jpg",
+    "cover.jpg",
+    "cover.jpg",
+    "cover.jpg",
+    "cover.jpg",
+    "cover.jpg",
+    "cover.jpg",
+    "cover (1).jpg",
+    "cover.jpg",
+    "cover.jpg",
+    "cover.jpg",
+    "cover.jpg",
+    "cover.jpg",
+    "Star Wars The Old Republic Revan.jpg",
+    "cover.jpg",
+    "cover.jpg",
+    "cover.jpg",
+    "cover.jpg",
+    "Jolly Roger.png"
+  ],
+  "ignored_sidecar_count": 25,
+  "ignored_sidecar_files": [
+    "Jay-Z-The.Blueprint.III-(Retail)-2009-[NoFS]\\00-Jay-Z-The.Blueprint.III-(Retail)-2009-[NoFS].nfo",
+    "Kendrick Lamar - Mr. Morale & The Big Steppers (2022) Mp3 320kbps [PMEDIA] \u2b50\ufe0f\\INFO.nfo",
+    "Lil Wayne - Discography 1999-2023 [FLAC] 88\\1999 - Tha Block Is Hot\\Lil Wayne - Tha Block Is Hot.m3u",
+    "Lil Wayne - Discography 1999-2023 [FLAC] 88\\2005 - Tha Carter II\\auCDtect.txt",
+    "Lil Wayne - Discography 1999-2023 [FLAC] 88\\2006 - Birdman & Lil Wayne - Like Father Like Son\\Birdman & Lil Wayne - Like Father, Like Son.m3u",
+    "Lil Wayne - Discography 1999-2023 [FLAC] 88\\2008 - Tha Carter III\\auCDtect.txt",
+    "Lil Wayne - Discography 1999-2023 [FLAC] 88\\2009 - Rebirth\\auCDtect.txt",
+    "Lil Wayne - Discography 1999-2023 [FLAC] 88\\2009 - Rebirth\\Lil Wayne - Rebirth.m3u",
+    "Lil Wayne - Discography 1999-2023 [FLAC] 88\\2010 - I Am Not A Human Being\\auCDtect.txt",
+    "Lil Wayne - Discography 1999-2023 [FLAC] 88\\2011 - Tha Carter IV\\DR5.txt",
+    "Lil Wayne - Discography 1999-2023 [FLAC] 88\\2013 - I Am Not a Human Being II\\DR5.txt",
+    "Lil Wayne - Discography 1999-2023 [FLAC] 88\\2015 - FWA\\DR5.txt",
+    "Lil Wayne - Discography 1999-2023 [FLAC] 88\\2018 - Tha Carter V\\Lil Wayne - Tha Carter V.m3u",
+    "Lil Wayne - Discography 1999-2023 [FLAC] 88\\2020 - Funeral\\Lil Wayne - Funeral.m3u",
+    "Lil Wayne - Discography 1999-2023 [FLAC] 88\\2023 - I Am Music\\auCDtect.txt",
+    "The Weeknd Discography 2012-2022 (FLAC) vtwin88cube\\2012 - Trilogy\\Disc 1 - House Of Balloons\\DR7.txt",
+    "The Weeknd Discography 2012-2022 (FLAC) vtwin88cube\\2012 - Trilogy\\Disc 1 - House Of Balloons\\The Weeknd - Trilogy.log",
+    "The Weeknd Discography 2012-2022 (FLAC) vtwin88cube\\2012 - Trilogy\\Disc 2 - Thursday\\DR6.txt",
+    "The Weeknd Discography 2012-2022 (FLAC) vtwin88cube\\2012 - Trilogy\\Disc 2 - Thursday\\Play Me.m3u",
+    "The Weeknd Discography 2012-2022 (FLAC) vtwin88cube\\2012 - Trilogy\\Disc 3 - Echoes Of Silence\\auCDtect.txt",
+    "The Weeknd Discography 2012-2022 (FLAC) vtwin88cube\\2012 - Trilogy\\Disc 3 - Echoes Of Silence\\The Weeknd - Trilogy.log",
+    "The Weeknd Discography 2012-2022 (FLAC) vtwin88cube\\2013 - Kiss Land (Deluxe)\\auCDtect.txt",
+    "The Weeknd Discography 2012-2022 (FLAC) vtwin88cube\\2020 - After Hours (Deluxe Explicit)\\Play Me.m3u",
+    "The Weeknd Discography 2012-2022 (FLAC) vtwin88cube\\2021 - The Highlights\\auCDtect.txt",
+    "The Weeknd Discography 2012-2022 (FLAC) vtwin88cube\\2022 - Dawn FM (Explicit)\\DR6.txt"
+  ],
+  "format_summary": [
+    "FLAC",
+    "MP3"
+  ],
+  "albums": [
+    {
+      "source_folder": "Jay-Z-The.Blueprint.III-(Retail)-2009-[NoFS]",
+      "artist": "drive-download-20260628T012539Z-3-002",
+      "album": "Jay-Z-The.Blueprint.III-(Retail)-[NoFS]",
+      "year": "2009",
+      "genre": "Rap/Hip-Hop",
+      "genre_source": "track tags",
+      "format": "MP3",
+      "track_count": 6,
+      "disc_count": 1,
+      "artwork_count": 1,
+      "artwork_files": [
+        "00-Jay-Z-The.Blueprint.III-(Retail)-2009-[NoFS]-BACK.jpg"
+      ],
+      "ignored_sidecar_count": 1,
+      "ignored_sidecar_files": [
+        "00-Jay-Z-The.Blueprint.III-(Retail)-2009-[NoFS].nfo"
+      ],
+      "release_type": "album",
+      "include": true,
+      "status": "warning",
+      "warnings": [
+        "album_title_from_folder_cleanup"
+      ],
+      "track_number_conflicts": {
+        "conflict_count": 0,
+        "duplicate_embedded_track_numbers": [],
+        "filename_embedded_mismatch_count": 0,
+        "missing_tracknumber_but_filename_available_count": 0,
+        "invalid_tracknumber_count": 0,
+        "filename_preferred_count": 0,
+        "ambiguous_count": 0
+      },
+      "release_tags_removed": [],
+      "metadata_candidates": {
+        "album_title": [
+          {
+            "field": "album_title",
+            "value": "Jay-Z-The.Blueprint.III-(Retail)-2009-[NoFS]",
+            "source": "audio_tag_album",
+            "source_label": "Embedded album tag",
+            "confidence": 0.9,
+            "confidence_label": "high",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          },
+          {
+            "field": "album_title",
+            "value": "Jay-Z-The.Blueprint.III-(Retail)-[NoFS]",
+            "source": "folder_name",
+            "source_label": "Release folder name",
+            "confidence": 0.9,
+            "confidence_label": "high",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ],
+        "year": [
+          {
+            "field": "year",
+            "value": "2009",
+            "source": "folder_name",
+            "source_label": "Release folder name",
+            "confidence": 0.9,
+            "confidence_label": "high",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ],
+        "album_artist": [
+          {
+            "field": "album_artist",
+            "value": "Jay-Z",
+            "source": "audio_tag_artist",
+            "source_label": "Embedded artist tag",
+            "confidence": 0.75,
+            "confidence_label": "medium",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          },
+          {
+            "field": "album_artist",
+            "value": "drive-download-20260628T012539Z-3-002",
+            "source": "parent_folder_name",
+            "source_label": "Parent folder name",
+            "confidence": 0.72,
+            "confidence_label": "medium",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ],
+        "genre": [
+          {
+            "field": "genre",
+            "value": "Rap/Hip-Hop",
+            "source": "audio_tag_genre",
+            "source_label": "Embedded genre tag",
+            "confidence": 0.72,
+            "confidence_label": "medium",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ]
+      },
+      "track_candidates": [
+        {
+          "field": "track_title",
+          "value": "What We Talkin' About",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "1",
+          "disc_number": 1
+        },
+        {
+          "field": "track_title",
+          "value": "Thank You",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "2",
+          "disc_number": 1
+        },
+        {
+          "field": "track_title",
+          "value": "Empire State Of Mind",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "5",
+          "disc_number": 1
+        },
+        {
+          "field": "track_title",
+          "value": "Real As It Gets",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "6",
+          "disc_number": 1
+        },
+        {
+          "field": "track_title",
+          "value": "Venus Vs. Mars",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "10",
+          "disc_number": 1
+        },
+        {
+          "field": "track_title",
+          "value": "So Ambitious",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "14",
+          "disc_number": 1
+        }
+      ],
+      "accepted_unknown_album_artist": false,
+      "accepted_unknown_album_title": false,
+      "accepted_unknown_year": false,
+      "lookup_later": false,
+      "release_profile": {
+        "release_title": {
+          "envelope_version": 1,
+          "value": "Jay-Z-The.Blueprint.III-(Retail)-[NoFS]",
+          "source": "folder_inference",
+          "confidence": 0.9,
+          "reason": "Release title inferred from folder/review metadata.",
+          "approval_state": "pending",
+          "approved": false,
+          "approved_at": null,
+          "approved_by": null,
+          "updated_at": "2026-07-11T04:19:11.437808Z"
+        },
+        "year": {
+          "envelope_version": 1,
+          "value": "2009",
+          "source": "folder_inference",
+          "confidence": 0.85,
+          "reason": "Release year inferred from folder/review metadata.",
+          "approval_state": "pending",
+          "approved": false,
+          "approved_at": null,
+          "approved_by": null,
+          "updated_at": "2026-07-11T04:19:11.437822Z"
+        },
+        "release_type": {
+          "envelope_version": 1,
+          "value": "album",
+          "source": "folder_inference",
+          "confidence": 0.8,
+          "reason": "Release type inferred from release grouping.",
+          "approval_state": "pending",
+          "approved": false,
+          "approved_at": null,
+          "approved_by": null,
+          "updated_at": "2026-07-11T04:19:11.437833Z"
+        }
+      },
+      "inheritance_summary": {
+        "inherited_field_count": 0,
+        "missing_field_count": 20,
+        "embedded_evidence_field_count": 0,
+        "explanations": [
+          {
+            "field": "primary_genre",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "genre",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "subgenres",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "moods",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "energy",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "era",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "region",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "scene",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "language",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "release_type",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "secondary_types",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_compilation",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_mixtape",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_live",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_remix",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_demo",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_instrumental",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_deluxe",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_bonus_track",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "related_artists",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          }
+        ]
+      }
+    },
+    {
+      "source_folder": "Kanye West - Discography [FLAC Songs] [PMEDIA] \u2b50\ufe0f",
+      "artist": "drive-download-20260628T012539Z-3-002",
+      "album": "Discography \u2b50\ufe0f",
+      "year": null,
+      "genre": "Rap",
+      "genre_source": "track tags",
+      "format": "FLAC",
+      "track_count": 3,
+      "disc_count": 1,
+      "artwork_count": 13,
+      "artwork_files": [
+        "cover.jpg",
+        "cover.jpg",
+        "cover.jpg",
+        "cover.jpg",
+        "cover.jpg",
+        "cover.jpg",
+        "cover.jpg",
+        "cover.jpg",
+        "cover.jpg",
+        "cover.jpg",
+        "cover.jpg",
+        "cover.jpg",
+        "cover.jpg"
+      ],
+      "ignored_sidecar_count": 0,
+      "ignored_sidecar_files": [],
+      "release_type": "single",
+      "include": true,
+      "status": "warning",
+      "warnings": [
+        "album_missing_year",
+        "folder_artist_mismatch",
+        "release_tag_removed",
+        "album_title_from_folder_cleanup"
+      ],
+      "track_number_conflicts": {
+        "conflict_count": 0,
+        "duplicate_embedded_track_numbers": [],
+        "filename_embedded_mismatch_count": 0,
+        "missing_tracknumber_but_filename_available_count": 0,
+        "invalid_tracknumber_count": 0,
+        "filename_preferred_count": 0,
+        "ambiguous_count": 0
+      },
+      "release_tags_removed": [
+        "[FLAC Songs]",
+        "[PMEDIA]"
+      ],
+      "metadata_candidates": {
+        "album_artist": [
+          {
+            "field": "album_artist",
+            "value": "Kanye West",
+            "source": "audio_tag_albumartist",
+            "source_label": "Embedded album artist tag",
+            "confidence": 0.92,
+            "confidence_label": "high",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          },
+          {
+            "field": "album_artist",
+            "value": "drive-download-20260628T012539Z-3-002",
+            "source": "parent_folder_name",
+            "source_label": "Parent folder name",
+            "confidence": 0.72,
+            "confidence_label": "medium",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ],
+        "album_title": [
+          {
+            "field": "album_title",
+            "value": "Discography \u2b50\ufe0f",
+            "source": "folder_name",
+            "source_label": "Release folder name",
+            "confidence": 0.9,
+            "confidence_label": "high",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          },
+          {
+            "field": "album_title",
+            "value": "The College Dropout",
+            "source": "audio_tag_album",
+            "source_label": "Embedded album tag",
+            "confidence": 0.9,
+            "confidence_label": "high",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ],
+        "year": [
+          {
+            "field": "year",
+            "value": "2004",
+            "source": "audio_tag_date",
+            "source_label": "Embedded date tag",
+            "confidence": 0.82,
+            "confidence_label": "medium",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ],
+        "genre": [
+          {
+            "field": "genre",
+            "value": "Rap",
+            "source": "audio_tag_genre",
+            "source_label": "Embedded genre tag",
+            "confidence": 0.72,
+            "confidence_label": "medium",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ]
+      },
+      "track_candidates": [
+        {
+          "field": "track_title",
+          "value": "Intro (Kanye West/The College Dropout)",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "1",
+          "disc_number": 1
+        },
+        {
+          "field": "track_title",
+          "value": "School Spirit Skit 2",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "16",
+          "disc_number": 1
+        },
+        {
+          "field": "track_title",
+          "value": "Champion",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "2",
+          "disc_number": 1
+        }
+      ],
+      "accepted_unknown_album_artist": false,
+      "accepted_unknown_album_title": false,
+      "accepted_unknown_year": false,
+      "lookup_later": false,
+      "release_profile": {
+        "release_title": {
+          "envelope_version": 1,
+          "value": "Discography \u2b50\ufe0f",
+          "source": "folder_inference",
+          "confidence": 0.9,
+          "reason": "Release title inferred from folder/review metadata.",
+          "approval_state": "pending",
+          "approved": false,
+          "approved_at": null,
+          "approved_by": null,
+          "updated_at": "2026-07-11T04:19:11.438068Z"
+        },
+        "release_type": {
+          "envelope_version": 1,
+          "value": "single",
+          "source": "folder_inference",
+          "confidence": 0.8,
+          "reason": "Release type inferred from release grouping.",
+          "approval_state": "pending",
+          "approved": false,
+          "approved_at": null,
+          "approved_by": null,
+          "updated_at": "2026-07-11T04:19:11.438079Z"
+        }
+      },
+      "inheritance_summary": {
+        "inherited_field_count": 0,
+        "missing_field_count": 20,
+        "embedded_evidence_field_count": 0,
+        "explanations": [
+          {
+            "field": "primary_genre",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "genre",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "subgenres",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "moods",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "energy",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "era",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "region",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "scene",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "language",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "release_type",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "secondary_types",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_compilation",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_mixtape",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_live",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_remix",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_demo",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_instrumental",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_deluxe",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_bonus_track",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "related_artists",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          }
+        ]
+      }
+    },
+    {
+      "source_folder": "Kendrick Lamar - Mr. Morale & The Big Steppers (2022) Mp3 320kbps [PMEDIA] \u2b50\ufe0f",
+      "artist": "drive-download-20260628T012539Z-3-002",
+      "album": "Mr. Morale & The Big Steppers Mp3 320kbps \u2b50\ufe0f",
+      "year": "2022",
+      "genre": "Rap/Hip Hop",
+      "genre_source": "track tags",
+      "format": "MP3",
+      "track_count": 5,
+      "disc_count": 2,
+      "artwork_count": 1,
+      "artwork_files": [
+        "cover (1).jpg"
+      ],
+      "ignored_sidecar_count": 1,
+      "ignored_sidecar_files": [
+        "INFO.nfo"
+      ],
+      "release_type": "album",
+      "include": true,
+      "status": "warning",
+      "warnings": [
+        "folder_artist_mismatch",
+        "release_tag_removed",
+        "album_title_from_folder_cleanup"
+      ],
+      "track_number_conflicts": {
+        "conflict_count": 0,
+        "duplicate_embedded_track_numbers": [],
+        "filename_embedded_mismatch_count": 0,
+        "missing_tracknumber_but_filename_available_count": 0,
+        "invalid_tracknumber_count": 0,
+        "filename_preferred_count": 0,
+        "ambiguous_count": 0
+      },
+      "release_tags_removed": [
+        "[PMEDIA]"
+      ],
+      "metadata_candidates": {
+        "album_artist": [
+          {
+            "field": "album_artist",
+            "value": "Kendrick Lamar",
+            "source": "audio_tag_albumartist",
+            "source_label": "Embedded album artist tag",
+            "confidence": 0.92,
+            "confidence_label": "high",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          },
+          {
+            "field": "album_artist",
+            "value": "drive-download-20260628T012539Z-3-002",
+            "source": "parent_folder_name",
+            "source_label": "Parent folder name",
+            "confidence": 0.72,
+            "confidence_label": "medium",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ],
+        "album_title": [
+          {
+            "field": "album_title",
+            "value": "Mr. Morale & The Big Steppers",
+            "source": "audio_tag_album",
+            "source_label": "Embedded album tag",
+            "confidence": 0.9,
+            "confidence_label": "high",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          },
+          {
+            "field": "album_title",
+            "value": "Mr. Morale & The Big Steppers Mp3 320kbps \u2b50\ufe0f",
+            "source": "folder_name",
+            "source_label": "Release folder name",
+            "confidence": 0.9,
+            "confidence_label": "high",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ],
+        "year": [
+          {
+            "field": "year",
+            "value": "2022",
+            "source": "folder_name",
+            "source_label": "Release folder name",
+            "confidence": 0.9,
+            "confidence_label": "high",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ],
+        "genre": [
+          {
+            "field": "genre",
+            "value": "Rap/Hip Hop",
+            "source": "audio_tag_genre",
+            "source_label": "Embedded genre tag",
+            "confidence": 0.72,
+            "confidence_label": "medium",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ]
+      },
+      "track_candidates": [
+        {
+          "field": "track_title",
+          "value": "N95",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "2",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Die Hard",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "4",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Rich Spirit",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "7",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Crown",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "2",
+          "disc_number": "2"
+        },
+        {
+          "field": "track_title",
+          "value": "Silent Hill",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "3",
+          "disc_number": "2"
+        }
+      ],
+      "accepted_unknown_album_artist": false,
+      "accepted_unknown_album_title": false,
+      "accepted_unknown_year": false,
+      "lookup_later": false,
+      "release_profile": {
+        "release_title": {
+          "envelope_version": 1,
+          "value": "Mr. Morale & The Big Steppers Mp3 320kbps \u2b50\ufe0f",
+          "source": "folder_inference",
+          "confidence": 0.9,
+          "reason": "Release title inferred from folder/review metadata.",
+          "approval_state": "pending",
+          "approved": false,
+          "approved_at": null,
+          "approved_by": null,
+          "updated_at": "2026-07-11T04:19:11.438299Z"
+        },
+        "year": {
+          "envelope_version": 1,
+          "value": "2022",
+          "source": "folder_inference",
+          "confidence": 0.85,
+          "reason": "Release year inferred from folder/review metadata.",
+          "approval_state": "pending",
+          "approved": false,
+          "approved_at": null,
+          "approved_by": null,
+          "updated_at": "2026-07-11T04:19:11.438309Z"
+        },
+        "release_type": {
+          "envelope_version": 1,
+          "value": "album",
+          "source": "folder_inference",
+          "confidence": 0.8,
+          "reason": "Release type inferred from release grouping.",
+          "approval_state": "pending",
+          "approved": false,
+          "approved_at": null,
+          "approved_by": null,
+          "updated_at": "2026-07-11T04:19:11.438319Z"
+        }
+      },
+      "inheritance_summary": {
+        "inherited_field_count": 0,
+        "missing_field_count": 20,
+        "embedded_evidence_field_count": 0,
+        "explanations": [
+          {
+            "field": "primary_genre",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "genre",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "subgenres",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "moods",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "energy",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "era",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "region",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "scene",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "language",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "release_type",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "secondary_types",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_compilation",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_mixtape",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_live",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_remix",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_demo",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_instrumental",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_deluxe",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_bonus_track",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "related_artists",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          }
+        ]
+      }
+    },
+    {
+      "source_folder": "Lil Wayne - Discography 1999-2023 [FLAC] 88",
+      "artist": "drive-download-20260628T012539Z-3-002",
+      "album": "Discography-2023 88",
+      "year": "1999",
+      "genre": "Rap/Hip-Hop",
+      "genre_source": "track tags",
+      "format": "FLAC",
+      "track_count": 14,
+      "disc_count": 1,
+      "artwork_count": 5,
+      "artwork_files": [
+        "cover.jpg",
+        "cover.jpg",
+        "cover.jpg",
+        "cover.jpg",
+        "cover.jpg"
+      ],
+      "ignored_sidecar_count": 13,
+      "ignored_sidecar_files": [
+        "Lil Wayne - Tha Block Is Hot.m3u",
+        "auCDtect.txt",
+        "Birdman & Lil Wayne - Like Father, Like Son.m3u",
+        "auCDtect.txt",
+        "auCDtect.txt",
+        "Lil Wayne - Rebirth.m3u",
+        "auCDtect.txt",
+        "DR5.txt",
+        "DR5.txt",
+        "DR5.txt",
+        "Lil Wayne - Tha Carter V.m3u",
+        "Lil Wayne - Funeral.m3u",
+        "auCDtect.txt"
+      ],
+      "release_type": "album",
+      "include": true,
+      "status": "warning",
+      "warnings": [
+        "folder_artist_mismatch",
+        "release_tag_removed",
+        "album_title_from_folder_cleanup",
+        "track_number_conflict_detected"
+      ],
+      "track_number_conflicts": {
+        "conflict_count": 4,
+        "duplicate_embedded_track_numbers": [
+          2,
+          3,
+          6,
+          14
+        ],
+        "filename_embedded_mismatch_count": 0,
+        "missing_tracknumber_but_filename_available_count": 0,
+        "invalid_tracknumber_count": 0,
+        "filename_preferred_count": 8,
+        "ambiguous_count": 0
+      },
+      "release_tags_removed": [
+        "[FLAC]"
+      ],
+      "metadata_candidates": {
+        "album_artist": [
+          {
+            "field": "album_artist",
+            "value": "Lil Wayne",
+            "source": "audio_tag_albumartist",
+            "source_label": "Embedded album artist tag",
+            "confidence": 0.92,
+            "confidence_label": "high",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          },
+          {
+            "field": "album_artist",
+            "value": "drive-download-20260628T012539Z-3-002",
+            "source": "parent_folder_name",
+            "source_label": "Parent folder name",
+            "confidence": 0.72,
+            "confidence_label": "medium",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ],
+        "album_title": [
+          {
+            "field": "album_title",
+            "value": "Discography-2023 88",
+            "source": "folder_name",
+            "source_label": "Release folder name",
+            "confidence": 0.9,
+            "confidence_label": "high",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          },
+          {
+            "field": "album_title",
+            "value": "FWA",
+            "source": "audio_tag_album",
+            "source_label": "Embedded album tag",
+            "confidence": 0.9,
+            "confidence_label": "high",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ],
+        "year": [
+          {
+            "field": "year",
+            "value": "1999",
+            "source": "folder_name",
+            "source_label": "Release folder name",
+            "confidence": 0.9,
+            "confidence_label": "high",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          },
+          {
+            "field": "year",
+            "value": "2015",
+            "source": "audio_tag_date",
+            "source_label": "Embedded date tag",
+            "confidence": 0.82,
+            "confidence_label": "medium",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ],
+        "genre": [
+          {
+            "field": "genre",
+            "value": "Rap/Hip-Hop",
+            "source": "audio_tag_genre",
+            "source_label": "Embedded genre tag",
+            "confidence": 0.72,
+            "confidence_label": "medium",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ]
+      },
+      "track_candidates": [
+        {
+          "field": "track_title",
+          "value": "Paradice",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "5",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Get A Life",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "6",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Knockout",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "11",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Hold Up",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "2",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "With You",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "3",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Bill Gates",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "10",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "I Feel Good",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "3",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "I\u2019m That Nigga",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "6",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "White Girl",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "14",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Street Chains",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "16",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Mahogany",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "2",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Harden",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "13",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Never Mind",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "22",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Uproar",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "14",
+          "disc_number": "1"
+        }
+      ],
+      "accepted_unknown_album_artist": false,
+      "accepted_unknown_album_title": false,
+      "accepted_unknown_year": false,
+      "lookup_later": false,
+      "release_profile": {
+        "release_title": {
+          "envelope_version": 1,
+          "value": "Discography-2023 88",
+          "source": "folder_inference",
+          "confidence": 0.9,
+          "reason": "Release title inferred from folder/review metadata.",
+          "approval_state": "pending",
+          "approved": false,
+          "approved_at": null,
+          "approved_by": null,
+          "updated_at": "2026-07-11T04:19:11.438535Z"
+        },
+        "year": {
+          "envelope_version": 1,
+          "value": "1999",
+          "source": "folder_inference",
+          "confidence": 0.85,
+          "reason": "Release year inferred from folder/review metadata.",
+          "approval_state": "pending",
+          "approved": false,
+          "approved_at": null,
+          "approved_by": null,
+          "updated_at": "2026-07-11T04:19:11.438545Z"
+        },
+        "release_type": {
+          "envelope_version": 1,
+          "value": "album",
+          "source": "folder_inference",
+          "confidence": 0.8,
+          "reason": "Release type inferred from release grouping.",
+          "approval_state": "pending",
+          "approved": false,
+          "approved_at": null,
+          "approved_by": null,
+          "updated_at": "2026-07-11T04:19:11.438554Z"
+        }
+      },
+      "inheritance_summary": {
+        "inherited_field_count": 0,
+        "missing_field_count": 20,
+        "embedded_evidence_field_count": 0,
+        "explanations": [
+          {
+            "field": "primary_genre",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "genre",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "subgenres",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "moods",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "energy",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "era",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "region",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "scene",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "language",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "release_type",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "secondary_types",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_compilation",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_mixtape",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_live",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_remix",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_demo",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_instrumental",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_deluxe",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_bonus_track",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "related_artists",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          }
+        ]
+      }
+    },
+    {
+      "source_folder": "Star Wars Darth Bane Audiobook Trilogy [Unabridged]",
+      "artist": "drive-download-20260628T012539Z-3-002",
+      "album": "Star Wars Darth Bane Audiobook Trilogy [Unabridged]",
+      "year": null,
+      "genre": "Unknown",
+      "genre_source": "unknown",
+      "format": "MP3",
+      "track_count": 1,
+      "disc_count": 1,
+      "artwork_count": 0,
+      "artwork_files": [],
+      "ignored_sidecar_count": 0,
+      "ignored_sidecar_files": [],
+      "release_type": "single",
+      "include": true,
+      "status": "warning",
+      "warnings": [
+        "album_missing_year",
+        "one_track_release",
+        "possible_single_or_ep"
+      ],
+      "track_number_conflicts": {
+        "conflict_count": 0,
+        "duplicate_embedded_track_numbers": [],
+        "filename_embedded_mismatch_count": 0,
+        "missing_tracknumber_but_filename_available_count": 0,
+        "invalid_tracknumber_count": 0,
+        "filename_preferred_count": 0,
+        "ambiguous_count": 0
+      },
+      "release_tags_removed": [],
+      "metadata_candidates": {
+        "album_title": [
+          {
+            "field": "album_title",
+            "value": "Star Wars Darth Bane Audiobook Trilogy [Unabridged]",
+            "source": "folder_name",
+            "source_label": "Release folder name",
+            "confidence": 0.9,
+            "confidence_label": "high",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ],
+        "album_artist": [
+          {
+            "field": "album_artist",
+            "value": "drive-download-20260628T012539Z-3-002",
+            "source": "parent_folder_name",
+            "source_label": "Parent folder name",
+            "confidence": 0.72,
+            "confidence_label": "medium",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ],
+        "year": [
+          {
+            "field": "year",
+            "value": "Unkn",
+            "source": "audio_tag_date",
+            "source_label": "Embedded date tag",
+            "confidence": 0.35,
+            "confidence_label": "low",
+            "applied": false,
+            "ignored": true,
+            "notes": [
+              "generic embedded tag"
+            ]
+          }
+        ]
+      },
+      "track_candidates": [
+        {
+          "field": "track_title",
+          "value": "Star Wars Darth Bane Rule Of Two (Book 2) [Unabridged]",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "1",
+          "disc_number": 1
+        }
+      ],
+      "accepted_unknown_album_artist": false,
+      "accepted_unknown_album_title": false,
+      "accepted_unknown_year": false,
+      "lookup_later": false,
+      "release_profile": {
+        "release_title": {
+          "envelope_version": 1,
+          "value": "Star Wars Darth Bane Audiobook Trilogy [Unabridged]",
+          "source": "folder_inference",
+          "confidence": 0.9,
+          "reason": "Release title inferred from folder/review metadata.",
+          "approval_state": "pending",
+          "approved": false,
+          "approved_at": null,
+          "approved_by": null,
+          "updated_at": "2026-07-11T04:19:11.438771Z"
+        },
+        "release_type": {
+          "envelope_version": 1,
+          "value": "single",
+          "source": "folder_inference",
+          "confidence": 0.8,
+          "reason": "Release type inferred from release grouping.",
+          "approval_state": "pending",
+          "approved": false,
+          "approved_at": null,
+          "approved_by": null,
+          "updated_at": "2026-07-11T04:19:11.438781Z"
+        }
+      },
+      "inheritance_summary": {
+        "inherited_field_count": 0,
+        "missing_field_count": 20,
+        "embedded_evidence_field_count": 0,
+        "explanations": [
+          {
+            "field": "primary_genre",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "genre",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "subgenres",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "moods",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "energy",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "era",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "region",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "scene",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "language",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "release_type",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "secondary_types",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_compilation",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_mixtape",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_live",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_remix",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_demo",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_instrumental",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_deluxe",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_bonus_track",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "related_artists",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          }
+        ]
+      }
+    },
+    {
+      "source_folder": "Star Wars The Old Republic Revan",
+      "artist": "drive-download-20260628T012539Z-3-002",
+      "album": "Star Wars The Old Republic Revan",
+      "year": null,
+      "genre": "Other",
+      "genre_source": "track tags",
+      "format": "MP3",
+      "track_count": 9,
+      "disc_count": 3,
+      "artwork_count": 1,
+      "artwork_files": [
+        "Star Wars The Old Republic Revan.jpg"
+      ],
+      "ignored_sidecar_count": 0,
+      "ignored_sidecar_files": [],
+      "release_type": "album",
+      "include": true,
+      "status": "warning",
+      "warnings": [
+        "album_missing_year"
+      ],
+      "track_number_conflicts": {
+        "conflict_count": 0,
+        "duplicate_embedded_track_numbers": [],
+        "filename_embedded_mismatch_count": 0,
+        "missing_tracknumber_but_filename_available_count": 0,
+        "invalid_tracknumber_count": 0,
+        "filename_preferred_count": 0,
+        "ambiguous_count": 0
+      },
+      "release_tags_removed": [],
+      "metadata_candidates": {
+        "album_title": [
+          {
+            "field": "album_title",
+            "value": "Star Wars The Old Republic Revan",
+            "source": "folder_name",
+            "source_label": "Release folder name",
+            "confidence": 0.9,
+            "confidence_label": "high",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          },
+          {
+            "field": "album_title",
+            "value": "Unknown Album (11/19/2011 3:14:38 PM)",
+            "source": "audio_tag_album",
+            "source_label": "Embedded album tag",
+            "confidence": 0.35,
+            "confidence_label": "low",
+            "applied": false,
+            "ignored": true,
+            "notes": [
+              "generic embedded tag"
+            ]
+          }
+        ],
+        "album_artist": [
+          {
+            "field": "album_artist",
+            "value": "drive-download-20260628T012539Z-3-002",
+            "source": "parent_folder_name",
+            "source_label": "Parent folder name",
+            "confidence": 0.72,
+            "confidence_label": "medium",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ],
+        "year": [
+          {
+            "field": "year",
+            "value": "Unkn",
+            "source": "audio_tag_date",
+            "source_label": "Embedded date tag",
+            "confidence": 0.35,
+            "confidence_label": "low",
+            "applied": false,
+            "ignored": true,
+            "notes": [
+              "generic embedded tag"
+            ]
+          }
+        ],
+        "genre": [
+          {
+            "field": "genre",
+            "value": "Other",
+            "source": "audio_tag_genre",
+            "source_label": "Embedded genre tag",
+            "confidence": 0.72,
+            "confidence_label": "medium",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ]
+      },
+      "track_candidates": [
+        {
+          "field": "track_title",
+          "value": "05 Track 5",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "5",
+          "disc_number": 3
+        },
+        {
+          "field": "track_title",
+          "value": "06 Track 6",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "6",
+          "disc_number": 3
+        },
+        {
+          "field": "track_title",
+          "value": "07 Track 7",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "7",
+          "disc_number": 3
+        },
+        {
+          "field": "track_title",
+          "value": "13 Track 13",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "13",
+          "disc_number": 3
+        },
+        {
+          "field": "track_title",
+          "value": "12 Track 12",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "12",
+          "disc_number": 6
+        },
+        {
+          "field": "track_title",
+          "value": "03 Track 3",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "3",
+          "disc_number": 9
+        },
+        {
+          "field": "track_title",
+          "value": "04 Track 4",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "4",
+          "disc_number": 9
+        },
+        {
+          "field": "track_title",
+          "value": "07 Track 7",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "7",
+          "disc_number": 9
+        },
+        {
+          "field": "track_title",
+          "value": "08 Track 8",
+          "source": "filename",
+          "source_label": "Audio filename",
+          "confidence": 0.65,
+          "confidence_label": "medium",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "8",
+          "disc_number": 9
+        }
+      ],
+      "accepted_unknown_album_artist": false,
+      "accepted_unknown_album_title": false,
+      "accepted_unknown_year": false,
+      "lookup_later": false,
+      "release_profile": {
+        "release_title": {
+          "envelope_version": 1,
+          "value": "Star Wars The Old Republic Revan",
+          "source": "folder_inference",
+          "confidence": 0.9,
+          "reason": "Release title inferred from folder/review metadata.",
+          "approval_state": "pending",
+          "approved": false,
+          "approved_at": null,
+          "approved_by": null,
+          "updated_at": "2026-07-11T04:19:11.438984Z"
+        },
+        "release_type": {
+          "envelope_version": 1,
+          "value": "album",
+          "source": "folder_inference",
+          "confidence": 0.8,
+          "reason": "Release type inferred from release grouping.",
+          "approval_state": "pending",
+          "approved": false,
+          "approved_at": null,
+          "approved_by": null,
+          "updated_at": "2026-07-11T04:19:11.438995Z"
+        }
+      },
+      "inheritance_summary": {
+        "inherited_field_count": 0,
+        "missing_field_count": 20,
+        "embedded_evidence_field_count": 0,
+        "explanations": [
+          {
+            "field": "primary_genre",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "genre",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "subgenres",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "moods",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "energy",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "era",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "region",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "scene",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "language",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "release_type",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "secondary_types",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_compilation",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_mixtape",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_live",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_remix",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_demo",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_instrumental",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_deluxe",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_bonus_track",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "related_artists",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          }
+        ]
+      }
+    },
+    {
+      "source_folder": "The Weeknd Discography 2012-2022 (FLAC) vtwin88cube",
+      "artist": "drive-download-20260628T012539Z-3-002",
+      "album": "The Weeknd Discography-2022 vtwin88cube",
+      "year": "2012",
+      "genre": "R&B",
+      "genre_source": "track tags",
+      "format": "FLAC",
+      "track_count": 4,
+      "disc_count": 1,
+      "artwork_count": 5,
+      "artwork_files": [
+        "cover.jpg",
+        "cover.jpg",
+        "cover.jpg",
+        "cover.jpg",
+        "Jolly Roger.png"
+      ],
+      "ignored_sidecar_count": 10,
+      "ignored_sidecar_files": [
+        "DR7.txt",
+        "The Weeknd - Trilogy.log",
+        "DR6.txt",
+        "Play Me.m3u",
+        "auCDtect.txt",
+        "The Weeknd - Trilogy.log",
+        "auCDtect.txt",
+        "Play Me.m3u",
+        "auCDtect.txt",
+        "DR6.txt"
+      ],
+      "release_type": "album",
+      "include": true,
+      "status": "warning",
+      "warnings": [
+        "suspicious_year",
+        "release_tag_removed",
+        "album_title_from_folder_cleanup"
+      ],
+      "track_number_conflicts": {
+        "conflict_count": 0,
+        "duplicate_embedded_track_numbers": [],
+        "filename_embedded_mismatch_count": 0,
+        "missing_tracknumber_but_filename_available_count": 0,
+        "invalid_tracknumber_count": 0,
+        "filename_preferred_count": 0,
+        "ambiguous_count": 0
+      },
+      "release_tags_removed": [
+        "(FLAC)"
+      ],
+      "metadata_candidates": {
+        "album_title": [
+          {
+            "field": "album_title",
+            "value": "Dawn FM (Explicit)",
+            "source": "audio_tag_album",
+            "source_label": "Embedded album tag",
+            "confidence": 0.9,
+            "confidence_label": "high",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          },
+          {
+            "field": "album_title",
+            "value": "The Weeknd Discography-2022 vtwin88cube",
+            "source": "folder_name",
+            "source_label": "Release folder name",
+            "confidence": 0.9,
+            "confidence_label": "high",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ],
+        "year": [
+          {
+            "field": "year",
+            "value": "2012",
+            "source": "folder_name",
+            "source_label": "Release folder name",
+            "confidence": 0.9,
+            "confidence_label": "high",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          },
+          {
+            "field": "year",
+            "value": "2022",
+            "source": "audio_tag_date",
+            "source_label": "Embedded date tag",
+            "confidence": 0.82,
+            "confidence_label": "medium",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ],
+        "album_artist": [
+          {
+            "field": "album_artist",
+            "value": "The Weeknd",
+            "source": "audio_tag_albumartist",
+            "source_label": "Embedded album artist tag",
+            "confidence": 0.92,
+            "confidence_label": "high",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          },
+          {
+            "field": "album_artist",
+            "value": "drive-download-20260628T012539Z-3-002",
+            "source": "parent_folder_name",
+            "source_label": "Parent folder name",
+            "confidence": 0.72,
+            "confidence_label": "medium",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ],
+        "genre": [
+          {
+            "field": "genre",
+            "value": "R&B",
+            "source": "audio_tag_genre",
+            "source_label": "Embedded genre tag",
+            "confidence": 0.72,
+            "confidence_label": "medium",
+            "applied": false,
+            "ignored": false,
+            "notes": []
+          }
+        ]
+      },
+      "track_candidates": [
+        {
+          "field": "track_title",
+          "value": "Try Me",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "02",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Out Of Time",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "07",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Is There Someone Else?",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "10",
+          "disc_number": "1"
+        },
+        {
+          "field": "track_title",
+          "value": "Every Angel Is Terrifying",
+          "source": "audio_tag_title",
+          "source_label": "Embedded track title tag",
+          "confidence": 0.85,
+          "confidence_label": "high",
+          "applied": false,
+          "ignored": false,
+          "notes": [],
+          "track_number": "12",
+          "disc_number": "1"
+        }
+      ],
+      "accepted_unknown_album_artist": false,
+      "accepted_unknown_album_title": false,
+      "accepted_unknown_year": false,
+      "lookup_later": false,
+      "release_profile": {
+        "release_title": {
+          "envelope_version": 1,
+          "value": "The Weeknd Discography-2022 vtwin88cube",
+          "source": "folder_inference",
+          "confidence": 0.9,
+          "reason": "Release title inferred from folder/review metadata.",
+          "approval_state": "pending",
+          "approved": false,
+          "approved_at": null,
+          "approved_by": null,
+          "updated_at": "2026-07-11T04:19:11.439210Z"
+        },
+        "year": {
+          "envelope_version": 1,
+          "value": "2012",
+          "source": "folder_inference",
+          "confidence": 0.85,
+          "reason": "Release year inferred from folder/review metadata.",
+          "approval_state": "pending",
+          "approved": false,
+          "approved_at": null,
+          "approved_by": null,
+          "updated_at": "2026-07-11T04:19:11.439220Z"
+        },
+        "release_type": {
+          "envelope_version": 1,
+          "value": "album",
+          "source": "folder_inference",
+          "confidence": 0.8,
+          "reason": "Release type inferred from release grouping.",
+          "approval_state": "pending",
+          "approved": false,
+          "approved_at": null,
+          "approved_by": null,
+          "updated_at": "2026-07-11T04:19:11.439229Z"
+        }
+      },
+      "inheritance_summary": {
+        "inherited_field_count": 0,
+        "missing_field_count": 20,
+        "embedded_evidence_field_count": 0,
+        "explanations": [
+          {
+            "field": "primary_genre",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "genre",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "subgenres",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "moods",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "energy",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "era",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "region",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "scene",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "language",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "release_type",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "secondary_types",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_compilation",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_mixtape",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_live",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_remix",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_demo",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_instrumental",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_deluxe",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "is_bonus_track",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          },
+          {
+            "field": "related_artists",
+            "source": "missing",
+            "reason": "No approved or usable value was available.",
+            "inherited": false
+          }
+        ]
+      }
+    }
+  ],
+  "parent_cleanup": {
+    "artist": "drive-download-20260628T012539Z-3-002",
+    "clean_collection_name": "drive-download-20260628T012539Z-3-002 Discography",
+    "removed_tokens": [],
+    "year_range": null,
+    "format_hint": null,
+    "warnings": []
+  },
+  "artist_source": "cleaned parent folder",
+  "metadata_quality": "good",
+  "metadata_warnings": [
+    "discography_grouping_used",
+    "track_number_conflict_detected",
+    "mixed_formats"
+  ],
+  "confidence": 1.0,
+  "metadata_candidates": {
+    "album_artist": [
+      {
+        "field": "album_artist",
+        "value": "drive-download-20260628T012539Z-3-002",
+        "source": "parent_folder_name",
+        "source_label": "Discography folder name",
+        "confidence": 0.9,
+        "confidence_label": "high",
+        "applied": false,
+        "ignored": false,
+        "notes": []
+      }
+    ]
+  },
+  "artist_profile": {
+    "artist": {
+      "envelope_version": 1,
+      "value": "drive-download-20260628T012539Z-3-002",
+      "source": "manual",
+      "confidence": 1.0,
+      "reason": "Approved discography artist profile value.",
+      "approval_state": "approved",
+      "approved": true,
+      "approved_at": null,
+      "approved_by": "local_admin",
+      "updated_at": "2026-07-11T04:19:11.437738Z"
+    }
+  },
+  "inheritance_summary": {
+    "inherited_field_count": 0,
+    "missing_field_count": 140,
+    "embedded_evidence_field_count": 0,
+    "explanations": [
+      {
+        "field": "primary_genre",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "genre",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "subgenres",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "moods",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "energy",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "era",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "region",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "scene",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "language",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "release_type",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "secondary_types",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_compilation",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_mixtape",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_live",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_remix",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_demo",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_instrumental",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_deluxe",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_bonus_track",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "related_artists",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "primary_genre",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "genre",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "subgenres",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "moods",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "energy",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "era",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "region",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "scene",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "language",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "release_type",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "secondary_types",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_compilation",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_mixtape",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_live",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_remix",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_demo",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_instrumental",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_deluxe",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_bonus_track",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "related_artists",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "primary_genre",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "genre",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "subgenres",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "moods",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "energy",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "era",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "region",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "scene",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "language",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "release_type",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "secondary_types",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_compilation",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_mixtape",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_live",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_remix",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_demo",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_instrumental",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_deluxe",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_bonus_track",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "related_artists",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "primary_genre",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "genre",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "subgenres",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "moods",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "energy",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "era",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "region",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "scene",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "language",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "release_type",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "secondary_types",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_compilation",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_mixtape",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_live",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_remix",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_demo",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_instrumental",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_deluxe",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_bonus_track",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "related_artists",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "primary_genre",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "genre",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "subgenres",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "moods",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "energy",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "era",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "region",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "scene",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "language",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "release_type",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "secondary_types",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_compilation",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_mixtape",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_live",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_remix",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_demo",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_instrumental",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_deluxe",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_bonus_track",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "related_artists",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "primary_genre",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "genre",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "subgenres",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "moods",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "energy",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "era",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "region",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "scene",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "language",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "release_type",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "secondary_types",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_compilation",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_mixtape",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_live",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_remix",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_demo",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_instrumental",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_deluxe",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_bonus_track",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "related_artists",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "primary_genre",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "genre",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "subgenres",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "moods",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "energy",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "era",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "region",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "scene",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "language",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "release_type",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "secondary_types",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_compilation",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_mixtape",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_live",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_remix",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_demo",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_instrumental",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_deluxe",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "is_bonus_track",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      },
+      {
+        "field": "related_artists",
+        "source": "missing",
+        "reason": "No approved or usable value was available.",
+        "inherited": false
+      }
+    ]
+  },
+  "blocking_review_items": [],
+  "non_blocking_review_items": [
+    {
+      "type": "discography_grouping_used",
+      "message": "Discography grouping used"
+    },
+    {
+      "type": "track_number_conflict_detected",
+      "message": "Embedded track numbers conflict with filename order; filename order will be used for destination numbering."
+    },
+    {
+      "type": "mixed_formats",
+      "message": "Mixed formats"
+    },
+    {
+      "type": "album_missing_year",
+      "message": "Included release is missing a year and may be reviewed later.",
+      "source_folder": "Kanye West - Discography [FLAC Songs] [PMEDIA] \u2b50\ufe0f"
+    },
+    {
+      "type": "album_missing_year",
+      "message": "Included release is missing a year and may be reviewed later.",
+      "source_folder": "Star Wars Darth Bane Audiobook Trilogy [Unabridged]"
+    },
+    {
+      "type": "album_missing_year",
+      "message": "Included release is missing a year and may be reviewed later.",
+      "source_folder": "Star Wars The Old Republic Revan"
+    }
+  ],
+  "review_confirmed": false,
+  "generated_at": "2026-07-11T04:19:12.296619Z"
+}
