@@ -41,7 +41,9 @@
     "ignored_sidecar_files": [],
     "unclassified_file_count": 0,
     "unclassified_files": [],
-    "metadata_warnings": ["manual_duplicate_batch_merge_performed"],
+    "metadata_warnings": [
+      "manual_duplicate_batch_merge_performed"
+    ],
     "blocking_review_items": [],
     "non_blocking_review_items": [
       {
@@ -7522,7 +7524,15 @@
         }
       ]
     },
-    "merged_batch_ids": [50, 63, 75, 87, 115, 128, 131],
+    "merged_batch_ids": [
+      50,
+      63,
+      75,
+      87,
+      115,
+      128,
+      131
+    ],
     "media_type_correction_audit": [
       {
         "previous_detected_type": "music_album",
@@ -7701,19 +7711,297 @@
       "15 Track 15.mp3"
     ],
     "suggested_destination_preview": "C:\\Users\\BonnyMakaniankhondo\\Documents\\GitHub\\NAS\\nas-data\\Audiobooks\\Library\\Drew Karpyshyn\\2003 - Star Wars The Old Republic Revan",
-    "parent_container_state": "active_parent_container",
-    "parent_is_drained": false,
-    "parent_media_extraction_complete": false,
-    "parent_extraction_state": "not_started",
+    "candidate_group_count": 1,
     "active_parent_file_count": 0,
     "remaining_primary_file_count": 0,
     "remaining_support_file_count": 0,
-    "child_batch_count": 0,
     "parent_has_remaining_files": false,
-    "approval_allowed": false,
+    "parent_is_drained": false,
+    "audiobook_candidate_repair_audit": [
+      {
+        "repaired_at": "2026-07-13T17:33:13.276535+00:00",
+        "operation": "single_book_multidisc_candidate_rebuild",
+        "previous_candidate_ids": [
+          114,
+          115,
+          116,
+          117,
+          118,
+          119,
+          120,
+          121,
+          122
+        ],
+        "previous_candidates": [
+          {
+            "candidate_id": 114,
+            "candidate_key": "audiobook:drew-karpyshyn:unknown-album-11-19-2011-3-04-25-pm",
+            "media_type": "audiobook",
+            "title": "Unknown Album (11/19/2011 3:04:25 PM)",
+            "primary_creator": "Drew Karpyshyn",
+            "primary_member_count": 15,
+            "support_member_count": 0,
+            "identity_evidence": {
+              "phase": "AA-M4D.1 — Universal Media Ingestion Boundary + Fragment Reconstruction",
+              "identity": {
+                "author": "Drew Karpyshyn",
+                "title": "Unknown Album (11/19/2011 3:04:25 PM)",
+                "series": null,
+                "series_index": null,
+                "narrator": null,
+                "chapter_number": "2",
+                "disc_number": "1",
+                "confidence": 0.82
+              },
+              "flags": [
+                "artwork_without_owner"
+              ],
+              "member_count": 15,
+              "support_member_count": 0
+            }
+          },
+          {
+            "candidate_id": 115,
+            "candidate_key": "audiobook:drew-karpyshyn:unknown-album-11-19-2011-3-09-44-pm",
+            "media_type": "audiobook",
+            "title": "Unknown Album (11/19/2011 3:09:44 PM)",
+            "primary_creator": "Drew Karpyshyn",
+            "primary_member_count": 16,
+            "support_member_count": 0,
+            "identity_evidence": {
+              "phase": "AA-M4D.1 — Universal Media Ingestion Boundary + Fragment Reconstruction",
+              "identity": {
+                "author": "Drew Karpyshyn",
+                "title": "Unknown Album (11/19/2011 3:09:44 PM)",
+                "series": null,
+                "series_index": null,
+                "narrator": null,
+                "chapter_number": "1",
+                "disc_number": "2",
+                "confidence": 0.82
+              },
+              "flags": [
+                "artwork_without_owner"
+              ],
+              "member_count": 16,
+              "support_member_count": 0
+            }
+          },
+          {
+            "candidate_id": 116,
+            "candidate_key": "audiobook:drew-karpyshyn:unknown-album-11-19-2011-3-14-38-pm",
+            "media_type": "audiobook",
+            "title": "Unknown Album (11/19/2011 3:14:38 PM)",
+            "primary_creator": "Drew Karpyshyn",
+            "primary_member_count": 17,
+            "support_member_count": 0,
+            "identity_evidence": {
+              "phase": "AA-M4D.1 — Universal Media Ingestion Boundary + Fragment Reconstruction",
+              "identity": {
+                "author": "Drew Karpyshyn",
+                "title": "Unknown Album (11/19/2011 3:14:38 PM)",
+                "series": null,
+                "series_index": null,
+                "narrator": null,
+                "chapter_number": "14",
+                "disc_number": "3",
+                "confidence": 0.82
+              },
+              "flags": [
+                "artwork_without_owner"
+              ],
+              "member_count": 17,
+              "support_member_count": 0
+            }
+          },
+          {
+            "candidate_id": 117,
+            "candidate_key": "audiobook:drew-karpyshyn:unknown-album-11-19-2011-3-20-51-pm",
+            "media_type": "audiobook",
+            "title": "Unknown Album (11/19/2011 3:20:51 PM)",
+            "primary_creator": "Drew Karpyshyn",
+            "primary_member_count": 18,
+            "support_member_count": 0,
+            "identity_evidence": {
+              "phase": "AA-M4D.1 — Universal Media Ingestion Boundary + Fragment Reconstruction",
+              "identity": {
+                "author": "Drew Karpyshyn",
+                "title": "Unknown Album (11/19/2011 3:20:51 PM)",
+                "series": null,
+                "series_index": null,
+                "narrator": null,
+                "chapter_number": "1",
+                "disc_number": "4",
+                "confidence": 0.82
+              },
+              "flags": [
+                "artwork_without_owner"
+              ],
+              "member_count": 18,
+              "support_member_count": 0
+            }
+          },
+          {
+            "candidate_id": 118,
+            "candidate_key": "audiobook:drew-karpyshyn:unknown-album-11-19-2011-3-30-58-pm",
+            "media_type": "audiobook",
+            "title": "Unknown Album (11/19/2011 3:30:58 PM)",
+            "primary_creator": "Drew Karpyshyn",
+            "primary_member_count": 20,
+            "support_member_count": 0,
+            "identity_evidence": {
+              "phase": "AA-M4D.1 — Universal Media Ingestion Boundary + Fragment Reconstruction",
+              "identity": {
+                "author": "Drew Karpyshyn",
+                "title": "Unknown Album (11/19/2011 3:30:58 PM)",
+                "series": null,
+                "series_index": null,
+                "narrator": null,
+                "chapter_number": "1",
+                "disc_number": "5",
+                "confidence": 0.82
+              },
+              "flags": [
+                "artwork_without_owner"
+              ],
+              "member_count": 20,
+              "support_member_count": 0
+            }
+          },
+          {
+            "candidate_id": 119,
+            "candidate_key": "audiobook:drew-karpyshyn:unknown-album-11-19-2011-3-36-12-pm",
+            "media_type": "audiobook",
+            "title": "Unknown Album (11/19/2011 3:36:12 PM)",
+            "primary_creator": "Drew Karpyshyn",
+            "primary_member_count": 19,
+            "support_member_count": 0,
+            "identity_evidence": {
+              "phase": "AA-M4D.1 — Universal Media Ingestion Boundary + Fragment Reconstruction",
+              "identity": {
+                "author": "Drew Karpyshyn",
+                "title": "Unknown Album (11/19/2011 3:36:12 PM)",
+                "series": null,
+                "series_index": null,
+                "narrator": null,
+                "chapter_number": "18",
+                "disc_number": "6",
+                "confidence": 0.82
+              },
+              "flags": [
+                "artwork_without_owner"
+              ],
+              "member_count": 19,
+              "support_member_count": 0
+            }
+          },
+          {
+            "candidate_id": 120,
+            "candidate_key": "audiobook:drew-karpyshyn:unknown-album-11-19-2011-3-40-42-pm",
+            "media_type": "audiobook",
+            "title": "Unknown Album (11/19/2011 3:40:42 PM)",
+            "primary_creator": "Drew Karpyshyn",
+            "primary_member_count": 18,
+            "support_member_count": 0,
+            "identity_evidence": {
+              "phase": "AA-M4D.1 — Universal Media Ingestion Boundary + Fragment Reconstruction",
+              "identity": {
+                "author": "Drew Karpyshyn",
+                "title": "Unknown Album (11/19/2011 3:40:42 PM)",
+                "series": null,
+                "series_index": null,
+                "narrator": null,
+                "chapter_number": "2",
+                "disc_number": "7",
+                "confidence": 0.82
+              },
+              "flags": [
+                "artwork_without_owner"
+              ],
+              "member_count": 18,
+              "support_member_count": 0
+            }
+          },
+          {
+            "candidate_id": 121,
+            "candidate_key": "audiobook:drew-karpyshyn:unknown-album-11-19-2011-3-44-49-pm",
+            "media_type": "audiobook",
+            "title": "Unknown Album (11/19/2011 3:44:49 PM)",
+            "primary_creator": "Drew Karpyshyn",
+            "primary_member_count": 19,
+            "support_member_count": 0,
+            "identity_evidence": {
+              "phase": "AA-M4D.1 — Universal Media Ingestion Boundary + Fragment Reconstruction",
+              "identity": {
+                "author": "Drew Karpyshyn",
+                "title": "Unknown Album (11/19/2011 3:44:49 PM)",
+                "series": null,
+                "series_index": null,
+                "narrator": null,
+                "chapter_number": "1",
+                "disc_number": "8",
+                "confidence": 0.82
+              },
+              "flags": [
+                "artwork_without_owner"
+              ],
+              "member_count": 19,
+              "support_member_count": 0
+            }
+          },
+          {
+            "candidate_id": 122,
+            "candidate_key": "audiobook:drew-karpyshyn:unknown-album-11-19-2011-3-49-15-pm",
+            "media_type": "audiobook",
+            "title": "Unknown Album (11/19/2011 3:49:15 PM)",
+            "primary_creator": "Drew Karpyshyn",
+            "primary_member_count": 19,
+            "support_member_count": 0,
+            "identity_evidence": {
+              "phase": "AA-M4D.1 — Universal Media Ingestion Boundary + Fragment Reconstruction",
+              "identity": {
+                "author": "Drew Karpyshyn",
+                "title": "Unknown Album (11/19/2011 3:49:15 PM)",
+                "series": null,
+                "series_index": null,
+                "narrator": null,
+                "chapter_number": "5",
+                "disc_number": "9",
+                "confidence": 0.82
+              },
+              "flags": [
+                "artwork_without_owner"
+              ],
+              "member_count": 19,
+              "support_member_count": 0
+            }
+          }
+        ],
+        "new_candidate_id": 114,
+        "archived_action_ids": [
+          131,
+          132,
+          133,
+          134,
+          135,
+          136,
+          137
+        ],
+        "attached_file_count": 162,
+        "primary_file_count": 161,
+        "support_file_count": 1,
+        "disc_count": 9,
+        "file_ownership_preserved": true
+      }
+    ],
+    "parent_container_state": null,
+    "parent_media_extraction_complete": false,
+    "parent_extraction_state": null,
+    "child_batch_count": 0,
+    "approval_allowed": true,
     "move_ready": false,
-    "requires_review": true,
-    "display_state": "active_parent_container"
+    "requires_review": false,
+    "display_state": null
   },
   "metadata_confirmed": false,
   "created_at": "2026-07-11T16:00:31.749243Z",
