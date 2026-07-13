@@ -81,6 +81,9 @@ export default function WorkspaceCandidateCard({ candidate, selected, onSelect }
       )}
       <div className="workspace-candidate__meta">
         <span>{plural(candidate.fileCount, "file")}</span>
+        {candidate.mediaType === "audiobook" && <span>{plural(candidate.primaryFileCount, "audio file")}</span>}
+        {candidate.mediaType === "audiobook" && candidate.supportFileCount > 0 && <span>{plural(candidate.supportFileCount, "support file")}</span>}
+        {candidate.mediaType === "audiobook" && candidate.discCount > 0 && <span>{plural(candidate.discCount, "disc")}</span>}
         {candidate.sourceFragmentCount > 0 && <span>{plural(candidate.sourceFragmentCount, "source fragment")}</span>}
         <span>{candidate.confidenceLabel}</span>
         {candidate.warningCount > 0 && <span>{plural(candidate.warningCount, "warning")}</span>}

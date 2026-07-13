@@ -7,6 +7,7 @@ type Props = {
   routing: RoutingDecision | null;
   onClose: () => void;
   onApprove: (batchId: number) => Promise<void>;
+  onOpenFullEditor?: () => void;
   onMaterializeApprovedCandidates?: () => Promise<void>;
   materializing?: boolean;
 };
@@ -29,6 +30,7 @@ export default function WorkspaceHeader({
   routing,
   onClose,
   onApprove,
+  onOpenFullEditor,
   onMaterializeApprovedCandidates,
   materializing = false,
 }: Props) {
@@ -51,6 +53,10 @@ export default function WorkspaceHeader({
       && !hasActiveAction(actions, "mark_review_later");
   }).length || (ingestion ? 0 : candidateCount);
   const canMaterialize = isParentReviewContainer && approvedCount > 0 && !!onMaterializeApprovedCandidates;
+  const canOpenAudiobookEditor = batch.detected_type === "audiobook"
+    && candidateCount === 1
+    && routing?.decision === "audiobook_editor_allowed"
+    && !!onOpenFullEditor;
   const approveDisabled = isParentReviewContainer || !canApprove;
   const approveTitle = isParentReviewContainer
     ? "Approved candidate groups must be created as child batches before this parent can move."
@@ -111,14 +117,22 @@ export default function WorkspaceHeader({
             <span className="review-workspace__badge--warn">Next: create child batches</span>
           )}
         </div>
-        {routing && routing.decision !== "music_editor_allowed" && (
+        {routing && !["music_editor_allowed", "audiobook_editor_allowed"].includes(routing.decision) && (
           <small className="review-workspace__routing">
             {routing.reasons.length ? routing.reasons.join(" | ") : "Universal review is recommended for this batch."}
           </small>
         )}
       </div>
       <div className="review-workspace__header-actions">
-        {canMaterialize ? (
+        {canOpenAudiobookEditor ? (
+          <button
+            className="btn btn--green"
+            title="Open the audiobook metadata editor for this single scoped book."
+            onClick={onOpenFullEditor}
+          >
+            <i className="ti ti-headphones" /> Open audiobook editor
+          </button>
+        ) : canMaterialize ? (
           <button
             className="btn btn--green"
             disabled={materializing}

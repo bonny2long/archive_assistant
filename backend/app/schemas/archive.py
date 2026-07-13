@@ -253,6 +253,23 @@ class RoutingDecisionOut(BaseModel):
     candidate_route_summaries: list[RoutingCandidateSummaryOut] = Field(default_factory=list)
 
 
+class AudiobookGroupingRepairResponse(BaseModel):
+    batch_id: int
+    detected_type: str
+    previous_candidate_count: int = 0
+    candidate_count: int = 0
+    attached_file_count: int = 0
+    primary_file_count: int = 0
+    support_file_count: int = 0
+    disc_count: int = 0
+    archived_action_count: int = 0
+    file_ownership_preserved: bool = False
+    candidate: dict = Field(default_factory=dict)
+    snapshot: dict = Field(default_factory=dict)
+    audit: dict = Field(default_factory=dict)
+    message: str
+
+
 class CandidateMovePreviewSummaryOut(BaseModel):
     candidate_count: int = 0
     source_fragment_count: int = 0

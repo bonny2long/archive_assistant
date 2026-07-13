@@ -59,6 +59,9 @@ export type CandidateViewModel = {
   displayState: WorkspaceCandidateState;
   confidenceLabel: string;
   fileCount: number;
+  primaryFileCount: number;
+  supportFileCount: number;
+  discCount: number;
   sourceFragmentCount: number;
   warningCount: number;
   recommendedAction: string;
@@ -182,6 +185,14 @@ export function buildCandidateViewModels(
     const relatedFlags = ingestion.mixed_media_flags.filter((flag) => flag.candidate_id === candidate.id);
     const hasChunkIdentityRisk = candidateHasChunkIdentityRisk(effectiveCandidate, routing);
     const displayState = deriveDisplayState({ ...candidate, active_actions: actions }, decisions, hasChunkIdentityRisk);
+    const primaryMembers = effectiveCandidate.members.filter((member) =>
+      !["artwork", "sidecar_metadata", "subtitle", "playlist"].includes(member.media_class),
+    );
+    const discNumbers = new Set(
+      primaryMembers
+        .map((member) => member.disc_number)
+        .filter((value): value is string => Boolean(value)),
+    );
     return {
       id: candidate.id,
       title: effectiveCandidate.candidate_title || effectiveCandidate.candidate_key || "Untitled candidate",
@@ -191,6 +202,9 @@ export function buildCandidateViewModels(
       displayState,
       confidenceLabel: effectiveCandidate.candidate_confidence_label || `${Math.round(effectiveCandidate.candidate_confidence * 100)}%`,
       fileCount: effectiveCandidate.member_count || effectiveCandidate.members.length,
+      primaryFileCount: primaryMembers.length,
+      supportFileCount: Math.max(0, effectiveCandidate.members.length - primaryMembers.length),
+      discCount: discNumbers.size,
       sourceFragmentCount: effectiveCandidate.source_fragment_count,
       warningCount: decisions.length + relatedFlags.length,
       recommendedAction: effectiveCandidate.recommended_action || decisions[0]?.recommended_action || "Review candidate",
@@ -261,8 +275,8 @@ export default function ReviewWorkspace({
     setLoading(true);
     setError(null);
     try {
-      const [nextIngestion, nextRouting, nextQuality] = await Promise.all([
-        api.getBatchUniversalIngestion(batch.id, true),
+      const nextIngestion = await api.getBatchUniversalIngestion(batch.id, true);
+      const [nextRouting, nextQuality] = await Promise.all([
         api.getReviewRouting(batch.id),
         api.getBatchMetadataQuality(batch.id),
       ]);
@@ -390,6 +404,7 @@ export default function ReviewWorkspace({
         routing={routing}
         onClose={onClose}
         onApprove={onApprove}
+        onOpenFullEditor={onOpenFullEditor ? () => onOpenFullEditor(batch) : undefined}
         onMaterializeApprovedCandidates={handleMaterializeApprovedCandidates}
         materializing={materializing}
       />

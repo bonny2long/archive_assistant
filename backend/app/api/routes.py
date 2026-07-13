@@ -24,6 +24,7 @@ from app.schemas.archive import (
     CandidateMovePreviewOut,
     UniversalIngestionReviewActionOut,
     UniversalIngestionReviewActionUpdate,
+    AudiobookGroupingRepairResponse,
     AudiobookMetadataUpdate,
     BookCollectionReviewUpdate,
     BookMetadataUpdate,
@@ -126,6 +127,7 @@ from app.services.metadata_contract import (
     resolve_approval_actor,
 )
 from app.services.audiobook_metadata import audiobook_destination
+from app.services.audiobook_candidate_repair import repair_audiobook_candidate_grouping
 from app.core.config import settings
 from app.core.time import configured_timezone, now_local, now_utc, serialize_utc
 
@@ -607,6 +609,21 @@ def batch_universal_ingestion(
         return get_batch_universal_ingestion_review(db, batch_id, snapshot=snapshot)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail="Batch not found") from exc
+
+
+@router.post(
+    "/batches/{batch_id}/repair-audiobook-grouping",
+    response_model=AudiobookGroupingRepairResponse,
+)
+def repair_batch_audiobook_grouping(batch_id: int, db: Session = Depends(get_db)):
+    try:
+        return repair_audiobook_candidate_grouping(db, batch_id)
+    except ValueError as exc:
+        detail = str(exc)
+        raise HTTPException(
+            status_code=404 if detail == "Batch not found" else 400,
+            detail=detail,
+        ) from exc
 
 
 @router.get("/batches/{batch_id}/universal-ingestion/actions", response_model=list[UniversalIngestionReviewActionOut])

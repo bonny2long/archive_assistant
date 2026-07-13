@@ -1135,7 +1135,7 @@ export type WorkspaceFilter =
 
 export interface RoutingDecision {
   batch_id: number;
-  decision: "music_editor_allowed" | "universal_review_required" | "universal_review_recommended" | "blocked_conflict" | "not_analyzed";
+  decision: "music_editor_allowed" | "audiobook_editor_allowed" | "universal_review_required" | "universal_review_recommended" | "blocked_conflict" | "not_analyzed";
   allowed_editors: string[];
   blocked_editors: string[];
   reasons: string[];

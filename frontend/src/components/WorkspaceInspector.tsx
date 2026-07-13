@@ -725,10 +725,10 @@ export default function WorkspaceInspector({
         <section className="workspace-inspector__section workspace-inspector__full-editor-section">
           <div className="workspace-inspector__full-editor-hint">
             <i className="ti ti-external-link" />
-            <span>Need full editing power? Open the legacy editor for detailed corrections.</span>
+            <span>{vm.mediaType === "audiobook" ? "Review the complete book metadata in the audiobook editor." : "Need full editing power? Open the detailed editor."}</span>
           </div>
           <button className="btn btn--compact" onClick={onOpenFullEditor}>
-            <i className="ti ti-pencil" /> Open full editor
+            <i className="ti ti-pencil" /> {vm.mediaType === "audiobook" ? "Open audiobook editor" : "Open full editor"}
           </button>
         </section>
       )}

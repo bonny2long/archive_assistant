@@ -22,6 +22,11 @@ from app.services.music_metadata import (
     parse_music_folder_name,
     resolved_music_track_evidence,
 )
+from app.services.metadata_candidates import (
+    is_generated_timestamp_value,
+    is_generic_track_value,
+    is_generic_unknown_value,
+)
 
 PHASE_NAME = "AA-M4D.1 — Universal Media Ingestion Boundary + Fragment Reconstruction"
 
@@ -48,6 +53,10 @@ SXXEYY_RE = re.compile(r"\bS(?P<season>\d{1,2})E(?P<episode>\d{1,3})\b", re.IGNO
 YEAR_RE = re.compile(r"\b(19\d{2}|20\d{2})\b")
 TRACK_RE = re.compile(r"(?:^|\D)(?P<track>\d+)(?:\D|$)")
 DISC_FOLDER_RE = re.compile(r"^(?:cd|disc|disk|part)\s*0*\d+\b", re.IGNORECASE)
+SOURCE_CHUNK_FOLDER_RE = re.compile(
+    r"^(?:drive-download-|googledrive|google-drive|source[-_\s]*fragment|fragment[-_\s]*\d+$)",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -166,6 +175,68 @@ def _path_has(relative_path: str, *needles: str) -> bool:
     lower = relative_path.casefold()
     return any(needle in lower for needle in needles)
 
+
+def _metadata_field_values(ingest_file: IngestFile, *names: str) -> list[str]:
+    metadata = ingest_file.metadata_json or {}
+    sources: list[dict[str, Any]] = [metadata]
+    discography_album = metadata.get("_discography_album")
+    if isinstance(discography_album, dict):
+        sources.append(discography_album)
+    embedded_fields = metadata.get("embedded_metadata_fields")
+    if isinstance(embedded_fields, dict):
+        sources.append(embedded_fields)
+    embedded = metadata.get("embedded_metadata")
+    if isinstance(embedded, dict) and isinstance(embedded.get("fields"), dict):
+        sources.append(embedded["fields"])
+    values: list[str] = []
+    for source in sources:
+        for name in names:
+            value = _norm(source.get(name))
+            if value and value not in values:
+                values.append(value)
+    return values
+
+
+def _usable_audiobook_identity(value: Any) -> str | None:
+    text = _norm(value)
+    if not text:
+        return None
+    if (
+        is_generic_unknown_value(text)
+        or is_generated_timestamp_value(text)
+        or is_generic_track_value(text)
+        or DISC_FOLDER_RE.fullmatch(text)
+    ):
+        return None
+    return text
+
+
+def _stable_audiobook_root(ingest_file: IngestFile, relative_path: str) -> tuple[str | None, str | None]:
+    parts = _path_parts(str(ingest_file.file_path))
+    directories = parts[:-1]
+    root: str | None = None
+    for index in range(len(directories) - 1, -1, -1):
+        if DISC_FOLDER_RE.fullmatch(directories[index]):
+            if index > 0:
+                root = directories[index - 1]
+            break
+    if root is None and directories:
+        root = directories[-1]
+    if root and SOURCE_CHUNK_FOLDER_RE.search(root):
+        root = None
+    if root is None:
+        relative_parts = _path_parts(relative_path)
+        relative_directories = relative_parts[:-1]
+        for index in range(len(relative_directories) - 1, -1, -1):
+            if DISC_FOLDER_RE.fullmatch(relative_directories[index]) and index > 0:
+                root = relative_directories[index - 1]
+                break
+        if root is None and relative_directories:
+            fallback = relative_directories[-1]
+            if not DISC_FOLDER_RE.fullmatch(fallback) and not SOURCE_CHUNK_FOLDER_RE.search(fallback):
+                root = fallback
+    return root, _key_part(root) if root else None
+
 def classify_media_file(ingest_file: IngestFile, relative_path: str | None = None) -> tuple[str, dict[str, Any]]:
     rel = relative_path or ingest_file.file_name
     extension = (ingest_file.extension or Path(ingest_file.file_name).suffix).casefold()
@@ -248,6 +319,11 @@ def classify_batch_files(batch: IngestBatch) -> list[ClassifiedFile]:
         rel = relative_path_for(batch, ingest_file)
         fragment_path, group_key, label, index = _fragment_info(rel)
         media_class, evidence = classify_media_file(ingest_file, rel)
+        if media_class in {"audiobook_audio", "artwork", "sidecar_metadata"}:
+            book_root, book_root_key = _stable_audiobook_root(ingest_file, rel)
+            if book_root:
+                evidence["audiobook_book_root"] = book_root
+                evidence["audiobook_book_root_key"] = book_root_key
         if media_class == "music_audio":
             release_folder, discography_folder = _discography_release_folder(ingest_file)
             review_origin = str((batch.metadata_json or {}).get("review_origin") or "")
@@ -333,29 +409,175 @@ def _music_candidate_key(item: ClassifiedFile) -> tuple[str, dict[str, Any]]:
     }
 
 
-def _audiobook_candidate_key(item: ClassifiedFile) -> tuple[str, dict[str, Any]]:
+def _batch_audiobook_identity(batch: IngestBatch | None) -> dict[str, str | None]:
+    if batch is None:
+        return {"author": None, "title": None, "year": None}
+    metadata = batch.metadata_json or {}
+    suggested = batch.suggested_metadata or {}
+
+    def first_usable(*values: Any) -> str | None:
+        for value in values:
+            usable = _usable_audiobook_identity(value)
+            if usable:
+                return usable
+        return None
+
+    return {
+        "author": first_usable(
+            metadata.get("author"), metadata.get("album_artist"), metadata.get("albumartist"),
+            metadata.get("artist"), suggested.get("author"), suggested.get("artist"),
+        ),
+        "title": first_usable(
+            metadata.get("book_title"), metadata.get("title"), metadata.get("album"),
+            suggested.get("book_title"), suggested.get("title"), suggested.get("album"),
+        ),
+        "year": _norm(metadata.get("year") or metadata.get("date") or suggested.get("year")),
+    }
+
+
+def _single_book_audiobook_context(
+    batch: IngestBatch | None,
+    classified: list[ClassifiedFile],
+) -> dict[str, Any] | None:
+    if batch is None or batch.detected_type != "audiobook":
+        return None
+    primary = [item for item in classified if item.media_class in PRIMARY_MEDIA_CLASSES]
+    audio_items = [item for item in primary if item.media_class == "audiobook_audio"]
+    if not audio_items or len(audio_items) != len(primary):
+        return None
+
+    batch_identity = _batch_audiobook_identity(batch)
+    batch_title = _usable_audiobook_identity(batch_identity.get("title"))
+    if not batch_title:
+        return None
+
+    root_keys = {
+        str(item.evidence.get("audiobook_book_root_key"))
+        for item in audio_items
+        if item.evidence.get("audiobook_book_root_key")
+    }
+    if len(root_keys) != 1 or any(not item.evidence.get("audiobook_book_root_key") for item in audio_items):
+        return None
+
+    usable_titles: set[str] = set()
+    usable_authors: set[str] = set()
+    generic_values: set[str] = set()
+    seen_pairs: set[tuple[int | None, int]] = set()
+    track_discs: dict[int, list[int | None]] = defaultdict(list)
+    discs: set[int] = set()
+    for item in audio_items:
+        for value in _metadata_field_values(item.ingest_file, "album", "book_title", "release"):
+            usable = _usable_audiobook_identity(value)
+            if usable:
+                usable_titles.add(_key_part(usable))
+            else:
+                generic_values.add(value)
+        for value in _metadata_field_values(
+            item.ingest_file, "author", "album_artist", "albumartist", "artist", "composer",
+        ):
+            usable = _usable_audiobook_identity(value)
+            if usable:
+                usable_authors.add(_key_part(usable))
+        fields = _metadata_fields(item.ingest_file)
+        track_text = _track_number(_field(fields, "track_number", "tracknumber", "chapter"))
+        disc_text = _track_number(_field(fields, "disc_number", "discnumber", "disc"))
+        if not track_text:
+            continue
+        track = int(track_text)
+        disc = int(disc_text) if disc_text else None
+        pair = (disc, track)
+        if pair in seen_pairs:
+            return None
+        seen_pairs.add(pair)
+        track_discs[track].append(disc)
+        if disc is not None:
+            discs.add(disc)
+
+    if usable_titles and usable_titles != {_key_part(batch_title)}:
+        return None
+    batch_author = _usable_audiobook_identity(batch_identity.get("author"))
+    if batch_author:
+        usable_authors.add(_key_part(batch_author))
+    if len(usable_authors) > 1:
+        return None
+    for repeated_discs in track_discs.values():
+        if len(repeated_discs) > 1 and (
+            any(disc is None for disc in repeated_discs)
+            or len(set(repeated_discs)) != len(repeated_discs)
+        ):
+            return None
+
+    book_root = next(
+        (str(item.evidence.get("audiobook_book_root")) for item in audio_items if item.evidence.get("audiobook_book_root")),
+        batch_title,
+    )
+    return {
+        "author": batch_author,
+        "title": batch_title,
+        "year": batch_identity.get("year"),
+        "book_root": book_root,
+        "book_root_key": next(iter(root_keys)),
+        "disc_count": len(discs),
+        "primary_member_count": len(audio_items),
+        "generic_embedded_values": sorted(generic_values),
+        "single_book_multidisc_collapse": True,
+        "identity_source": "approved_batch_identity_and_scoped_file_evidence",
+        "confidence": 0.96,
+    }
+
+
+def _audiobook_candidate_key(
+    item: ClassifiedFile,
+    batch: IngestBatch | None = None,
+    single_book_context: dict[str, Any] | None = None,
+) -> tuple[str, dict[str, Any]]:
     fields = _metadata_fields(item.ingest_file)
-    author = _field(fields, "author", "album_artist", "albumartist", "artist", "composer")
-    title = _field(fields, "album", "title")
+    if single_book_context:
+        evidence = dict(single_book_context)
+        evidence.update({
+            "series": _field(fields, "series"),
+            "series_index": _field(fields, "series_index"),
+            "narrator": _field(fields, "narrator"),
+            "chapter_number": _field(fields, "chapter", "track_number", "tracknumber"),
+            "disc_number": _field(fields, "disc_number", "discnumber", "disc"),
+        })
+        return (
+            f"audiobook:{_key_part(evidence.get('author'))}:{_key_part(evidence.get('title'))}",
+            evidence,
+        )
+
+    batch_identity = _batch_audiobook_identity(batch)
+    author_values = _metadata_field_values(
+        item.ingest_file, "author", "album_artist", "albumartist", "artist", "composer",
+    )
+    title_values = _metadata_field_values(item.ingest_file, "album", "book_title", "release", "title")
+    author = next((_usable_audiobook_identity(value) for value in author_values if _usable_audiobook_identity(value)), None)
+    title = next((_usable_audiobook_identity(value) for value in title_values if _usable_audiobook_identity(value)), None)
+    author = author or _usable_audiobook_identity(batch_identity.get("author"))
+    title = title or _usable_audiobook_identity(item.evidence.get("audiobook_book_root"))
+    generic_values = sorted({value for value in title_values if not _usable_audiobook_identity(value)})
     if author and title:
         key = f"audiobook:{_key_part(author)}:{_key_part(title)}"
-        confidence = 0.82
+        confidence = 0.84
     else:
         parts = _path_parts(item.relative_path)
-        folder = parts[-2] if len(parts) > 1 else Path(item.ingest_file.file_name).stem
+        folder = item.evidence.get("audiobook_book_root") or (parts[-2] if len(parts) > 1 else Path(item.ingest_file.file_name).stem)
         key = f"audiobook:custom:{_key_part(folder)}"
         confidence = 0.48
     return key, {
         "author": author,
         "title": title,
+        "year": batch_identity.get("year") or _field(fields, "date", "year"),
         "series": _field(fields, "series"),
         "series_index": _field(fields, "series_index"),
         "narrator": _field(fields, "narrator"),
         "chapter_number": _field(fields, "chapter", "track_number", "tracknumber"),
-        "disc_number": _field(fields, "disc_number", "discnumber"),
+        "disc_number": _field(fields, "disc_number", "discnumber", "disc"),
+        "book_root": item.evidence.get("audiobook_book_root"),
+        "book_root_key": item.evidence.get("audiobook_book_root_key"),
+        "generic_embedded_values": generic_values,
         "confidence": confidence,
     }
-
 
 def _bookish_candidate_key(item: ClassifiedFile, media_type: str) -> tuple[str, dict[str, Any]]:
     fields = _metadata_fields(item.ingest_file)
@@ -395,8 +617,12 @@ def _sort_key(item: ClassifiedFile) -> str:
     return f"{disc}:{track}:{item.relative_path}"
 
 
-def build_candidate_drafts(classified: list[ClassifiedFile]) -> dict[str, CandidateDraft]:
+def build_candidate_drafts(
+    classified: list[ClassifiedFile],
+    batch: IngestBatch | None = None,
+) -> dict[str, CandidateDraft]:
     candidates: dict[str, CandidateDraft] = {}
+    single_book_context = _single_book_audiobook_context(batch, classified)
     support: list[ClassifiedFile] = []
     for item in classified:
         if item.media_class in SUPPORT_MEDIA_CLASSES:
@@ -408,7 +634,7 @@ def build_candidate_drafts(classified: list[ClassifiedFile]) -> dict[str, Candid
             key, evidence = _music_candidate_key(item)
             media_type, title, creator = "music", evidence.get("album"), evidence.get("artist")
         elif item.media_class == "audiobook_audio":
-            key, evidence = _audiobook_candidate_key(item)
+            key, evidence = _audiobook_candidate_key(item, batch, single_book_context)
             media_type, title, creator = "audiobook", evidence.get("title"), evidence.get("author")
         elif item.media_class == "ebook":
             key, evidence = _bookish_candidate_key(item, "ebook")
@@ -458,6 +684,18 @@ def build_candidate_drafts(classified: list[ClassifiedFile]) -> dict[str, Candid
     return candidates
 
 
+def _candidate_book_root_keys(candidate: CandidateDraft) -> set[str]:
+    identity = candidate.evidence.get("identity") if isinstance(candidate.evidence, dict) else None
+    keys = {
+        str(member.evidence.get("audiobook_book_root_key"))
+        for member in candidate.members
+        if member.evidence.get("audiobook_book_root_key")
+    }
+    if isinstance(identity, dict) and identity.get("book_root_key"):
+        keys.add(str(identity["book_root_key"]))
+    return keys
+
+
 def _attach_support_members(candidates: dict[str, CandidateDraft], support_items: list[ClassifiedFile]) -> None:
     for item in support_items:
         same_fragment = [candidate for candidate in candidates.values() if any(member.fragment_path == item.fragment_path for member in candidate.members)]
@@ -465,7 +703,29 @@ def _attach_support_members(candidates: dict[str, CandidateDraft], support_items
             candidate for candidate in candidates.values()
             if any(Path(member.ingest_file.file_name).stem.casefold() == Path(item.ingest_file.file_name).stem.casefold() for member in candidate.members)
         ]
-        target = same_stem[0] if len(same_stem) == 1 else same_fragment[0] if len(same_fragment) == 1 else None
+        target: CandidateDraft | None = None
+        if item.media_class == "artwork":
+            support_root_key = item.evidence.get("audiobook_book_root_key")
+            support_stem_key = _key_part(Path(item.ingest_file.file_name).stem)
+            audiobook_candidates = [candidate for candidate in candidates.values() if candidate.media_type == "audiobook"]
+            title_matches = [
+                candidate for candidate in audiobook_candidates
+                if candidate.title and _key_part(candidate.title) == support_stem_key
+            ]
+            root_matches = [
+                candidate for candidate in audiobook_candidates
+                if support_root_key and str(support_root_key) in _candidate_book_root_keys(candidate)
+            ]
+            if len(title_matches) == 1:
+                target = title_matches[0]
+            elif len(root_matches) == 1:
+                target = root_matches[0]
+            elif len(audiobook_candidates) == 1 and audiobook_candidates[0].confidence >= 0.8:
+                only_candidate = audiobook_candidates[0]
+                if support_root_key in _candidate_book_root_keys(only_candidate):
+                    target = only_candidate
+        if target is None:
+            target = same_stem[0] if len(same_stem) == 1 else same_fragment[0] if len(same_fragment) == 1 else None
         if target:
             target.support_members.append(item)
             continue
@@ -477,7 +737,6 @@ def _attach_support_members(candidates: dict[str, CandidateDraft], support_items
             for candidate in same_fragment or candidates.values():
                 candidate.flags.add("sidecar_without_owner")
                 candidate.reasons.append("Sidecar ownership is unclear")
-
 
 def _detect_track_conflicts(candidates: Any) -> None:
     for candidate in candidates:
@@ -531,7 +790,7 @@ def snapshot_universal_ingestion_boundary(db: Session, batch: IngestBatch) -> di
     _delete_existing_snapshot(db, batch.id)
     classified = classify_batch_files(batch)
     fragments = _persist_fragments(db, batch, classified)
-    candidates = build_candidate_drafts(classified)
+    candidates = build_candidate_drafts(classified, batch)
     candidate_rows = _persist_candidates(db, batch, candidates)
     decisions = _persist_decisions_and_flags(db, batch, candidates, candidate_rows, fragments, classified)
     db.flush()
@@ -686,10 +945,20 @@ def _persist_decisions_and_flags(
         candidate_group_keys = {str(member.evidence.get("fragment_group_key")) for member in draft.members if member.evidence.get("fragment_group_key")}
         flags = set(draft.flags)
         reasons = list(dict.fromkeys(draft.reasons))
+        identity_evidence = draft.evidence.get("identity") if isinstance(draft.evidence, dict) else None
+        coherent_single_audiobook = bool(
+            draft.media_type == "audiobook"
+            and isinstance(identity_evidence, dict)
+            and identity_evidence.get("single_book_multidisc_collapse") is True
+        )
         if mixed_batch:
             flags.add("candidate_media_type_conflict")
             reasons.append("Candidate is part of a mixed-media batch")
-        if (len(candidate_fragments) > 1 or candidate_group_keys) and not resolved_single_identity:
+        if (
+            (len(candidate_fragments) > 1 or candidate_group_keys)
+            and not resolved_single_identity
+            and not coherent_single_audiobook
+        ):
             flags.add("merge_recommended")
             if draft.media_type in {"music", "audiobook"}:
                 flags.add("split_release_candidate")

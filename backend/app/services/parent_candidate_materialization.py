@@ -210,7 +210,9 @@ def build_parent_candidate_summary(db: Session | None, batch: IngestBatch) -> di
             "remaining_candidate_count": candidate_group_count,
         }
 
-    file_inventory = get_parent_file_inventory(batch, db) if explicit_parent_container else {"total": 0, "primary": 0, "support": 0}
+    # Multi-candidate review containers must report their real attached inventory,
+    # even when they are not legacy discography parents.
+    file_inventory = get_parent_file_inventory(batch, db)
     remaining_parent_file_count = file_inventory["total"]
     remaining_primary_file_count = file_inventory["primary"]
     remaining_support_file_count = file_inventory["support"]
