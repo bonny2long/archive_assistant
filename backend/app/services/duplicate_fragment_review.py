@@ -835,7 +835,7 @@ def _track_int(value: object) -> int | None:
 
 def _filename_track_int(ingest_file: IngestFile) -> int | None:
     stem = Path(ingest_file.file_name or "").stem
-    match = re.match(r"^\s*(\d{1,3})(?:\s*[-._)]|\s+)", stem)
+    match = re.match(r"^\s*(\d+)(?:\s*[-._)]|\s+)", stem)
     if not match:
         return None
     number = int(match.group(1))

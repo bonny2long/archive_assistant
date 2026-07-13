@@ -220,16 +220,30 @@ def _positive_int(value, default: int | None = None) -> int | None:
 
 
 
+EXPLICIT_DISC_TRACK_PREFIXES = (
+    re.compile(r"^\s*0*(\d+)[-._]0*(\d+)\b"),
+    re.compile(r"^\s*0*(\d+)\s+-\s+0*(\d+)(?=\s+-\s+|$)"),
+    re.compile(r"^\s*disc\s*0*(\d+)\s+track\s*0*(\d+)\b", re.IGNORECASE),
+)
+
+
+def _explicit_disc_track_prefix(value: str) -> re.Match[str] | None:
+    for pattern in EXPLICIT_DISC_TRACK_PREFIXES:
+        match = pattern.match(value)
+        if match:
+            return match
+    return None
+
+
 def _filename_track_numbers(filename: str) -> tuple[int | None, int | None, str | None]:
     name = Path(str(filename or "")).stem
-    combined = re.match(r"^\s*0*(\d{1,3})\s*-\s*0*(\d{1,3})\b", name)
+    combined = _explicit_disc_track_prefix(name)
     if combined:
         return int(combined.group(1)), int(combined.group(2)), "combined_disc_track_filename_prefix"
-    single = re.match(r"^\s*0*(\d{1,3})\s*(?:[-._\s]+|$)", name)
+    single = re.match(r"^\s*0*(\d+)\s*(?:[-._\s]+|$)", name)
     if single:
         return None, int(single.group(1)), "filename_prefix"
     return None, None, None
-
 
 def _embedded_track_number(metadata: dict | None) -> tuple[int | None, str | None]:
     metadata = metadata or {}
@@ -378,7 +392,7 @@ def find_music_track_number_conflicts(files: list) -> dict:
 def apply_track_number_conflict_warnings(metadata: dict, files: list) -> dict:
     summary_files = []
     for item in files:
-        item_metadata = _metadata_for_track_item(item)
+        item_metadata = dict(_metadata_for_track_item(item))
         filename = _filename_for_track_item(item, item_metadata)
         evidence = track_number_evidence(item_metadata, filename)
         item_metadata["track_number_evidence"] = evidence
@@ -389,7 +403,7 @@ def apply_track_number_conflict_warnings(metadata: dict, files: list) -> dict:
     summary = find_music_track_number_conflicts(summary_files)
     duplicate_numbers = set(summary.get("duplicate_embedded_track_numbers") or [])
     for item in summary_files:
-        item_metadata = _metadata_for_track_item(item)
+        item_metadata = dict(_metadata_for_track_item(item))
         evidence = dict(item_metadata.get("track_number_evidence") or {})
         if evidence.get("embedded_track") in duplicate_numbers:
             warnings = list(evidence.get("warnings") or [])
@@ -436,15 +450,14 @@ def music_track_numbers(
     else:
         track = _positive_int(raw_track)
 
-    filename_combined = re.match(r"^\s*(\d+)\s*-\s*(\d+)\b", filename)
-    filename_track = re.match(r"^\s*(\d+)\b", filename)
-    if filename_combined:
+    filename_disc, filename_track, _filename_source = _filename_track_numbers(filename)
+    if filename_disc is not None and filename_track is not None:
         if raw_disc in (None, "", "Unknown"):
-            disc = int(filename_combined.group(1))
+            disc = filename_disc
         if track is None:
-            track = int(filename_combined.group(2))
-    elif track is None and filename_track:
-        track = int(filename_track.group(1))
+            track = filename_track
+    elif track is None and filename_track is not None:
+        track = filename_track
 
     return disc, track
 
@@ -552,14 +565,18 @@ def normalize_track_title_for_destination(
     current = str(title or "").strip()
     expected_track = _positive_int(track_number)
     for _ in range(4):
-        combined = re.match(
-            r"^\s*0*\d{1,3}\s*-\s*0*(\d{1,3})\s*(?:[-._]\s*)+(.+?)\s*$",
-            current,
-        )
-        match = combined or re.match(
-            r"^\s*0*(\d{1,3})\s*(?:[-._]\s*)+(.+?)\s*$",
-            current,
-        )
+        combined = _explicit_disc_track_prefix(current)
+        if combined:
+            parsed_track = int(combined.group(2))
+            remainder = re.sub(r"^\s*(?:[-._]\s*)+", "", current[combined.end():])
+            if expected_track is not None and parsed_track != expected_track:
+                break
+            next_value = _clean_spacing(remainder)
+            if not next_value or next_value == current:
+                break
+            current = next_value
+            continue
+        match = re.match(r"^\s*0*(\d+)\s*(?:[-._]\s*)+(.+?)\s*$", current)
         if not match:
             break
         parsed_track = int(match.group(1))

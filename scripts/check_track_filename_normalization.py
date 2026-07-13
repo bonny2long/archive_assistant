@@ -26,6 +26,11 @@ def main() -> None:
         ("99 Problems", 9, "99 Problems"),
         ("10 Crack Commandments", 10, "10 Crack Commandments"),
         ("10. Crack Commandments", 10, "Crack Commandments"),
+        ("12 - 500 Degreez", 12, "500 Degreez"),
+        ("1-02 - N95", 2, "N95"),
+        ("01 - 02 - Coeur D'Alene", 2, "Coeur D'Alene"),
+        ("02 - 2000 Watts", 2, "2000 Watts"),
+        ("162 - Final Chapter", 162, "Final Chapter"),
     ]
     for raw, track, expected in cases:
         actual = normalize_track_title_for_destination(raw, track)

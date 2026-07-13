@@ -46,7 +46,7 @@ FRAGMENT_PATTERNS = [
 ]
 SXXEYY_RE = re.compile(r"\bS(?P<season>\d{1,2})E(?P<episode>\d{1,3})\b", re.IGNORECASE)
 YEAR_RE = re.compile(r"\b(19\d{2}|20\d{2})\b")
-TRACK_RE = re.compile(r"(?:^|\D)(?P<track>\d{1,3})(?:\D|$)")
+TRACK_RE = re.compile(r"(?:^|\D)(?P<track>\d+)(?:\D|$)")
 DISC_FOLDER_RE = re.compile(r"^(?:cd|disc|disk|part)\s*0*\d+\b", re.IGNORECASE)
 
 

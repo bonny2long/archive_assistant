@@ -6,6 +6,9 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_ROOT = PROJECT_ROOT / "backend"
@@ -14,7 +17,15 @@ sys.path.insert(0, str(BACKEND_ROOT))
 from app.services.music_metadata import (  # noqa: E402
     music_track_filename,
     music_track_numbers,
+    normalize_track_title_for_destination,
     sort_music_tracks,
+    track_number_evidence,
+)
+from app.db.session import Base  # noqa: E402
+from app.models.archive import IngestBatch, IngestFile  # noqa: E402
+from app.services.track_metadata_repair import (  # noqa: E402
+    rebuild_pending_music_track_metadata,
+    repair_pending_music_batch_track_metadata,
 )
 
 
@@ -34,6 +45,7 @@ def track(
         id=file_id,
         file_name=filename,
         extension=Path(filename).suffix,
+        detected_role="music_track",
         metadata_json=metadata,
     )
 
@@ -110,6 +122,162 @@ def main() -> int:
         )
         == "01 - Unknown.mp3",
     )
+
+    numeric_title_cases = [
+        ("12 - 500 Degreez.flac", 1, 12, "500 Degreez"),
+        ("1-02 - N95.mp3", 1, 2, "N95"),
+        ("01 - 02 - Coeur D'Alene.flac", 1, 2, "Coeur D'Alene"),
+        ("02 - 2000 Watts.flac", 1, 2, "2000 Watts"),
+        ("162 - Final Chapter.mp3", 1, 162, "Final Chapter"),
+        ("1.02 - Dot Syntax.flac", 1, 2, "Dot Syntax"),
+        ("1_02 - Underscore Syntax.flac", 1, 2, "Underscore Syntax"),
+        ("Disc 1 Track 02 - Label Syntax.flac", 1, 2, "Label Syntax"),
+    ]
+    for filename, expected_disc, expected_track, expected_title in numeric_title_cases:
+        evidence = track_number_evidence(
+            {"tracknumber": str(expected_track), "discnumber": "1"},
+            filename,
+        )
+        failures += check(
+            f"numeric title disambiguation: {filename}",
+            evidence["disc"] == expected_disc
+            and evidence["filename_track"] == expected_track
+            and evidence["resolved_track"] == expected_track
+            and normalize_track_title_for_destination(
+                Path(filename).stem,
+                expected_track,
+            ) == expected_title,
+        )
+
+    repair_files = [
+        track(
+            number,
+            (
+                "12 - 500 Degreez.flac"
+                if number == 12
+                else f"{number:02d} - Track {number:02d}.flac"
+            ),
+            str(number),
+            "1",
+            "500 Degreez" if number == 12 else f"Track {number:02d}",
+        )
+        for number in range(1, 22)
+    ]
+    repair_files[11].metadata_json["track_number_evidence"] = {
+        "filename_track": 500,
+        "embedded_track": 12,
+        "resolved_track": 500,
+        "disc": 12,
+        "preferred_source": "combined_disc_track_filename_prefix",
+        "warnings": ["filename_embedded_tracknumber_mismatch"],
+    }
+    repair_batch = SimpleNamespace(
+        id=122,
+        detected_type="music_album",
+        status="pending_review",
+        files=repair_files,
+        metadata_json={
+            "artist": "Lil Wayne",
+            "albumartist": "Lil Wayne",
+            "album": "500 Degreez",
+            "year": "2002",
+            "track_count": 21,
+            "disc_count": 12,
+            "metadata_warnings": [
+                "track_number_conflict_detected",
+                "partial_track_set",
+            ],
+        },
+        updated_at=None,
+    )
+    repair_result = rebuild_pending_music_track_metadata(repair_batch)
+    repaired_track_12 = next(
+        row
+        for row in repair_batch.metadata_json["tracks"]
+        if row["track_number"] == 12
+    )
+    failures += check(
+        "existing 500 Degreez batch repair rebuilds a complete single-disc track set",
+        repair_result["track_count"] == 21
+        and repair_result["disc_count"] == 1
+        and repair_result["present_track_numbers"] == list(range(1, 22))
+        and repair_result["missing_track_numbers"] == []
+        and repair_result["duplicate_track_numbers"] == []
+        and repair_result["track_number_conflicts"] == []
+        and repair_result["completeness_status"] == "complete"
+        and repaired_track_12["title"] == "500 Degreez",
+    )
+    failures += check(
+        "repair replaces stale per-file evidence without changing file ownership",
+        repair_files[11].metadata_json["track_number_evidence"]["disc"] == 1
+        and repair_files[11].metadata_json["track_number_evidence"]["resolved_track"] == 12
+        and all(item.id == number for number, item in enumerate(repair_files, start=1)),
+    )
+
+    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    Base.metadata.create_all(engine)
+    TestSession = sessionmaker(bind=engine)
+    with TestSession() as db:
+        persisted_batch = IngestBatch(
+            source_path="repair-persistence",
+            detected_type="music_album",
+            status="pending_review",
+            metadata_json={
+                "artist": "Lil Wayne",
+                "albumartist": "Lil Wayne",
+                "album": "500 Degreez",
+                "year": "2002",
+                "track_count": 2,
+            },
+        )
+        persisted_batch.files = [
+            IngestFile(
+                file_path=f"repair-persistence/{filename}",
+                file_name=filename,
+                extension=".flac",
+                size_bytes=1,
+                detected_role="music_track",
+                metadata_json={
+                    "title": title,
+                    "tracknumber": str(number),
+                    "discnumber": "1",
+                    "track_number_evidence": stale_evidence,
+                },
+            )
+            for filename, title, number, stale_evidence in [
+                (
+                    "01 - Track 01.flac",
+                    "Track 01",
+                    1,
+                    {"resolved_track": 1, "disc": 1},
+                ),
+                (
+                    "12 - 500 Degreez.flac",
+                    "500 Degreez",
+                    12,
+                    {"resolved_track": 500, "disc": 12},
+                ),
+            ]
+        ]
+        db.add(persisted_batch)
+        db.commit()
+        persisted_batch_id = persisted_batch.id
+        repair_pending_music_batch_track_metadata(db, persisted_batch_id)
+        db.expunge_all()
+        repaired_batch = db.get(IngestBatch, persisted_batch_id)
+        repaired_file = next(
+            item
+            for item in repaired_batch.files
+            if item.file_name == "12 - 500 Degreez.flac"
+        )
+        persisted_evidence = repaired_file.metadata_json["track_number_evidence"]
+        failures += check(
+            "repaired file evidence survives database commit and reload",
+            persisted_evidence["filename_track"] == 12
+            and persisted_evidence["resolved_track"] == 12
+            and persisted_evidence["disc"] == 1,
+        )
+    engine.dispose()
 
     return 1 if failures else 0
 
