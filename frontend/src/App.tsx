@@ -49,6 +49,17 @@ type QaSummary = {
   errors?: string[];
 };
 
+const AUDIO_FILE_EXTENSIONS = new Set([
+  ".aac", ".aiff", ".alac", ".flac", ".m4a", ".m4b", ".mp3",
+  ".ogg", ".opus", ".wav", ".wma",
+]);
+
+function attachedAudioFileIds(batch: IngestBatch): number[] {
+  return batch.files
+    .filter((file) => AUDIO_FILE_EXTENSIONS.has(file.extension.toLowerCase()))
+    .map((file) => file.id);
+}
+
 function isProcessedContainerBatch(batch: BatchSummary): boolean {
   return Boolean(batch.parent_media_extraction_complete || batch.parent_is_drained || batch.parent_container_state === "drained_parent" || batch.display_state === "drained_parent");
 }
@@ -533,12 +544,28 @@ export default function App() {
   const handleMediaTypeChange = async (target: "music_album" | "audiobook") => {
     if (!editingBatch) return;
     const targetLabel = target === "audiobook" ? "Audiobook" : "Music album";
-    const confirmed = window.confirm(`Change this entire scoped batch to ${targetLabel}? This updates the batch type, file roles, and destination. It does not move or retag files.`);
+    let currentBatch: IngestBatch;
+    try {
+      currentBatch = details[editingBatch.id] ?? await api.getBatch(editingBatch.id);
+    } catch {
+      showToast("Could not load the current attached-file scope. Refresh and try again.", "error");
+      return;
+    }
+    const audioFileIds = attachedAudioFileIds(currentBatch);
+    if (!audioFileIds.length) {
+      showToast("This batch has no attached audio files to convert.", "error");
+      return;
+    }
+    const confirmed = window.confirm(
+      `Change this entire scoped batch and all ${audioFileIds.length} attached audio files to ${targetLabel}? `
+      + "Only continue if every attached audio file belongs to this one media object. "
+      + "This updates roles and destination, but does not move, delete, or retag files.",
+    );
     if (!confirmed) return;
     const batchId = editingBatch.id;
     setSavingMetadata(true);
     try {
-      const result = await api.updateBatchMediaType(batchId, target);
+      const result = await api.updateBatchMediaType(batchId, target, audioFileIds);
       showToast(result.action_message ?? ("Media type changed to " + target.replace("_", " ")));
       setEditingBatch(result);
       await loadBatches({ mode: "refresh" });
@@ -685,7 +712,8 @@ export default function App() {
     setSavingMetadata(true);
     try {
       const result = await api.updateAudiobookMetadata(editingBatch.id, update);
-      showToast(result.action_message ?? "Audiobook metadata updated");
+      const savedMessage = result.action_message ?? "Audiobook metadata updated";
+      showToast(`${savedMessage} Next: approve this batch from the dashboard.`);
       setEditingBatch(null);
       await loadBatches({ mode: "refresh" });
     } catch (saveError: unknown) {

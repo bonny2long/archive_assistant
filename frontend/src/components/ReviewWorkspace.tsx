@@ -438,6 +438,7 @@ export default function ReviewWorkspace({
                 candidate={candidate}
                 selected={candidate.id === selectedCandidate?.id}
                 onSelect={() => setSelectedCandidateId(candidate.id)}
+                requiresChildMaterialization={candidates.length > 1}
               />
             ))}
             {filteredCandidates.length === 0 && (

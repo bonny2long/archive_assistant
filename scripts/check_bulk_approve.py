@@ -17,7 +17,7 @@ sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.api.routes import approve_selected_batches  # noqa: E402
 from app.db.session import Base  # noqa: E402
-from app.models.archive import IngestBatch  # noqa: E402
+from app.models.archive import IngestBatch, IngestFile  # noqa: E402
 from app.schemas.archive import BulkApproveRequest  # noqa: E402
 
 
@@ -53,11 +53,34 @@ def main() -> int:
         needs = batch("needs_metadata_review", "weak")
         moved = batch("moved")
         blocked = batch("pending_review", warnings=["possible_duplicate_destination"])
-        db.add_all([good, needs, moved, blocked])
+        mixed_source = batch('pending_review')
+        mixed_source.source_path = 'mixed-source'
+        mixed_source.files = [
+            IngestFile(
+                file_path='mixed-source/one.mp3',
+                file_name='one.mp3',
+                extension='.mp3',
+                size_bytes=1,
+                detected_role='audio_track',
+                metadata_json={'artist': 'Artist', 'album': 'Album One', 'track': '1'},
+            ),
+            IngestFile(
+                file_path='mixed-source/two.mp3',
+                file_name='two.mp3',
+                extension='.mp3',
+                size_bytes=1,
+                detected_role='audio_track',
+                metadata_json={'artist': 'Artist', 'album': 'Album Two', 'track': '1'},
+            ),
+        ]
+        db.add_all([good, needs, moved, blocked, mixed_source])
         db.commit()
+        mixed_source_id = mixed_source.id
 
         result = approve_selected_batches(
-            BulkApproveRequest(batch_ids=[good.id, needs.id, moved.id, blocked.id, 999]),
+            BulkApproveRequest(
+                batch_ids=[good.id, needs.id, moved.id, blocked.id, mixed_source.id, 999]
+            ),
             db,
         )
         reasons = {error.batch_id: error.reason for error in result.errors}
@@ -85,6 +108,13 @@ def main() -> int:
             },
         )
         failures += check("missing batch is reported", reasons.get(999) == "not_found")
+
+    failures += check(
+        'mixed source cannot bypass universal review through bulk approval',
+        mixed_source_id in result.skipped
+        and mixed_source_id not in result.approved
+        and reasons.get(mixed_source_id) == 'universal_review_required',
+    )
 
     return 1 if failures else 0
 

@@ -12,6 +12,7 @@ from app.models.archive import IngestBatch, IngestFile
 from app.models.media_metadata import CandidateMember, MediaIdentityCandidate, UniversalIngestionReviewAction
 from app.services.audiobook_metadata import audiobook_destination
 from app.services.destination_authority import rebuild_music_batch_destination_from_attached_files
+from app.services.parent_candidate_materialization import is_parent_container_batch
 from app.services.review_state import build_review_state
 
 
@@ -20,6 +21,7 @@ AUDIO_EXTENSIONS = {
     ".ogg", ".opus", ".wav", ".wma",
 }
 SUPPORT_ROLES = {"artwork", "cover_art", "album_artwork", "sidecar", "metadata_sidecar", "playlist"}
+WHOLE_BATCH_SCOPE_CONFIRMATION = "all_attached_primary_audio_files"
 
 
 def _audio_files(batch: IngestBatch) -> list[IngestFile]:
@@ -68,6 +70,7 @@ def _candidate_covers_batch_audio(db: Session, batch: IngestBatch, candidate_id:
 
 
 def _append_audit(metadata: dict[str, Any], *, batch: IngestBatch, candidate: MediaIdentityCandidate, target_type: str) -> None:
+    audio = _audio_files(batch)
     audit = list(metadata.get("media_type_correction_audit") or [])
     audit.append({
         "previous_detected_type": batch.detected_type,
@@ -75,11 +78,13 @@ def _append_audit(metadata: dict[str, Any], *, batch: IngestBatch, candidate: Me
         "candidate_id": candidate.id,
         "file_count": len(batch.files),
         "previous_suggested_destination": batch.suggested_destination,
-        "previous_candidate_media_type": (
-            db_candidate.candidate_media_type if (
-                db_candidate := next((row for row in [batch] if False), None)
-            ) else None
-        ),
+        "previous_candidate_media_type": candidate.candidate_media_type,
+        "scoped_audio_file_ids": [int(item.id) for item in audio if item.id is not None],
+        "scoped_file_roles": [
+            {"file_id": int(item.id), "role": item.detected_role}
+            for item in audio
+            if item.id is not None
+        ],
         "corrected_at": now_utc().isoformat(),
         "corrected_by": "local_user",
     })
@@ -261,6 +266,8 @@ def correct_batch_media_type(
     target_detected_type: str,
     *,
     confirmed: bool = False,
+    scope_confirmation: str | None = None,
+    expected_audio_file_ids: list[int] | set[int] | None = None,
 ) -> IngestBatch:
     """Apply a confirmed whole-batch correction to one fully scoped candidate."""
     if not confirmed:
@@ -282,6 +289,31 @@ def correct_batch_media_type(
         raise ValueError("Batch not found")
     if batch.status in {"moved", "merged", "approved"}:
         raise ValueError("Closed or approved batches cannot change media type")
+    if is_parent_container_batch(batch):
+        raise ValueError(
+            "Parent or reconstructed containers cannot use whole-batch media conversion. "
+            "Review and separate candidate groups first."
+        )
+
+    actual_audio_file_ids = {
+        int(item.id)
+        for item in _audio_files(batch)
+        if item.id is not None
+    }
+    confirmed_audio_file_ids = {
+        int(file_id)
+        for file_id in (expected_audio_file_ids or [])
+    }
+    if scope_confirmation != WHOLE_BATCH_SCOPE_CONFIRMATION:
+        raise ValueError(
+            "Whole-batch media correction requires confirmation that every attached primary "
+            "audio file belongs to one media object."
+        )
+    if not actual_audio_file_ids or confirmed_audio_file_ids != actual_audio_file_ids:
+        raise ValueError(
+            "Attached audio ownership changed or was not fully confirmed. "
+            "Refresh the batch and review its file membership before changing the whole batch type."
+        )
 
     candidates = _scoped_candidates(db, batch_id)
     if not candidates:
@@ -448,7 +480,18 @@ def repair_batch_media_type_from_audit(
         raise ValueError("No audited previous media type is available; provide a recovery target")
     if target in {"music_album", "audiobook"}:
         recovered_from = batch.detected_type
-        repaired = correct_batch_media_type(db, batch_id, str(target), confirmed=True)
+        repaired = correct_batch_media_type(
+            db,
+            batch_id,
+            str(target),
+            confirmed=True,
+            scope_confirmation=WHOLE_BATCH_SCOPE_CONFIRMATION,
+            expected_audio_file_ids=[
+                int(item.id)
+                for item in _audio_files(batch)
+                if item.id is not None
+            ],
+        )
         repaired_metadata = dict(repaired.metadata_json or {})
         recovery_audit = list(repaired_metadata.get("media_type_recovery_audit") or [])
         recovery_audit.append({

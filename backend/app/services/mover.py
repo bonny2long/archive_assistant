@@ -1672,6 +1672,7 @@ def _move_audiobook_batch(
             "audiobook_audio",
             "audiobook_artwork",
             "audiobook_sidecar",
+            "artwork",
         }:
             continue
         source = Path(ingest_file.file_path)

@@ -70,17 +70,18 @@ function hasDecision(actions: Array<{ action_type: string; decision_status?: str
 function formatActionLabel(
   action: { action_type: string; target_media_class?: string | null; decision_status?: string | null },
   candidateActions: Array<{ action_type: string; decision_status?: string | null }>,
+  requiresChildMaterialization: boolean,
 ): string {
   if (action.action_type === "split_candidate") {
     if (action.decision_status === "applied") return "Child batch created";
     if (hasDecision(candidateActions, "approve_candidate")) return "Will create child batch";
     return "Approve first";
   }
-  if (action.action_type === "approve_candidate" && action.decision_status === "applied") {
-    return "Child batch created";
+  if (action.action_type === "approve_candidate") {
+    if (action.decision_status === "applied" && requiresChildMaterialization) return "Child batch created";
+    return requiresChildMaterialization ? "Will create child batch" : "Candidate approved";
   }
   const labels: Record<string, string> = {
-    approve_candidate: "Will create child batch",
     mark_review_later: "Marked for later review",
     override_identity: "Identity override saved",
     exclude_from_move_plan: "Excluded from move plan",
@@ -532,7 +533,9 @@ export default function WorkspaceInspector({
 
   const candidate = vm.rawCandidate as EvidenceCandidate;
   const saving = savingActionId === vm.id;
-  const approveDisabled = vm.hasChunkIdentityRisk || saving;
+  const requiresChildMaterialization = ingestion.summary.candidate_count > 1;
+  const candidateApproved = hasDecision(vm.activeActions, "approve_candidate");
+  const approveDisabled = vm.hasChunkIdentityRisk || saving || candidateApproved;
 
   return (
     <aside className="workspace-inspector" aria-label="Candidate inspector">
@@ -655,7 +658,7 @@ export default function WorkspaceInspector({
             disabled={approveDisabled}
             onClick={() => void onAction(vm.id, "approve_candidate", { reason: "workspace_approved" })}
           >
-            <i className={`ti ti-${saving ? "loader-2 spinner" : "check"}`} /> {vm.hasChunkIdentityRisk ? "Review identity first" : "Approve candidate"}
+            <i className={`ti ti-${saving ? "loader-2 spinner" : "check"}`} /> {vm.hasChunkIdentityRisk ? "Review identity first" : candidateApproved ? "Candidate approved" : "Approve candidate"}
           </button>
           <button
             className="btn btn--compact"
@@ -695,7 +698,7 @@ export default function WorkspaceInspector({
           <div className="workspace-inspector__actions-list">
             {vm.activeActions.map((action) => (
               <div key={action.id}>
-                <span>{formatActionLabel(action, vm.activeActions)}</span>
+                <span>{formatActionLabel(action, vm.activeActions, requiresChildMaterialization)}</span>
                 <button className="btn-sm" disabled={saving} onClick={() => void onClear(action.id, vm.id)}>
                   <i className="ti ti-eraser" /> Clear
                 </button>

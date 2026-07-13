@@ -4,6 +4,7 @@ type Props = {
   candidate: CandidateViewModel;
   selected: boolean;
   onSelect: () => void;
+  requiresChildMaterialization: boolean;
 };
 
 function stateIcon(state: CandidateViewModel["displayState"]): string {
@@ -13,12 +14,14 @@ function stateIcon(state: CandidateViewModel["displayState"]): string {
   return "ti-shield-check";
 }
 
-function stateLabel(candidate: CandidateViewModel): string {
+function stateLabel(candidate: CandidateViewModel, requiresChildMaterialization: boolean): string {
   if (hasAppliedAction(candidate, "approve_candidate") || hasAppliedAction(candidate, "split_candidate")) return "Child batch created";
   if (hasAction(candidate, "exclude_from_move_plan")) return "Excluded";
   if (hasAction(candidate, "block_candidate")) return "Blocked";
   if (hasAction(candidate, "mark_review_later")) return "Review later";
-  if (hasAction(candidate, "approve_candidate")) return "Ready to extract";
+  if (hasAction(candidate, "approve_candidate")) {
+    return requiresChildMaterialization ? "Ready to extract" : "Candidate approved";
+  }
   if (candidate.displayState === "blocked") return "Blocked";
   if (candidate.hasChunkIdentityRisk) return "Identity review";
   if (candidate.displayState === "review") return "Needs review";
@@ -51,10 +54,12 @@ function hasAppliedAction(candidate: CandidateViewModel, actionType: string): bo
   return candidate.activeActions.some((action) => action.action_type === actionType && action.decision_status === "applied");
 }
 
-function actionSummary(candidate: CandidateViewModel): string | null {
+function actionSummary(candidate: CandidateViewModel, requiresChildMaterialization: boolean): string | null {
   if (hasAppliedAction(candidate, "approve_candidate") || hasAppliedAction(candidate, "split_candidate")) return "Child batch created";
   if (hasAction(candidate, "exclude_from_move_plan")) return "Excluded from move plan";
-  if (hasAction(candidate, "approve_candidate")) return "Will create child batch";
+  if (hasAction(candidate, "approve_candidate")) {
+    return requiresChildMaterialization ? "Will create child batch" : "Approved for batch review";
+  }
   if (hasAction(candidate, "split_candidate")) return "Approve first";
   if (hasAction(candidate, "mark_review_later")) return "Review later";
   if (hasAction(candidate, "block_candidate")) return "Blocked by user";
@@ -62,16 +67,16 @@ function actionSummary(candidate: CandidateViewModel): string | null {
   return null;
 }
 
-export default function WorkspaceCandidateCard({ candidate, selected, onSelect }: Props) {
+export default function WorkspaceCandidateCard({ candidate, selected, onSelect, requiresChildMaterialization }: Props) {
   const compact = candidate.displayState === "safe" || candidate.displayState === "approved";
-  const summary = actionSummary(candidate);
+  const summary = actionSummary(candidate, requiresChildMaterialization);
   return (
     <button
       className={`workspace-candidate workspace-candidate--${candidate.displayState} ${selected ? "is-selected" : ""}`}
       onClick={onSelect}
     >
       <div className="workspace-candidate__top">
-        <span className="workspace-candidate__state"><i className={`ti ${stateIcon(candidate.displayState)}`} /> {stateLabel(candidate)}</span>
+        <span className="workspace-candidate__state"><i className={`ti ${stateIcon(candidate.displayState)}`} /> {stateLabel(candidate, requiresChildMaterialization)}</span>
         <span>{mediaTypeLabel(candidate.mediaType)}</span>
       </div>
       <strong>{candidate.title}</strong>

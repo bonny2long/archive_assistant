@@ -581,6 +581,8 @@ class IngestBatchOut(BaseModel):
 class BatchMediaTypeUpdate(BaseModel):
     target_detected_type: Literal["music_album", "audiobook"]
     confirmed: bool = False
+    scope_confirmation: Literal["all_attached_primary_audio_files"] | None = None
+    expected_audio_file_ids: list[int] = Field(default_factory=list)
 
 
 class BatchMediaTypeRecoveryRepairRequest(BaseModel):

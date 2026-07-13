@@ -21,6 +21,7 @@ from app.services.approved_candidate_materialization import materialize_approved
 from app.services.batch_split import execute_split_candidate
 from app.services.candidate_move_plan_preview import build_candidate_move_plan_preview
 from app.services.media_type_correction import (
+    WHOLE_BATCH_SCOPE_CONFIRMATION,
     correct_batch_media_type,
     inspect_batch_media_type_recovery,
     repair_batch_media_type_from_audit,
@@ -94,7 +95,34 @@ def main() -> None:
         db.flush()
         db.commit()
 
-        correct_batch_media_type(db, batch.id, "audiobook", confirmed=True)
+        initial_roles = {item.id: item.detected_role for item in audio}
+        try:
+            correct_batch_media_type(
+                db,
+                batch.id,
+                "audiobook",
+                confirmed=True,
+                scope_confirmation=WHOLE_BATCH_SCOPE_CONFIRMATION,
+                expected_audio_file_ids=[audio[0].id],
+            )
+        except ValueError as exc:
+            require(
+                "Attached audio ownership changed" in str(exc),
+                "Incomplete file scope should be rejected before conversion",
+            )
+        else:
+            raise AssertionError("Whole-batch conversion must reject a stale attached-file scope")
+        require(batch.detected_type == "music_album", "Rejected file scope must preserve the batch type")
+        require({item.id: item.detected_role for item in audio} == initial_roles, "Rejected file scope must preserve file roles")
+
+        correct_batch_media_type(
+            db,
+            batch.id,
+            "audiobook",
+            confirmed=True,
+            scope_confirmation=WHOLE_BATCH_SCOPE_CONFIRMATION,
+            expected_audio_file_ids=[item.id for item in audio],
+        )
         db.refresh(batch)
         require(batch.detected_type == "audiobook", "The batch type should persist as audiobook")
         require("Audiobooks" in str(batch.suggested_destination), "Audiobook destination should be rebuilt")
@@ -296,6 +324,26 @@ def main() -> None:
 
         original_owners = {item.id: item.batch_id for item in all_files}
         original_roles = {item.id: item.detected_role for item in all_files}
+        try:
+            correct_batch_media_type(
+                db,
+                parent.id,
+                "audiobook",
+                confirmed=True,
+                scope_confirmation=WHOLE_BATCH_SCOPE_CONFIRMATION,
+                expected_audio_file_ids=[item.id for item in revan_audio + music_audio],
+            )
+        except ValueError as exc:
+            require(
+                "Parent or reconstructed containers" in str(exc),
+                "Mixed parent conversion should fail at the parent ownership boundary",
+            )
+        else:
+            raise AssertionError("Mixed parent must not permit whole-batch media conversion")
+        require(parent.detected_type == "music_discography", "Rejected conversion must preserve the parent type")
+        require({item.id: item.batch_id for item in all_files} == original_owners, "Rejected conversion must preserve file ownership")
+        require({item.id: item.detected_role for item in all_files} == original_roles, "Rejected conversion must preserve file roles")
+
         create_or_update_review_action(db, parent.id, {
             "action_type": "override_media_class",
             "candidate_id": music.id,

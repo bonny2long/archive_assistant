@@ -190,18 +190,24 @@ def empty_parent_candidate_summary() -> dict[str, Any]:
     }
 
 
-def build_parent_candidate_summary(db: Session | None, batch: IngestBatch) -> dict[str, Any]:
+def build_parent_candidate_summary(
+    db: Session | None,
+    batch: IngestBatch,
+    *,
+    candidate_ids: list[int] | None = None,
+) -> dict[str, Any]:
     """Derive review-container state from DB-owned children/files and active audit actions."""
     if db is None:
         return empty_parent_candidate_summary()
 
     metadata = batch.metadata_json or {}
-    candidate_ids = [
-        candidate_id
-        for (candidate_id,) in db.query(MediaIdentityCandidate.id)
-        .filter(MediaIdentityCandidate.batch_id == batch.id)
-        .all()
-    ]
+    if candidate_ids is None:
+        candidate_ids = [
+            candidate_id
+            for (candidate_id,) in db.query(MediaIdentityCandidate.id)
+            .filter(MediaIdentityCandidate.batch_id == batch.id)
+            .all()
+        ]
     candidate_group_count = len(candidate_ids)
     explicit_parent_container = is_parent_container_batch(batch)
     if not explicit_parent_container and candidate_group_count <= 1:

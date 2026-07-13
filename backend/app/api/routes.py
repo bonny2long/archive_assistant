@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, selectinload
 from app.db.session import get_db
 from app.models.archive import ArchiveItem, IngestBatch, IngestFile, MoveAction
+from app.models.media_metadata import MediaIdentityCandidate
 from app.schemas.archive import (
     ApproveResponse,
     BulkApproveError,
@@ -56,7 +57,7 @@ from app.services.dev_reset import (
     reset_test_data,
 )
 from app.services.batch_display import build_batch_display_fields
-from app.services.parent_candidate_materialization import build_parent_candidate_summary
+from app.services.parent_candidate_materialization import build_parent_candidate_summary, is_parent_container_batch
 from app.services.duplicate_fragment_review import (
     build_duplicate_fragment_review,
     DuplicateFragmentResolutionError,
@@ -299,6 +300,26 @@ def dev_reset_music_test(db: Session = Depends(get_db)):
     return DevResetResponse(**summary.__dict__)
 
 
+def _candidate_ids_by_batch(
+    db: Session,
+    batches: list[IngestBatch],
+) -> dict[int, list[int]]:
+    batch_ids = [batch.id for batch in batches]
+    grouped = {batch_id: [] for batch_id in batch_ids}
+    if not batch_ids:
+        return grouped
+    for batch_id, candidate_id in (
+        db.query(
+            MediaIdentityCandidate.batch_id,
+            MediaIdentityCandidate.id,
+        )
+        .filter(MediaIdentityCandidate.batch_id.in_(batch_ids))
+        .all()
+    ):
+        grouped[int(batch_id)].append(int(candidate_id))
+    return grouped
+
+
 @router.post("/dev/reset/test-data", response_model=DevResetResponse)
 def dev_reset_test_data(db: Session = Depends(get_db)):
     if not (settings.debug and settings.dev_tools_enabled):
@@ -319,14 +340,25 @@ def list_batches(
     query = db.query(IngestBatch).filter(IngestBatch.status != "merged")
     total = query.count()
     batches = (
-        query.order_by(IngestBatch.created_at.desc())
+        query.options(selectinload(IngestBatch.files))
+        .order_by(IngestBatch.created_at.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
         .all()
     )
 
     duplicate_clusters = build_duplicate_fragment_review(db)["clusters"]
-    items = [_batch_to_summary(b, db=db, duplicate_clusters=duplicate_clusters) for b in batches]
+    candidate_ids_by_batch = _candidate_ids_by_batch(db, batches)
+    items = [
+        _batch_to_summary(
+            batch,
+            db=db,
+            duplicate_clusters=duplicate_clusters,
+            candidate_ids=candidate_ids_by_batch[batch.id],
+            actual_file_count_override=len(batch.files),
+        )
+        for batch in batches
+    ]
     return PaginatedResponse(
         items=items,
         page=page,
@@ -347,14 +379,29 @@ def list_pending_batches(
     )
     total = query.count()
     batches = (
-        query.order_by(IngestBatch.created_at.desc())
+        query.options(selectinload(IngestBatch.files))
+        .order_by(IngestBatch.created_at.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
         .all()
     )
 
     duplicate_clusters = build_duplicate_fragment_review(db)["clusters"]
-    items = [item for item in (_batch_to_summary(b, db=db, duplicate_clusters=duplicate_clusters) for b in batches) if not item.parent_is_drained]
+    candidate_ids_by_batch = _candidate_ids_by_batch(db, batches)
+    items = [
+        item
+        for item in (
+            _batch_to_summary(
+                batch,
+                db=db,
+                duplicate_clusters=duplicate_clusters,
+                candidate_ids=candidate_ids_by_batch[batch.id],
+                actual_file_count_override=len(batch.files),
+            )
+            for batch in batches
+        )
+        if not item.parent_is_drained
+    ]
     total = len(items)
     return PaginatedResponse(
         items=items,
@@ -758,6 +805,8 @@ def update_batch_media_type(
             batch_id,
             update.target_detected_type,
             confirmed=update.confirmed,
+            scope_confirmation=update.scope_confirmation,
+            expected_audio_file_ids=update.expected_audio_file_ids,
         )
         return _batch_to_summary(
             batch,
@@ -1471,6 +1520,14 @@ def update_audiobook_metadata(
         raise HTTPException(status_code=400, detail="Batch is not an audiobook")
     if batch.status in {"moved", "merged"}:
         raise HTTPException(status_code=400, detail="Moved batches cannot be edited")
+    if is_parent_container_batch(batch):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Parent or reconstructed containers cannot be confirmed as one audiobook. "
+                "Review and extract the scoped candidate groups first."
+            ),
+        )
 
     author = normalize_metadata_text(update.author)
     title = normalize_metadata_text(update.title)
@@ -2284,12 +2341,15 @@ def approve_selected_batches(
 
         metadata = build_review_state(batch.detected_type, batch.metadata_json)
         parent_summary = build_parent_candidate_summary(db, batch)
+        routing_decision = get_batch_routing_decision(db, batch.id)
         if batch.detected_type in {"unknown_type", "unsupported_file"}:
             reason = "quarantine_review_required"
         elif parent_summary["is_parent_review_container"]:
             reason = "drained_parent_review_child_batches" if parent_summary.get("parent_is_drained") else "parent_review_container_needs_child_batches"
         elif duplicate_fragment_summary_for_batch(db, batch)["requires_duplicate_review"]:
             reason = "duplicate_fragment_review_required"
+        elif routing_decision.get('decision') in {'universal_review_required', 'blocked_conflict'}:
+            reason = 'universal_review_required'
         elif _music_track_completeness_blocker(batch):
             reason = "music_track_completeness_required"
         elif _discography_child_batch_blocker(batch, parent_summary):
@@ -2481,9 +2541,15 @@ def _batch_to_summary(
     db: Session | None = None,
     action_message: str | None = None,
     duplicate_clusters: list[dict] | None = None,
+    candidate_ids: list[int] | None = None,
+    actual_file_count_override: int | None = None,
 ) -> BatchSummary:
     meta = build_review_state(batch.detected_type, batch.metadata_json)
-    parent_summary = build_parent_candidate_summary(db, batch)
+    parent_summary = build_parent_candidate_summary(
+        db,
+        batch,
+        candidate_ids=candidate_ids,
+    )
     duplicate_summary = duplicate_fragment_summary_for_batch(db, batch, duplicate_clusters) if db is not None else {
         "possible_duplicate_group_id": None,
         "possible_duplicate_count": 0,
@@ -2494,7 +2560,9 @@ def _batch_to_summary(
     }
     display = build_batch_display_fields(batch, parent_summary)
     actual_file_count = (
-        db.query(IngestFile).filter(IngestFile.batch_id == batch.id).count()
+        actual_file_count_override
+        if actual_file_count_override is not None
+        else db.query(IngestFile).filter(IngestFile.batch_id == batch.id).count()
         if db is not None
         else len(batch.files or [])
     )

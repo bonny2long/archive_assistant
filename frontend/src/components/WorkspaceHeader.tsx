@@ -53,9 +53,15 @@ export default function WorkspaceHeader({
       && !hasActiveAction(actions, "mark_review_later");
   }).length || (ingestion ? 0 : candidateCount);
   const canMaterialize = isParentReviewContainer && approvedCount > 0 && !!onMaterializeApprovedCandidates;
+  const hasApprovedSingleCandidate = !isParentReviewContainer && approvedCount > 0;
+  const canApproveSingleBatch = batch.detected_type === "audiobook"
+    && hasApprovedSingleCandidate
+    && batch.metadata_confirmed
+    && canApprove;
   const canOpenAudiobookEditor = batch.detected_type === "audiobook"
     && candidateCount === 1
     && routing?.decision === "audiobook_editor_allowed"
+    && !batch.metadata_confirmed
     && !!onOpenFullEditor;
   const approveDisabled = isParentReviewContainer || !canApprove;
   const approveTitle = isParentReviewContainer
@@ -124,7 +130,15 @@ export default function WorkspaceHeader({
         )}
       </div>
       <div className="review-workspace__header-actions">
-        {canOpenAudiobookEditor ? (
+        {canApproveSingleBatch ? (
+          <button
+            className="btn btn--green"
+            title="Final approval marks this reviewed audiobook batch as ready to move."
+            onClick={() => void onApprove(batch.id)}
+          >
+            <i className="ti ti-check" /> Approve audiobook batch
+          </button>
+        ) : canOpenAudiobookEditor ? (
           <button
             className="btn btn--green"
             title="Open the audiobook metadata editor for this single scoped book."
