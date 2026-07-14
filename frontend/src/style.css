@@ -4694,3 +4694,32 @@ button:focus-visible, input:focus-visible {
   color: var(--accent-blue);
   font-family: var(--font-mono);
 }
+
+/* AA-MOVE1 - selected and per-batch canary moves */
+.batch-detail-move-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.8rem 1rem;
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-raised);
+}
+
+.batch-detail-move-action > div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.batch-detail-move-action span {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+@media (max-width: 720px) {
+  .batch-detail-move-action {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

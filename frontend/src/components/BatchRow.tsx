@@ -27,6 +27,8 @@ type Props = {
   onRestoreQuarantine: (id: number) => void;
   onEdit: (batch: BatchSummary) => void;
   onOpenWorkspace: (batch: BatchSummary, forceUniversal?: boolean) => void;
+  onMoveBatch: (id: number) => Promise<void>;
+  moveLoading: boolean;
 };
 
 function confidenceColor(percent: number): string {
@@ -164,6 +166,8 @@ export default function BatchRow({
   onRestoreQuarantine,
   onEdit,
   onOpenWorkspace,
+  onMoveBatch,
+  moveLoading,
 }: Props) {
   const awaitingQuarantine = batch.status === "needs_quarantine_review";
   const quarantined = batch.status === "quarantined";
@@ -374,6 +378,21 @@ export default function BatchRow({
             {detail && (
               <>
                 <BatchDetail batch={detail} moveSummary={moveSummary} review={review} onEditBatch={onEdit} onApproveBatch={onApprove} />
+                {batch.status === "approved" && (
+                  <section className="batch-detail-move-action">
+                    <div>
+                      <strong>Canary move</strong>
+                      <span>Preflight and move only this approved batch.</span>
+                    </div>
+                    <button
+                      className="btn btn--green"
+                      disabled={moveLoading}
+                      onClick={() => void onMoveBatch(batch.id)}
+                    >
+                      <i className={`ti ti-${moveLoading ? "loader-2 spinner" : "circle-arrow-right"}`} /> Move this batch
+                    </button>
+                  </section>
+                )}
                 <MoveManifestProof batch={batch} moveSummary={moveSummary} />
               </>
             )}

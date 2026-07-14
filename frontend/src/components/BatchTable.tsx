@@ -41,6 +41,8 @@ type Props = {
   onOpenWorkspace: (batch: BatchSummary, forceUniversal?: boolean) => void;
   onBulkApprove: () => Promise<void>;
   onBulkReject: () => Promise<void>;
+  onMoveSelected: () => Promise<void>;
+  onMoveBatch: (id: number) => Promise<void>;
 };
 
 export default function BatchTable({
@@ -68,6 +70,8 @@ export default function BatchTable({
   onOpenWorkspace,
   onBulkApprove,
   onBulkReject,
+  onMoveSelected,
+  onMoveBatch,
 }: Props) {
   const [expanded, setExpanded] = useState<number | null>(null);
   const selectableBatches = batches.filter((batch) => !isProcessedContainerBatch(batch));
@@ -81,6 +85,9 @@ export default function BatchTable({
   ).length;
   const rejectableCount = selectedBatches.filter(
     (batch) => batch.status !== "moved",
+  ).length;
+  const movableCount = selectedBatches.filter(
+    (batch) => batch.status === "approved",
   ).length;
 
   const handleToggle = (id: number) => {
@@ -108,6 +115,11 @@ export default function BatchTable({
           {rejectableCount > 0 && (
             <button className="btn btn--compact" disabled={bulkLoading} onClick={() => void onBulkReject()}>
               <i className="ti ti-x" /> Reject selected
+            </button>
+          )}
+          {movableCount > 0 && (
+            <button className="btn btn--compact btn--green" disabled={bulkLoading} onClick={() => void onMoveSelected()}>
+              <i className={`ti ti-${bulkLoading ? "loader-2 spinner" : "circle-arrow-right"}`} /> Move selected
             </button>
           )}
           <button className="btn btn--compact" disabled={bulkLoading} onClick={() => onSelectAll(false)}>
@@ -184,6 +196,8 @@ export default function BatchTable({
                 onRestoreQuarantine={onRestoreQuarantine}
                 onEdit={onEdit}
                 onOpenWorkspace={onOpenWorkspace}
+                onMoveBatch={onMoveBatch}
+                moveLoading={bulkLoading}
               />
             ))}
           </tbody>

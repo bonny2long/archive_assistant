@@ -14,7 +14,9 @@ import type {
   LibrarySummary as LibrarySummaryData,
   MovieCollectionReviewUpdate,
   MovieMetadataUpdate,
+  MoveResult,
   ScanJobStatus,
+  SelectedMoveResult,
   SystemTimeResponse,
   TabKey,
   TvMetadataUpdate,
@@ -880,32 +882,99 @@ export default function App() {
     }
   };
 
+  const applyMoveResult = async (
+    result: MoveResult | SelectedMoveResult,
+    label: string,
+  ) => {
+    const selectedResult = "results" in result ? result : null;
+    const notMoved = selectedResult
+      ? selectedResult.results.filter((item) => !item.moved).length
+      : 0;
+    const hasProblems = result.errors.length > 0 || result.warnings.length > 0;
+    showToast(
+      `${label}: moved ${result.moved} batch(es)${notMoved ? `; ${notMoved} blocked or failed` : ""}.`,
+      hasProblems ? "error" : "info",
+    );
+    await loadBatches({ mode: "refresh" });
+    const summary = await api.getLibrarySummary();
+    setLibrarySummary(summary);
+    const hasFailedMoves = result.failed_moves > 0;
+    const title = hasFailedMoves
+      ? result.files_moved > 0 ? "Move partially complete" : "Move failed"
+      : result.warnings.length > 0 ? "Move complete with warnings"
+      : result.notices.length > 0 ? "Move complete with notices"
+      : "Move complete";
+    setQaSummary({
+      title,
+      text: `${result.moved} batches moved | ${result.files_moved} files moved | ${result.failed_moves} failed moves${notMoved ? ` | ${notMoved} blocked or failed batches` : ""}`,
+      auditRecords: result.audit_records,
+      notices: result.notices,
+      warnings: result.warnings,
+      errors: result.errors,
+    });
+  };
+
+  const runSelectedMove = async () => {
+    const ids = selectedBatches.map((batch) => batch.id);
+    if (ids.length === 0) return;
+    setBulkLoading(true);
+    try {
+      const preflight = await api.preflightSelectedMove(ids);
+      if (preflight.ready_count === 0) {
+        const blocker = preflight.batches.flatMap((batch) => batch.blockers)[0];
+        showToast(blocker ?? "No selected batches are ready to move.", "error");
+        return;
+      }
+      const confirmed = window.confirm(
+        `Move ${preflight.ready_count} approved batch(es) containing exactly ${preflight.source_file_count} source file(s)?`
+        + (preflight.blocked_count
+          ? `\n\n${preflight.blocked_count} selected batch(es) are blocked and will not move.`
+          : "")
+        + "\n\nNo destination files will be overwritten.",
+      );
+      if (!confirmed) return;
+      const result = await api.moveSelected(ids);
+      await applyMoveResult(result, "Selected move");
+      setSelected(new Set());
+    } catch (moveError: unknown) {
+      showToast(
+        moveError instanceof Error ? moveError.message : "Selected move failed",
+        "error",
+      );
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  const handleMoveBatch = async (batchId: number) => {
+    setBulkLoading(true);
+    try {
+      const preflight = await api.preflightSelectedMove([batchId]);
+      const check = preflight.batches[0];
+      if (!check?.ready) {
+        showToast(check?.blockers.join(" ") || "This batch is not ready to move.", "error");
+        return;
+      }
+      if (!window.confirm(
+        `Move batch ${batchId} containing exactly ${check.source_file_count} source file(s)?\n\nDestination:\n${check.destination}`,
+      )) return;
+      const result = await api.moveBatch(batchId);
+      await applyMoveResult(result, `Batch ${batchId}`);
+    } catch (moveError: unknown) {
+      showToast(
+        moveError instanceof Error ? moveError.message : "Batch move failed",
+        "error",
+      );
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
   const handleMove = async () => {
     setLoadingAction("move");
     try {
       const result = await api.moveApproved();
-      const hasProblems = result.errors.length > 0 || result.warnings.length > 0;
-      showToast(
-        hasProblems ? `Moved ${result.moved} batch(es) with issues` : `Moved ${result.moved} batch(es)`,
-        hasProblems ? "error" : "info",
-      );
-      await loadBatches({ mode: "refresh" });
-      const summary = await api.getLibrarySummary();
-      setLibrarySummary(summary);
-      const hasFailedMoves = result.failed_moves > 0;
-      const title = hasFailedMoves
-        ? result.files_moved > 0 ? "Move partially complete" : "Move failed"
-        : result.warnings.length > 0 ? "Move complete with warnings"
-        : result.notices.length > 0 ? "Move complete with notices"
-        : "Move complete";
-      setQaSummary({
-        title,
-        text: `${result.moved} batches moved | ${result.files_moved} files moved | ${result.failed_moves} failed moves`,
-        auditRecords: result.audit_records,
-        notices: result.notices,
-        warnings: result.warnings,
-        errors: result.errors,
-      });
+      await applyMoveResult(result, "Bulk move");
     } catch {
       showToast("Move failed", "error");
     } finally {
@@ -1001,6 +1070,8 @@ export default function App() {
             return Promise.resolve();
           }}
           onBulkReject={runBulkReject}
+          onMoveSelected={runSelectedMove}
+          onMoveBatch={handleMoveBatch}
         />
       </div>
       <footer className="app-footer">

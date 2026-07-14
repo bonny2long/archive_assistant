@@ -46,7 +46,7 @@ export default function ActionBar({
           <i className={`ti ti-scan ${loadingAction === "scan" || isScanningIngest ? "spinner" : ""}`} /> {isScanningIngest ? "Scanning ingest" : "Scan ingest"}
         </button>
         <button className="btn btn--green" disabled={disabled} onClick={() => void onMove()}>
-          <i className={`ti ti-circle-arrow-right ${loadingAction === "move" ? "spinner" : ""}`} /> Move approved
+          <i className={`ti ti-circle-arrow-right ${loadingAction === "move" ? "spinner" : ""}`} /> Move all approved
         </button>
         {devToolsEnabled && (
           <button

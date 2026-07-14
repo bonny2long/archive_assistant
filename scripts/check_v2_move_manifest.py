@@ -25,6 +25,7 @@ def file(path: Path, role: str, size: int = 100) -> SimpleNamespace:
         extension=path.suffix,
         size_bytes=size,
         detected_role=role,
+        metadata_json={},
     )
 
 

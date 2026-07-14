@@ -851,6 +851,45 @@ class MoveResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class SelectedMoveRequest(BaseModel):
+    batch_ids: list[int] = Field(min_length=1, max_length=100)
+
+
+class MovePreflightBatch(BaseModel):
+    batch_id: int
+    media_type: str
+    source_file_count: int
+    destination: str | None = None
+    expected_manifest_path: str | None = None
+    ready: bool
+    blockers: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class SelectedMovePreflightResponse(BaseModel):
+    batches: list[MovePreflightBatch]
+    ready_count: int
+    blocked_count: int
+    source_file_count: int
+
+
+class SelectedMoveBatchResult(BaseModel):
+    batch_id: int
+    status: str
+    moved: bool
+    files_moved: int = 0
+    destination: str | None = None
+    manifest: dict | None = None
+    blockers: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class SelectedMoveResponse(MoveResponse):
+    requested: int
+    results: list[SelectedMoveBatchResult] = Field(default_factory=list)
+
+
 class ScanMusicResponse(BaseModel):
     created: int
     skipped_duplicates: int

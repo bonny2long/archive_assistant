@@ -1,7 +1,9 @@
 import json
 import shutil
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Iterable
 from sqlalchemy.orm import Session, selectinload
 from app.core.config import settings
 from app.core.time import now_utc, serialize_utc
@@ -26,7 +28,7 @@ from app.services.library_manifest import (
     append_library_index_entry,
     write_library_manifest,
 )
-from app.services.move_manifest import write_move_manifest
+from app.services.move_manifest import expected_move_manifest_path, write_move_manifest
 from app.services.parent_candidate_materialization import build_parent_candidate_summary
 from app.services.duplicate_fragment_review import (
     duplicate_fragment_summary_for_batch,
@@ -58,6 +60,292 @@ def _music_track_completeness_blocker(batch: IngestBatch) -> str | None:
         )
         return f"Music album has conflicting track numbers: {duplicate_text}." if duplicate_text else "Music album has conflicting tracks before move."
     return None
+
+
+def _batch_preflight_destination(batch: IngestBatch) -> Path | None:
+    metadata = dict(batch.metadata_json or {})
+    if batch.detected_type == "video_movie" and metadata.get("review_type") != "movie_collection":
+        title = str(metadata.get("title") or "Unknown Movie")
+        year = str(metadata.get("year") or "")[:4]
+        edition = str(metadata.get("edition") or "").strip()
+        folder = f"{year or 'Unknown Year'} - {title}"
+        if edition:
+            folder += f" [{edition}]"
+        return settings.movies_dir / _safe_path_part(folder)
+    if batch.detected_type == "video_tv_show":
+        return settings.tv_dir / safe_tv_path_part(
+            str(metadata.get("show_title") or "Unknown TV Show")
+        )
+    if batch.detected_type == "audiobook":
+        return audiobook_destination(
+            audiobooks_root=settings.audiobooks_dir,
+            author=str(metadata.get("author") or "Unknown Author"),
+            title=str(metadata.get("title") or "Unknown Title"),
+            year=str(metadata.get("year") or "").strip()[:4] or None,
+        )
+    if batch.detected_type == "book" and metadata.get("review_type") != "book_collection":
+        return book_destination(
+            str(metadata.get("format") or "EPUB"),
+            str(metadata.get("author") or "Unknown Author"),
+            str(metadata.get("title") or "Unknown Title"),
+            str(metadata.get("year") or "")[:4] or None,
+            settings.books_dir,
+        )
+    if batch.suggested_destination:
+        return Path(batch.suggested_destination)
+    return None
+
+
+def _preflight_movable_files(batch: IngestBatch) -> list:
+    if batch.detected_type == "video_tv_show":
+        return [
+            item for item in batch.files
+            if item.detected_role in {"tv_episode", "tv_subtitle", "tv_artwork"}
+            and not (
+                item.detected_role == "tv_episode"
+                and not (item.metadata_json or {}).get("include", True)
+            )
+        ]
+    if batch.detected_type == "audiobook":
+        return [
+            item for item in batch.files
+            if item.detected_role in {
+                "audiobook_audio", "audiobook_artwork",
+                "audiobook_sidecar", "artwork",
+            }
+        ]
+    return list(batch.files)
+
+
+def _preflight_destination_paths(
+    batch: IngestBatch,
+    destination: Path,
+) -> list[Path]:
+    metadata = dict(batch.metadata_json or {})
+    source_root = Path(batch.source_path)
+    paths: list[Path] = []
+    reserved: set[str] = set()
+    disc_count = int(metadata.get("disc_count") or 1)
+    for ingest_file in _preflight_movable_files(batch):
+        if batch.detected_type == "music_album":
+            filename = (
+                ingest_file.file_name
+                if ingest_file.detected_role == "artwork"
+                else music_track_filename(
+                    ingest_file.metadata_json or {},
+                    ingest_file.extension,
+                    disc_count,
+                    ingest_file.file_name,
+                )
+            )
+            planned = destination / filename
+            if ingest_file.detected_role == "artwork":
+                planned = _unique_artwork_destination(planned, reserved)
+            reserved.add(_path_key(planned))
+            paths.append(planned)
+            continue
+        if batch.detected_type == "video_tv_show":
+            if ingest_file.detected_role == "tv_episode":
+                planned = _tv_episode_destination(destination, ingest_file)
+            elif ingest_file.detected_role == "tv_subtitle":
+                planned = _tv_subtitle_destination(destination, ingest_file)
+            else:
+                planned = _tv_artwork_destination(batch, destination, ingest_file)
+            if planned is not None:
+                if ingest_file.detected_role == "tv_artwork":
+                    planned = _unique_artwork_destination(planned, reserved)
+                reserved.add(_path_key(planned))
+                paths.append(planned)
+            continue
+        if batch.detected_type == "audiobook":
+            source = Path(ingest_file.file_path)
+            relative = Path(ingest_file.file_name)
+            if source_root.is_dir():
+                try:
+                    relative = source.relative_to(source_root)
+                except ValueError:
+                    pass
+            planned = destination / relative
+            reserved.add(_path_key(planned))
+            paths.append(planned)
+            continue
+        planned = destination / ingest_file.file_name
+        if batch.detected_type == "video_movie" and ingest_file.detected_role in {
+            "movie_artwork", "subtitle",
+        }:
+            planned = _unique_artwork_destination(planned, reserved)
+        reserved.add(_path_key(planned))
+        paths.append(planned)
+    return paths
+
+
+def preflight_selected_batches(
+    db: Session,
+    batch_ids: Iterable[int],
+) -> list[dict]:
+    """Validate selected moves without changing the database or filesystem."""
+    requested_ids = list(dict.fromkeys(int(value) for value in batch_ids))
+    if not requested_ids:
+        return []
+    loaded = (
+        db.query(IngestBatch)
+        .options(selectinload(IngestBatch.files))
+        .filter(IngestBatch.id.in_(requested_ids))
+        .all()
+    )
+    by_id = {batch.id: batch for batch in loaded}
+    results: list[dict] = []
+    planned_paths_by_batch: dict[int, list[Path]] = {}
+
+    for batch_id in requested_ids:
+        batch = by_id.get(batch_id)
+        if batch is None:
+            results.append({
+                "batch_id": batch_id,
+                "media_type": "unknown",
+                "source_file_count": 0,
+                "destination": None,
+                "expected_manifest_path": None,
+                "ready": False,
+                "blockers": ["Batch does not exist."],
+                "warnings": [],
+            })
+            continue
+
+        metadata = dict(batch.metadata_json or {})
+        movable_files = _preflight_movable_files(batch)
+        destination = _batch_preflight_destination(batch)
+        blockers: list[str] = []
+        warnings: list[str] = []
+
+        if batch.status != "approved":
+            blockers.append(
+                f"Batch status is {batch.status}; approved is required."
+            )
+        parent_summary = build_parent_candidate_summary(db, batch)
+        if parent_summary["is_parent_review_container"]:
+            blockers.append(
+                "Parent review containers must create child batches before move."
+            )
+        duplicate_summary = duplicate_fragment_summary_for_batch(db, batch)
+        if duplicate_summary["requires_duplicate_review"]:
+            blockers.append(
+                "Duplicate/fragment review must be resolved before move."
+            )
+        if (
+            metadata.get("metadata_quality") in {"weak", "broken"}
+            and not batch.metadata_confirmed
+        ):
+            blockers.append("Metadata review must be confirmed before move.")
+        completeness_blocker = _music_track_completeness_blocker(batch)
+        if completeness_blocker:
+            blockers.append(completeness_blocker)
+        if batch.detected_type == "video_tv_show":
+            blockers.extend(_validate_tv_file_metadata_ready(batch))
+        if not movable_files:
+            blockers.append("Batch has no attached files eligible for move.")
+
+        missing_sources = [
+            str(item.file_path)
+            for item in movable_files
+            if not Path(item.file_path).exists()
+        ]
+        if missing_sources:
+            blockers.append(
+                f"{len(missing_sources)} source file(s) no longer exist."
+            )
+        if destination is None:
+            blockers.append("Batch has no authoritative destination.")
+        elif destination.exists():
+            blockers.append(f"Destination already exists: {destination}")
+
+        if destination is not None:
+            planned_paths = _preflight_destination_paths(batch, destination)
+            planned_paths_by_batch[batch.id] = planned_paths
+            path_counts = Counter(_path_key(path) for path in planned_paths)
+            duplicate_paths = [
+                path for path, count in path_counts.items() if count > 1
+            ]
+            if duplicate_paths:
+                blockers.append(
+                    f"{len(duplicate_paths)} destination filename collision(s) "
+                    "exist inside this batch."
+                )
+            existing_files = [path for path in planned_paths if path.exists()]
+            if existing_files:
+                blockers.append(
+                    f"{len(existing_files)} destination file(s) already exist."
+                )
+
+        ignored_sidecars = int(metadata.get("ignored_sidecar_count") or 0)
+        if ignored_sidecars:
+            warnings.append(
+                f"{ignored_sidecars} unowned sidecar file(s) will remain in source."
+            )
+        manifest_path = (
+            expected_move_manifest_path(
+                batch_id=batch.id,
+                detected_type=batch.detected_type,
+                review_type=str(metadata.get("review_type") or ""),
+                metadata=metadata,
+                destination_roots=[destination],
+            )
+            if destination is not None
+            else None
+        )
+        results.append({
+            "batch_id": batch.id,
+            "media_type": batch.detected_type,
+            "source_file_count": len(movable_files),
+            "destination": str(destination) if destination is not None else None,
+            "expected_manifest_path": (
+                str(manifest_path) if manifest_path is not None else None
+            ),
+            "ready": not blockers,
+            "blockers": list(dict.fromkeys(blockers)),
+            "warnings": list(dict.fromkeys(warnings)),
+        })
+
+    destination_groups: dict[str, list[dict]] = {}
+    for result in results:
+        destination = result.get("destination")
+        if destination:
+            destination_groups.setdefault(
+                _path_key(Path(destination)), []
+            ).append(result)
+    for group in destination_groups.values():
+        if len(group) < 2:
+            continue
+        ids = ", ".join(str(item["batch_id"]) for item in group)
+        blocker = f"Selected batches resolve to the same destination: {ids}."
+        for item in group:
+            item["blockers"].append(blocker)
+            item["ready"] = False
+
+    planned_path_owners: dict[str, set[int]] = {}
+    for batch_id, planned_paths in planned_paths_by_batch.items():
+        for path in planned_paths:
+            planned_path_owners.setdefault(_path_key(path), set()).add(batch_id)
+    colliding_batch_ids: dict[int, set[int]] = {}
+    for owners in planned_path_owners.values():
+        if len(owners) < 2:
+            continue
+        for batch_id in owners:
+            colliding_batch_ids.setdefault(batch_id, set()).update(
+                owners - {batch_id}
+            )
+    for result in results:
+        other_ids = colliding_batch_ids.get(int(result["batch_id"]))
+        if not other_ids:
+            continue
+        ids = ", ".join(str(value) for value in sorted(other_ids))
+        result["blockers"].append(
+            f"Planned destination files collide with selected batch(es): {ids}."
+        )
+        result["ready"] = False
+
+    return results
+
 
 def _safe_path_part(value: str) -> str:
     return "".join(c if c not in '<>:"/\\|?*' else "_" for c in value).strip()
@@ -2042,13 +2330,28 @@ def _move_book_batch(
     return moved_files, failed_files
 
 
-def move_approved_batches(db: Session) -> tuple[int, list[str]]:
-    approved = (
+def move_approved_batches(
+    db: Session,
+    batch_ids: Iterable[int] | None = None,
+) -> tuple[int, list[str]]:
+    requested_ids = (
+        list(dict.fromkeys(int(value) for value in batch_ids))
+        if batch_ids is not None
+        else None
+    )
+    if requested_ids == []:
+        return 0, []
+    query = (
         db.query(IngestBatch)
         .options(selectinload(IngestBatch.files))
         .filter(IngestBatch.status == "approved")
-        .all()
     )
+    if requested_ids is not None:
+        query = query.filter(IngestBatch.id.in_(requested_ids))
+    approved = query.all()
+    if requested_ids is not None:
+        by_id = {batch.id: batch for batch in approved}
+        approved = [by_id[batch_id] for batch_id in requested_ids if batch_id in by_id]
     moved = 0
     errors: list[str] = []
 

@@ -916,6 +916,41 @@ export type MoveResult = {
   warnings: string[];
 };
 
+export type MovePreflightBatch = {
+  batch_id: number;
+  media_type: string;
+  source_file_count: number;
+  destination?: string | null;
+  expected_manifest_path?: string | null;
+  ready: boolean;
+  blockers: string[];
+  warnings: string[];
+};
+
+export type SelectedMovePreflight = {
+  batches: MovePreflightBatch[];
+  ready_count: number;
+  blocked_count: number;
+  source_file_count: number;
+};
+
+export type SelectedMoveBatchResult = {
+  batch_id: number;
+  status: string;
+  moved: boolean;
+  files_moved: number;
+  destination?: string | null;
+  manifest?: (MoveManifestPointer & { batch_id: number }) | null;
+  blockers: string[];
+  errors: string[];
+  warnings: string[];
+};
+
+export type SelectedMoveResult = MoveResult & {
+  requested: number;
+  results: SelectedMoveBatchResult[];
+};
+
 export type MoveManifestPointer = {
   json_path: string;
   markdown_path?: string | null;

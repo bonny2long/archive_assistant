@@ -22,6 +22,8 @@ import type {
   MovieCollectionReviewUpdate,
   MovieMetadataUpdate,
   MoveResult,
+  SelectedMovePreflight,
+  SelectedMoveResult,
   PaginatedResponse,
   ScanMusicResponse,
   ScanJobStatus,
@@ -190,6 +192,12 @@ export const api = {
   restoreQuarantinedBatch: (id: number) =>
     request<BatchSummary>(`/batches/${id}/restore-quarantine`, "POST"),
   moveApproved: () => request<MoveResult>("/move/approved", "POST"),
+  preflightSelectedMove: (batchIds: number[]) =>
+    request<SelectedMovePreflight>("/move/selected/preflight", "POST", { batch_ids: batchIds }),
+  moveSelected: (batchIds: number[]) =>
+    request<SelectedMoveResult>("/move/selected", "POST", { batch_ids: batchIds }),
+  moveBatch: (id: number) =>
+    request<SelectedMoveResult>(`/batches/${id}/move`, "POST"),
   getLibrarySummary: () => request<LibrarySummary>("/library/summary"),
   resetTestData: () => request<DevResetResponse>("/dev/reset/test-data", "POST"),
 };

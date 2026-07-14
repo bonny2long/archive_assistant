@@ -105,6 +105,28 @@ def _manifest_paths(
     return directory / "move_manifest.json", directory / "move_manifest.md"
 
 
+def expected_move_manifest_path(
+    *,
+    batch_id: int,
+    detected_type: str,
+    review_type: str,
+    metadata: dict,
+    destination_roots: list[Path],
+) -> Path:
+    """Return the authoritative JSON manifest path without writing anything."""
+    locked_metadata = dict(metadata)
+    locked_metadata["metadata_locked_for_move"] = True
+    json_path, _ = _manifest_paths(
+        batch_id=batch_id,
+        detected_type=detected_type,
+        review_type=review_type,
+        metadata=locked_metadata,
+        destination_roots=destination_roots,
+        created_at=datetime.now(timezone.utc),
+    )
+    return json_path
+
+
 def _confirmed_metadata(detected_type: str, metadata: dict) -> dict:
     if detected_type == "video_movie":
         if (

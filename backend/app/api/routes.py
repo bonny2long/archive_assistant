@@ -41,7 +41,12 @@ from app.schemas.archive import (
     MovieCollectionReviewUpdate,
     MovieMetadataUpdate,
     MoveActionOut,
+    MovePreflightBatch,
     MoveResponse,
+    SelectedMoveBatchResult,
+    SelectedMovePreflightResponse,
+    SelectedMoveRequest,
+    SelectedMoveResponse,
     PaginatedResponse,
     TvMetadataUpdate,
     TvEpisodeReviewUpdate,
@@ -83,7 +88,11 @@ from app.services.music_metadata import (
     sort_music_tracks,
 )
 from app.services.scan_runtime import get_scan_status, start_scan_job
-from app.services.mover import _lock_metadata_for_move, move_approved_batches
+from app.services.mover import (
+    _lock_metadata_for_move,
+    move_approved_batches,
+    preflight_selected_batches,
+)
 from app.services.quarantine import quarantine_batch, restore_quarantined_batch
 from app.services.video_metadata import safe_movie_path_part, safe_tv_path_part
 from app.services.tv_review import apply_tv_episode_review_patches, sync_tv_episode_metadata_to_ingest_files
@@ -2471,26 +2480,21 @@ def send_to_recovery(batch_id: int, db: Session = Depends(get_db)):
     return ApproveResponse(batch_id=batch.id, status=batch.status, message="Batch sent to metadata recovery")
 
 
-@router.post("/move/approved", response_model=MoveResponse)
-def move_approved(db: Session = Depends(get_db)):
-    approved_ids = [
-        value[0]
-        for value in (
-            db.query(IngestBatch.id)
-            .filter(IngestBatch.status == "approved")
-            .all()
-        )
-    ]
-    moved, errors = move_approved_batches(db)
+def _move_response_data(
+    db: Session,
+    batch_ids: list[int],
+    moved: int,
+    errors: list[str],
+) -> dict:
     moved_batches = (
         db.query(IngestBatch)
-        .filter(IngestBatch.id.in_(approved_ids))
+        .filter(IngestBatch.id.in_(batch_ids))
         .all()
-        if approved_ids
+        if batch_ids
         else []
     )
-    manifests = []
-    notices = []
+    manifests: list[dict] = []
+    notices: list[str] = []
     for batch in moved_batches:
         pointer = (batch.metadata_json or {}).get("move_manifest")
         if pointer:
@@ -2515,25 +2519,169 @@ def move_approved(db: Session = Depends(get_db)):
             "Cleaner will block cleanup for that source until evidence exists."
         )
 
-    return MoveResponse(
-        moved=moved,
-        errors=operation_errors,
-        files_moved=sum(
+    return {
+        "moved": moved,
+        "errors": operation_errors,
+        "files_moved": sum(
             int(item.get("files_moved") or 0)
             + int(item.get("artwork_moved") or 0)
             for item in manifests
         ),
-        failed_moves=sum(
+        "failed_moves": sum(
             int(item.get("failed_moves") or 0) for item in manifests
         ),
-        manifests=manifests,
-        audit_records=[
+        "manifests": manifests,
+        "audit_records": [
             str(item.get("markdown_path") or item.get("json_path"))
             for item in manifests
         ],
-        notices=list(dict.fromkeys(notices)),
-        warnings=warnings,
+        "notices": list(dict.fromkeys(notices)),
+        "warnings": warnings,
+    }
+
+
+def _selected_preflight_response(results: list[dict]) -> SelectedMovePreflightResponse:
+    return SelectedMovePreflightResponse(
+        batches=[MovePreflightBatch(**item) for item in results],
+        ready_count=sum(bool(item["ready"]) for item in results),
+        blocked_count=sum(not bool(item["ready"]) for item in results),
+        source_file_count=sum(
+            int(item["source_file_count"])
+            for item in results
+            if item["ready"]
+        ),
     )
+
+
+def _execute_selected_move(
+    db: Session,
+    batch_ids: list[int],
+) -> SelectedMoveResponse:
+    requested_ids = list(dict.fromkeys(batch_ids))
+    preflight = preflight_selected_batches(db, requested_ids)
+    ready_ids = [item["batch_id"] for item in preflight if item["ready"]]
+    blocked_errors = [
+        f"Batch {item['batch_id']}: {blocker}"
+        for item in preflight
+        for blocker in item["blockers"]
+    ]
+    moved, mover_errors = move_approved_batches(db, ready_ids)
+    response_data = _move_response_data(
+        db,
+        requested_ids,
+        moved,
+        blocked_errors + mover_errors,
+    )
+    response_data["warnings"] = list(dict.fromkeys([
+        *response_data["warnings"],
+        *[
+            f"Batch {item['batch_id']}: {warning}"
+            for item in preflight
+            for warning in item["warnings"]
+        ],
+    ]))
+
+    refreshed = {
+        batch.id: batch
+        for batch in (
+            db.query(IngestBatch)
+            .filter(IngestBatch.id.in_(requested_ids))
+            .all()
+            if requested_ids
+            else []
+        )
+    }
+    manifest_by_batch = {
+        int(item["batch_id"]): item for item in response_data["manifests"]
+    }
+    preflight_by_batch = {int(item["batch_id"]): item for item in preflight}
+    results: list[SelectedMoveBatchResult] = []
+    for batch_id in requested_ids:
+        batch = refreshed.get(batch_id)
+        check = preflight_by_batch[batch_id]
+        prefix = f"Batch {batch_id}:"
+        batch_errors = [
+            error.removeprefix(prefix).strip()
+            for error in response_data["errors"]
+            if error.startswith(prefix)
+        ]
+        batch_warnings = [
+            warning.removeprefix(prefix).strip()
+            for warning in response_data["warnings"]
+            if warning.startswith(prefix)
+        ]
+        manifest = manifest_by_batch.get(batch_id)
+        results.append(SelectedMoveBatchResult(
+            batch_id=batch_id,
+            status=batch.status if batch is not None else "not_found",
+            moved=bool(batch is not None and batch.status == "moved"),
+            files_moved=(
+                int(manifest.get("files_moved") or 0)
+                + int(manifest.get("artwork_moved") or 0)
+                if manifest
+                else 0
+            ),
+            destination=(
+                batch.suggested_destination
+                if batch is not None
+                else check.get("destination")
+            ),
+            manifest=manifest,
+            blockers=check["blockers"],
+            errors=batch_errors,
+            warnings=list(dict.fromkeys([
+                *check["warnings"],
+                *batch_warnings,
+            ])),
+        ))
+
+    return SelectedMoveResponse(
+        **response_data,
+        requested=len(requested_ids),
+        results=results,
+    )
+
+
+@router.post("/move/approved", response_model=MoveResponse)
+def move_approved(db: Session = Depends(get_db)):
+    approved_ids = [
+        value[0]
+        for value in (
+            db.query(IngestBatch.id)
+            .filter(IngestBatch.status == "approved")
+            .all()
+        )
+    ]
+    moved, errors = move_approved_batches(db)
+    return MoveResponse(**_move_response_data(db, approved_ids, moved, errors))
+
+
+@router.post(
+    "/move/selected/preflight",
+    response_model=SelectedMovePreflightResponse,
+)
+def preflight_selected_move(
+    request: SelectedMoveRequest,
+    db: Session = Depends(get_db),
+):
+    return _selected_preflight_response(
+        preflight_selected_batches(db, request.batch_ids)
+    )
+
+
+@router.post("/move/selected", response_model=SelectedMoveResponse)
+def move_selected(
+    request: SelectedMoveRequest,
+    db: Session = Depends(get_db),
+):
+    return _execute_selected_move(db, request.batch_ids)
+
+
+@router.post("/batches/{batch_id}/move", response_model=SelectedMoveResponse)
+def move_batch(batch_id: int, db: Session = Depends(get_db)):
+    if db.get(IngestBatch, batch_id) is None:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    return _execute_selected_move(db, [batch_id])
 
 
 @router.get("/library")
