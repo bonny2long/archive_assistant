@@ -6,7 +6,7 @@ from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
 
 from app.models.archive import IngestBatch, IngestFile
-from app.models.media_metadata import MediaIdentityCandidate, UniversalIngestionReviewAction
+from app.models.media_metadata import CandidateMember, MediaIdentityCandidate, UniversalIngestionReviewAction
 
 
 # Legacy parent_review_state values kept for response/history compatibility; current workflow uses parent_container_state.
@@ -190,6 +190,84 @@ def empty_parent_candidate_summary() -> dict[str, Any]:
     }
 
 
+def _tv_episode_candidates_form_one_show(
+    db: Session,
+    batch: IngestBatch,
+    candidate_ids: list[int],
+) -> bool:
+    """Treat episode-level candidates as members of one reviewed TV show."""
+    metadata = batch.metadata_json or {}
+    show_title = str(metadata.get("show_title") or "").strip()
+    if (
+        batch.detected_type != "video_tv_show"
+        or metadata.get("review_type") != "tv_show"
+        or not show_title
+        or len(candidate_ids) <= 1
+    ):
+        return False
+
+    candidate_id_set = set(candidate_ids)
+    candidate_rows = (
+        db.query(
+            MediaIdentityCandidate.id,
+            MediaIdentityCandidate.candidate_media_type,
+        )
+        .filter(MediaIdentityCandidate.id.in_(candidate_ids))
+        .all()
+    )
+    if {int(row[0]) for row in candidate_rows} != candidate_id_set:
+        return False
+    if any(
+        str(row[1] or "").casefold() not in {"tv", "tv_episode"}
+        for row in candidate_rows
+    ):
+        return False
+
+    members = (
+        db.query(CandidateMember)
+        .filter(CandidateMember.candidate_id.in_(candidate_ids))
+        .all()
+    )
+    primary_episode_members = [
+        member
+        for member in members
+        if member.role_in_candidate == "primary"
+        and member.media_class == "tv_episode"
+        and member.batch_file_id is not None
+    ]
+    if {
+        int(member.candidate_id) for member in primary_episode_members
+    } != candidate_id_set:
+        return False
+
+    file_ids = {
+        int(member.batch_file_id) for member in primary_episode_members
+    }
+    episode_files = (
+        db.query(IngestFile)
+        .filter(
+            IngestFile.id.in_(file_ids),
+            IngestFile.batch_id == batch.id,
+            IngestFile.detected_role == "tv_episode",
+        )
+        .all()
+    )
+    if {int(item.id) for item in episode_files} != file_ids:
+        return False
+
+    show_key = "".join(character for character in show_title.casefold() if character.isalnum())
+    return bool(show_key) and all(
+        "".join(
+            character
+            for character in str(
+                (item.metadata_json or {}).get("show_title") or ""
+            ).casefold()
+            if character.isalnum()
+        ) == show_key
+        for item in episode_files
+    )
+
+
 def build_parent_candidate_summary(
     db: Session | None,
     batch: IngestBatch,
@@ -210,10 +288,23 @@ def build_parent_candidate_summary(
         ]
     candidate_group_count = len(candidate_ids)
     explicit_parent_container = is_parent_container_batch(batch)
-    if not explicit_parent_container and candidate_group_count <= 1:
+    tv_episode_candidates_form_one_show = (
+        not explicit_parent_container
+        and _tv_episode_candidates_form_one_show(
+            db,
+            batch,
+            candidate_ids,
+        )
+    )
+    if not explicit_parent_container and (
+        candidate_group_count <= 1 or tv_episode_candidates_form_one_show
+    ):
+        displayed_group_count = (
+            1 if tv_episode_candidates_form_one_show else candidate_group_count
+        )
         return empty_parent_candidate_summary() | {
-            "candidate_group_count": candidate_group_count,
-            "remaining_candidate_count": candidate_group_count,
+            "candidate_group_count": displayed_group_count,
+            "remaining_candidate_count": displayed_group_count,
         }
 
     # Multi-candidate review containers must report their real attached inventory,

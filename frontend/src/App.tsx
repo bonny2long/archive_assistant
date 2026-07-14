@@ -890,7 +890,11 @@ export default function App() {
     const notMoved = selectedResult
       ? selectedResult.results.filter((item) => !item.moved).length
       : 0;
-    const hasProblems = result.errors.length > 0 || result.warnings.length > 0;
+    const hasProblems = (
+      result.errors.length > 0
+      || result.failed_moves > 0
+      || notMoved > 0
+    );
     showToast(
       `${label}: moved ${result.moved} batch(es)${notMoved ? `; ${notMoved} blocked or failed` : ""}.`,
       hasProblems ? "error" : "info",

@@ -838,6 +838,73 @@ def test_single_item_batch_stays_normal(db) -> None:
     assert display["item_label"] == "tracks"
 
 
+def test_tv_episode_candidates_stay_one_show_batch(db) -> None:
+    batch = IngestBatch(
+        source_kind="manual-drop",
+        source_path=str(PROJECT_ROOT / ".tmp" / "severance-season-1"),
+        detected_type="video_tv_show",
+        status="approved",
+        confidence=1.0,
+        metadata_confirmed=True,
+        metadata_json={
+            "review_type": "tv_show",
+            "review_mode": "guided_episode_review",
+            "review_confirmed": True,
+            "show_title": "Severance",
+            "episode_count": 3,
+        },
+    )
+    db.add(batch)
+    db.flush()
+
+    for episode_number in range(1, 4):
+        episode = IngestFile(
+            batch_id=batch.id,
+            file_path=str(
+                Path(batch.source_path)
+                / f"Severance S01E{episode_number:02d}.mp4"
+            ),
+            file_name=f"Severance S01E{episode_number:02d}.mp4",
+            extension=".mp4",
+            size_bytes=4096,
+            detected_role="tv_episode",
+            metadata_json={
+                "show_title": "Severance",
+                "season_number": 1,
+                "episode_number": episode_number,
+                "episode_code": f"S01E{episode_number:02d}",
+            },
+        )
+        db.add(episode)
+        db.flush()
+        candidate = MediaIdentityCandidate(
+            batch_id=batch.id,
+            candidate_key=f"tv:severance:s01:e{episode_number:02d}",
+            candidate_media_type="tv",
+            candidate_title=episode.file_name,
+            candidate_confidence=0.84,
+        )
+        db.add(candidate)
+        db.flush()
+        db.add(CandidateMember(
+            candidate_id=candidate.id,
+            batch_file_id=episode.id,
+            relative_path=episode.file_name,
+            media_class="tv_episode",
+            role_in_candidate="primary",
+        ))
+    db.commit()
+
+    summary = build_parent_candidate_summary(db, batch)
+    assert summary["is_parent_review_container"] is False
+    assert summary["candidate_group_count"] == 1
+
+    display = build_batch_display_fields(batch, summary)
+    assert display["media_label"] == "TV Show"
+    assert display["primary_name"] == "Severance"
+    assert display["item_count"] == 3
+
+
 def test_parent_source_progress_ui_contract() -> None:
     batch_row = (PROJECT_ROOT / "frontend" / "src" / "components" / "BatchRow.tsx").read_text(encoding="utf-8")
     discography_editor = (PROJECT_ROOT / "frontend" / "src" / "components" / "DiscographyEditor.tsx").read_text(encoding="utf-8")
@@ -869,6 +936,7 @@ def main() -> None:
         test_discography_release_decisions_leave_remainder_on_parent(db)
         test_failed_materialization_does_not_complete_parent(db)
         test_single_item_batch_stays_normal(db)
+        test_tv_episode_candidates_stay_one_show_batch(db)
         test_parent_source_progress_ui_contract()
         print("PASS - AA-QA1-FIX2.2 candidate-member-first materialization verified")
     finally:
