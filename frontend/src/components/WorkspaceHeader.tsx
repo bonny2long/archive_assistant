@@ -123,7 +123,7 @@ export default function WorkspaceHeader({
             <span className="review-workspace__badge--warn">Next: create child batches</span>
           )}
         </div>
-        {routing && !["music_editor_allowed", "audiobook_editor_allowed"].includes(routing.decision) && (
+        {routing && !["music_editor_allowed", "audiobook_editor_allowed", "media_editor_allowed"].includes(routing.decision) && (
           <small className="review-workspace__routing">
             {routing.reasons.length ? routing.reasons.join(" | ") : "Universal review is recommended for this batch."}
           </small>

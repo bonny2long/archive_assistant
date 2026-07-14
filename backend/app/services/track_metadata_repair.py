@@ -101,8 +101,11 @@ def rebuild_pending_music_track_metadata(batch: IngestBatch) -> dict[str, Any]:
     completeness = music_track_completeness_for_batch(batch)
     metadata["track_completeness"] = completeness
     metadata["present_track_numbers"] = completeness["present_track_numbers"]
+    metadata["present_track_positions"] = completeness["present_track_positions"]
     metadata["missing_track_numbers"] = completeness["missing_track_numbers"]
+    metadata["missing_track_positions"] = completeness["missing_track_positions"]
     metadata["duplicate_track_numbers"] = completeness["duplicate_track_numbers"]
+    metadata["duplicate_track_positions"] = completeness["duplicate_track_positions"]
     metadata["track_number_conflicts"] = completeness["track_number_conflicts"]
     metadata["track_number_conflict_summary"] = conflict_summary
     metadata["completeness_status"] = completeness["completeness_status"]
@@ -124,7 +127,7 @@ def rebuild_pending_music_track_metadata(batch: IngestBatch) -> dict[str, Any]:
     audit.append({
         "batch_id": batch.id,
         "repaired_at": now_utc().isoformat(),
-        "repair_version": "AA-TRACK2",
+        "repair_version": "AA-TRACK2.1",
         "attached_audio_file_count": len(audio_files),
         "previous": previous,
         "result": {
@@ -143,8 +146,11 @@ def rebuild_pending_music_track_metadata(batch: IngestBatch) -> dict[str, Any]:
         "track_count": metadata["track_count"],
         "disc_count": metadata["disc_count"],
         "present_track_numbers": completeness["present_track_numbers"],
+        "present_track_positions": completeness["present_track_positions"],
         "missing_track_numbers": completeness["missing_track_numbers"],
+        "missing_track_positions": completeness["missing_track_positions"],
         "duplicate_track_numbers": completeness["duplicate_track_numbers"],
+        "duplicate_track_positions": completeness["duplicate_track_positions"],
         "track_number_conflicts": completeness["track_number_conflicts"],
         "completeness_status": completeness["completeness_status"],
     }

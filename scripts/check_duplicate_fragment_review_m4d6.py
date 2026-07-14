@@ -23,6 +23,7 @@ from app.services.duplicate_fragment_review import (  # noqa: E402
     DuplicateFragmentResolutionError,
     build_duplicate_fragment_review,
     duplicate_fragment_summary_for_batch,
+    music_track_completeness_for_batch,
     resolve_duplicate_fragment_group,
 )
 from app.services.mover import move_approved_batches  # noqa: E402
@@ -278,6 +279,50 @@ def test_track_completeness_detects_internal_gaps(db) -> None:
     assert collapsed_row["missing_track_numbers"] == [1, 2, 5]
     assert collapsed_row["track_completeness"]["track_number_source"] == "filename"
     assert collapsed_row["completeness_status"] == "incomplete"
+
+
+def test_multidisc_track_positions_are_distinct(db) -> None:
+    batch = IngestBatch(
+        source_kind="manual-drop",
+        source_path="multidisc-regression",
+        detected_type="music_album",
+        status="pending_review",
+        metadata_json={
+            "artist": "Daft Punk",
+            "album": "Random Access Memories (10th Anniversary)",
+            "year": "2023",
+            "track_count": 22,
+            "disc_count": 2,
+        },
+    )
+    batch.files = [
+        IngestFile(
+            file_path=f"multidisc-regression/{disc}-{track:02d} - Disc {disc} Track {track}.flac",
+            file_name=f"{disc}-{track:02d} - Disc {disc} Track {track}.flac",
+            extension=".flac",
+            size_bytes=4096,
+            checksum=f"multidisc:{disc}:{track}",
+            detected_role="music_track",
+            metadata_json={
+                "title": f"Disc {disc} Track {track}",
+                "tracknumber": "1",
+                "discnumber": str(disc),
+            },
+        )
+        for disc, track_total in ((1, 13), (2, 9))
+        for track in range(1, track_total + 1)
+    ]
+    db.add(batch)
+    db.commit()
+    db.refresh(batch)
+
+    completeness = music_track_completeness_for_batch(batch)
+    assert completeness["completeness_status"] == "complete"
+    assert len(completeness["present_track_positions"]) == 22
+    assert completeness["missing_track_positions"] == []
+    assert completeness["duplicate_track_positions"] == []
+    assert completeness["track_number_conflicts"] == []
+    assert completeness["expected_track_count_by_disc"] == {"1": 13, "2": 9}
 
 
 def test_fragment_cluster_blocks_approval_and_move(db) -> None:
@@ -930,6 +975,7 @@ def main() -> None:
     Session = sessionmaker(bind=engine)
     tests = [
         test_track_completeness_detects_internal_gaps,
+        test_multidisc_track_positions_are_distinct,
         test_fragment_cluster_blocks_approval_and_move,
         test_same_destination_creates_duplicate_conflict,
         test_missing_file_ownership_is_flagged_and_blocked,

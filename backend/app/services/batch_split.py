@@ -18,6 +18,10 @@ from app.services.destination_authority import (
     safe_path_part as destination_safe_path_part,
     sync_batch_destination_fields,
 )
+from app.services.music_metadata import (
+    normalize_track_title_for_destination,
+    resolved_music_track_evidence,
+)
 from app.services.parent_candidate_materialization import (
     PARENT_CONTAINER_DRAINED,
     get_child_batch_count,
@@ -231,44 +235,24 @@ def _embedded_fields(ingest_file: IngestFile) -> dict[str, Any]:
     return {}
 
 
-def _track_number_value(value: object) -> int | str | None:
-    if value is None:
-        return None
-    text = str(value).strip()
-    if not text:
-        return None
-    first = re.split(r"[/\-]", text)[0].strip()
-    return int(first) if first.isdigit() else text
-
-
 def _track_from_audio_file(ingest_file: IngestFile) -> dict[str, Any]:
     meta = ingest_file.metadata_json or {}
     embedded = _embedded_fields(ingest_file)
-    title = _first_non_empty(
+    evidence = resolved_music_track_evidence(meta, ingest_file.file_name)
+    resolved_track = evidence.get("resolved_track")
+    raw_title = _first_non_empty(
         embedded.get("title"),
         meta.get("title"),
         Path(getattr(ingest_file, "file_name", "") or "").stem,
         fallback="Unknown Track",
     )
-    track_number = _first_non_empty(
-        embedded.get("track_number"),
-        embedded.get("tracknumber"),
-        meta.get("tracknumber"),
-        meta.get("track_number"),
-        fallback="",
-    )
-    disc_number = _first_non_empty(
-        embedded.get("disc_number"),
-        embedded.get("discnumber"),
-        meta.get("discnumber"),
-        meta.get("disc_number"),
-        fallback="1",
-    )
+    title = normalize_track_title_for_destination(raw_title, resolved_track)
     return {
         "title": title,
-        "track_number": _track_number_value(track_number),
-        "disc_number": _track_number_value(disc_number) or 1,
+        "track_number": resolved_track,
+        "disc_number": int(evidence.get("disc") or 1),
         "file_name": getattr(ingest_file, "file_name", None),
+        "track_number_source": evidence.get("preferred_source"),
     }
 
 

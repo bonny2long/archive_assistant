@@ -277,7 +277,11 @@ def looks_like_generic_multidisc_audiobook_source(path: Path) -> bool:
     return len(audio_files) >= 80 and generic_ratio >= 0.75
 
 
-def looks_like_audiobook_source(path: Path) -> bool:
+def looks_like_audiobook_source(
+    path: Path,
+    *,
+    check_embedded_signal: bool = True,
+) -> bool:
     candidates = [path] if path.is_file() else [
         candidate for candidate in path.rglob("*") if candidate.is_file()
     ]
@@ -288,6 +292,8 @@ def looks_like_audiobook_source(path: Path) -> bool:
     if not audio_files:
         return False
     if has_explicit_audiobook_signal(path):
+        return True
+    if check_embedded_signal and has_embedded_audiobook_signal(path, audio_files):
         return True
     chapterish = [
         candidate
@@ -561,11 +567,7 @@ def build_audiobook_metadata_candidates(
             generic_audio_tag_count += 1
         if chapter_title and not is_generic_track_value(chapter_title):
             chapter_candidates.append({
-                "source_file": (
-                    str(path.relative_to(source))
-                    if source_is_container
-                    else path.name
-                ),
+                "source_file": _relative_audiobook_path(path, source),
                 "track_number": embedded.get("track_number"),
                 "disc_number": disc_number,
                 "current_name": path.name,
@@ -582,9 +584,7 @@ def build_audiobook_metadata_candidates(
         if (
             candidate := make_candidate(
                 "artwork",
-                str(path.relative_to(source))
-                if source_is_container
-                else path.name,
+                _relative_audiobook_path(path, source),
                 "audiobook_sidecar_artwork",
                 "Audiobook artwork file",
                 0.9,
@@ -617,9 +617,37 @@ def audiobook_destination(
     )
 
 
-def build_audiobook_metadata(source: Path, audiobooks_root: Path) -> dict:
-    files = collect_audiobook_files(source)
+def _scoped_audiobook_files(
+    files: dict[str, list[Path]] | None,
+    source: Path,
+) -> dict[str, list[Path]]:
+    if files is None:
+        return collect_audiobook_files(source)
+    return {
+        key: sorted(Path(path) for path in files.get(key, []))
+        for key in ("audio", "artwork", "sidecars", "other")
+    }
+
+
+def _relative_audiobook_path(path: Path, source: Path) -> str:
+    if source.is_dir():
+        try:
+            return str(path.relative_to(source))
+        except ValueError:
+            pass
+    return path.name
+
+
+def build_audiobook_metadata(
+    source: Path,
+    audiobooks_root: Path,
+    *,
+    scoped_files: dict[str, list[Path]] | None = None,
+) -> dict:
+    files = _scoped_audiobook_files(scoped_files, source)
     audio = files["audio"]
+    if not audio:
+        raise ValueError("Audiobook metadata requires at least one scoped audio file.")
     primary = sorted(audio, key=lambda path: path.name.casefold())[0]
     source_guess = parse_audiobook_name(
         source.name if source.is_dir() else primary.name
@@ -718,18 +746,18 @@ def build_audiobook_metadata(source: Path, audiobooks_root: Path) -> dict:
         "audiobook_file_count": len(audio),
         "chapter_count": len(audio),
         "audio_files": [
-            str(path.relative_to(source)) if source.is_dir() else path.name
+            _relative_audiobook_path(path, source)
             for path in audio
         ],
         "primary_audio_file": primary.name,
         "artwork_count": len(files["artwork"]),
         "artwork_files": [
-            str(path.relative_to(source)) if source.is_dir() else path.name
+            _relative_audiobook_path(path, source)
             for path in files["artwork"]
         ],
         "ignored_sidecar_count": len(files["sidecars"]) + len(files["other"]),
         "ignored_sidecar_files": [
-            str(path.relative_to(source)) if source.is_dir() else path.name
+            _relative_audiobook_path(path, source)
             for path in [*files["sidecars"], *files["other"]]
         ],
         "original_release_name": source.name,

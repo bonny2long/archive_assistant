@@ -11,6 +11,8 @@ from app.services.music_metadata import (
     canonical_album_key,
     canonical_artist_key,
     evaluate_music_album_metadata,
+    normalize_track_title_for_destination,
+    resolved_music_track_evidence,
     sort_music_tracks,
 )
 
@@ -134,14 +136,20 @@ def _combined_track_metadata(files: list[IngestFile]) -> tuple[list[dict], int]:
     discs = set()
     for ingest_file in sort_music_tracks(files):
         metadata = ingest_file.metadata_json or {}
-        disc_number = metadata.get("discnumber", 1)
-        normalized_disc = str(disc_number).split("/")[0].split(".")[0]
-        discs.add(normalized_disc)
+        evidence = resolved_music_track_evidence(metadata, ingest_file.file_name)
+        disc_number = int(evidence.get("disc") or 1)
+        resolved_track = evidence.get("resolved_track")
+        discs.add(disc_number)
         tracks.append(
             {
-                "title": metadata.get("title") or Path(ingest_file.file_name).stem,
-                "track_number": metadata.get("tracknumber", "1"),
+                "title": normalize_track_title_for_destination(
+                    metadata.get("title") or Path(ingest_file.file_name).stem,
+                    resolved_track,
+                ),
+                "track_number": resolved_track,
                 "disc_number": disc_number,
+                "file_name": ingest_file.file_name,
+                "track_number_source": evidence.get("preferred_source"),
             }
         )
     return tracks, max(1, len(discs))

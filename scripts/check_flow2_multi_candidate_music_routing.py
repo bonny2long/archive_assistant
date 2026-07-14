@@ -352,6 +352,187 @@ def test_confirmed_materialized_child_can_be_approved(db) -> None:
     assert response.status == "approved"
     assert db.get(IngestBatch, batch.id).status == "approved"
 
+
+def test_confirmed_multidisc_single_object_can_be_approved_without_candidate_action(db) -> None:
+    destination = "Music/Library/FLAC/Daft Punk/2023 - Random Access Memories (10th Anniversary)"
+    batch = IngestBatch(
+        source_kind="manual-drop",
+        source_path=str(PROJECT_ROOT / ".tmp" / "daft-punk-multidisc"),
+        detected_type="music_album",
+        status="pending_review",
+        confidence=1.0,
+        suggested_destination=destination,
+        suggested_metadata={
+            "artist": "Daft Punk",
+            "album": "Random Access Memories (10th Anniversary)",
+            "year": "2023",
+            "format": "FLAC",
+            "suggested_destination": destination,
+        },
+        metadata_confirmed=True,
+        metadata_json={
+            "artist": "Daft Punk",
+            "albumartist": "Daft Punk",
+            "album": "Random Access Memories (10th Anniversary)",
+            "title": "Random Access Memories (10th Anniversary)",
+            "year": "2023",
+            "track_count": 2,
+            "file_count": 2,
+            "disc_count": 2,
+            "format": "FLAC",
+            "suggested_destination": destination,
+            "review_type": "music_album",
+            "review_mode": "single_item",
+            "review_confirmed": True,
+            "metadata_quality": "good",
+            "metadata_warnings": [],
+            "blocking_review_items": [],
+        },
+    )
+    db.add(batch)
+    db.flush()
+    files = [
+        make_file(batch, "Random Access Memories (10th Anniversary)", "2023", index)
+        for index in (1, 2)
+    ]
+    db.add_all(files)
+    db.flush()
+    candidate = MediaIdentityCandidate(
+        batch_id=batch.id,
+        candidate_key="music:daft-punk:random-access-memories-10th-anniversary",
+        candidate_media_type="music",
+        candidate_title="Random Access Memories (10th Anniversary)",
+        candidate_primary_creator="Daft Punk",
+        candidate_year="2023",
+        candidate_confidence=1.0,
+        identity_evidence_json={"album": "Random Access Memories (10th Anniversary)", "artist": "Daft Punk"},
+    )
+    db.add(candidate)
+    db.flush()
+    for index, ingest_file in enumerate(files, start=1):
+        db.add(CandidateMember(
+            candidate_id=candidate.id,
+            batch_file_id=ingest_file.id,
+            relative_path=f"CD {index}/{ingest_file.file_name}",
+            media_class="music_audio",
+            role_in_candidate="primary",
+            sort_key=f"{index:02d}-{ingest_file.file_name}",
+            evidence_json={"disc": index},
+        ))
+        db.add(SourceFragment(
+            batch_id=batch.id,
+            source_root=batch.source_path,
+            relative_fragment_path=f"CD {index}",
+            fragment_group_key="daft-punk-random-access-memories",
+            fragment_label=f"CD {index}",
+            file_count=1,
+            media_class_counts_json={"music_audio": 1},
+        ))
+    db.add(FragmentReconstructionDecision(
+        batch_id=batch.id,
+        candidate_id=candidate.id,
+        decision="review_required",
+        severity="review",
+    ))
+    db.commit()
+
+    routing = get_batch_routing_decision(db, batch.id, target_editor="music_album")
+    assert routing["decision"] == "music_editor_allowed"
+    assert "source_fragment_group_detected" not in routing["reasons"]
+    assert "reconstruction_review_required" not in routing["reasons"]
+
+    response = approve_batch(batch.id, db)
+    assert response.status == "approved"
+    assert db.get(IngestBatch, batch.id).status == "approved"
+
+
+def test_confirmed_single_epub_is_not_routed_as_mixed_music(db) -> None:
+    destination = "Books/EPUB/Frank Herbert/1985 - Chapterhouse Dune"
+    batch = IngestBatch(
+        source_kind="manual-drop",
+        source_path=str(PROJECT_ROOT / ".tmp" / "single-epub-fragment"),
+        detected_type="book",
+        status="pending_review",
+        confidence=1.0,
+        suggested_destination=destination,
+        suggested_metadata={
+            "author": "Frank Herbert",
+            "title": "Chapterhouse Dune",
+            "year": "1985",
+            "format": "EPUB",
+            "suggested_destination": destination,
+        },
+        metadata_confirmed=True,
+        metadata_json={
+            "author": "Frank Herbert",
+            "title": "Chapterhouse Dune",
+            "year": "1985",
+            "format": "EPUB",
+            "file_count": 1,
+            "review_confirmed": True,
+            "metadata_warnings": [],
+            "blocking_review_items": [],
+        },
+    )
+    db.add(batch)
+    db.flush()
+    ingest_file = IngestFile(
+        batch_id=batch.id,
+        file_path=str(Path(batch.source_path) / "Chapterhouse Dune.epub"),
+        file_name="Chapterhouse Dune.epub",
+        extension=".epub",
+        size_bytes=4096,
+        checksum="flow2-chapterhouse-dune",
+        detected_role="ebook",
+        metadata_json={"author": "Frank Herbert", "title": "Chapterhouse Dune", "year": "1985"},
+    )
+    db.add(ingest_file)
+    db.flush()
+    candidate = MediaIdentityCandidate(
+        batch_id=batch.id,
+        candidate_key="ebook:frank-herbert:chapterhouse-dune",
+        candidate_media_type="ebook",
+        candidate_title="Chapterhouse Dune",
+        candidate_primary_creator="Frank Herbert",
+        candidate_year="1985",
+        candidate_confidence=1.0,
+        identity_evidence_json={"title": "Chapterhouse Dune", "author": "Frank Herbert"},
+    )
+    db.add(candidate)
+    db.flush()
+    db.add(CandidateMember(
+        candidate_id=candidate.id,
+        batch_file_id=ingest_file.id,
+        relative_path=ingest_file.file_name,
+        media_class="ebook",
+        role_in_candidate="primary",
+        sort_key=ingest_file.file_name,
+        evidence_json={"format": "EPUB"},
+    ))
+    db.add(SourceFragment(
+        batch_id=batch.id,
+        source_root=batch.source_path,
+        relative_fragment_path="Chapterhouse Dune",
+        fragment_group_key="frank-herbert-chapterhouse-dune",
+        fragment_label="Chapterhouse Dune",
+        file_count=1,
+        media_class_counts_json={"ebook": 1},
+    ))
+    db.add(FragmentReconstructionDecision(
+        batch_id=batch.id,
+        candidate_id=candidate.id,
+        decision="review_required",
+        severity="review",
+    ))
+    db.commit()
+
+    routing = get_batch_routing_decision(db, batch.id, target_editor="book")
+    assert routing["decision"] == "media_editor_allowed"
+    assert "mixed_media_detected" not in routing["reasons"]
+    assert "non_music_candidate_present" not in routing["reasons"]
+    assert "source_fragment_group_detected" not in routing["reasons"]
+
+
 def main() -> None:
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
@@ -362,6 +543,8 @@ def main() -> None:
         test_single_music_album_stays_music_editor_allowed(db)
         test_reviewed_single_fragment_album_can_be_approved(db)
         test_confirmed_materialized_child_can_be_approved(db)
+        test_confirmed_multidisc_single_object_can_be_approved_without_candidate_action(db)
+        test_confirmed_single_epub_is_not_routed_as_mixed_music(db)
         print("PASS - AA-FLOW2 multi-candidate music routing verified")
     finally:
         db.close()

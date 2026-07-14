@@ -28,11 +28,14 @@ from app.services.music_metadata import (
     metadata_mismatch_warnings,
     music_folder_release_tags,
     normalize_key,
+    normalize_track_title_for_destination,
     looks_like_discography_parent,
     parse_discography_parent_folder,
     parse_music_folder_name,
+    resolved_music_track_evidence,
     sort_music_tracks,
     suggest_music_destination,
+    track_number_evidence,
     UNKNOWN_VALUES,
 )
 from app.services.report_writer import write_json_report
@@ -272,7 +275,10 @@ def classify_ingest_item(path: Path) -> str:
         {str(child): [] for child in child_audio_folders},
     ):
         return "music_discography"
-    if audio_files and not video_files and looks_like_audiobook_source(path):
+    if audio_files and not video_files and looks_like_audiobook_source(
+        path,
+        check_embedded_signal=False,
+    ):
         return "audiobook"
     return "music_album"
 
@@ -1822,7 +1828,10 @@ def _create_discography_batch(
         formats.update(child_formats)
         album_format = ", ".join(sorted(child_formats))
         disc_count = len({
-            int(metadata.get("discnumber") or 1)
+            int(resolved_music_track_evidence(
+                metadata,
+                str(metadata.get("source_filename") or ""),
+            ).get("disc") or 1)
             for metadata in track_metadata
         })
         child_warnings = []
@@ -1926,6 +1935,8 @@ def _create_discography_batch(
             if file_checksums[str(path)] in existing_checksums:
                 continue
             metadata = dict(file_metadata[str(path)])
+            metadata["source_filename"] = path.name
+            metadata["track_number_evidence"] = track_number_evidence(metadata, path.name)
             metadata["_discography_album"] = {
                 "source_folder": child.name,
                 "album": album,
@@ -2506,7 +2517,9 @@ def scan_music_ingest(
 
         ingest_files = []
         for path in new_paths:
-            metadata = file_metadata[str(path)]
+            metadata = dict(file_metadata[str(path)])
+            metadata["source_filename"] = path.name
+            metadata["track_number_evidence"] = track_number_evidence(metadata, path.name)
             ingest_files.append(
                 IngestFile(
                     batch_id=batch.id,
@@ -2534,14 +2547,27 @@ def scan_music_ingest(
             )
         for ingest_file in sort_music_tracks(ingest_files):
             db.add(ingest_file)
+            if ingest_file.detected_role != "music_track":
+                continue
             metadata = ingest_file.metadata_json or {}
+            evidence = resolved_music_track_evidence(metadata, ingest_file.file_name)
             album_meta["tracks"].append(
                 {
-                    "title": metadata.get("title") or Path(ingest_file.file_name).stem,
-                    "track_number": metadata.get("tracknumber", "1"),
-                    "disc_number": metadata.get("discnumber", 1),
+                    "title": normalize_track_title_for_destination(
+                        metadata.get("title") or Path(ingest_file.file_name).stem,
+                        evidence.get("resolved_track"),
+                    ),
+                    "track_number": evidence.get("resolved_track"),
+                    "disc_number": int(evidence.get("disc") or 1),
+                    "file_name": ingest_file.file_name,
+                    "track_number_source": evidence.get("preferred_source"),
                 }
             )
+
+        album_meta["disc_count"] = max(
+            1,
+            len({int(track.get("disc_number") or 1) for track in album_meta["tracks"]}),
+        )
 
         db.flush()
         snapshot_batch_metadata(db, batch)

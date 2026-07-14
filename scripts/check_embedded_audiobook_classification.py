@@ -65,9 +65,9 @@ def main() -> int:
             )
 
         with patch.object(
-            scanner,
-            "has_embedded_audiobook_signal",
-            return_value=True,
+            audiobook_metadata,
+            "read_embedded_metadata",
+            side_effect=audiobook_reader,
         ):
             assert scanner.classify_ingest_item(root) == "audiobook"
 
@@ -80,9 +80,9 @@ def main() -> int:
                     b"test music"
                 )
         with patch.object(
-            scanner,
-            "has_embedded_audiobook_signal",
-            return_value=False,
+            audiobook_metadata,
+            "read_embedded_metadata",
+            return_value=_embedded("Rock"),
         ):
             assert scanner.classify_ingest_item(music_root) == "music_discography"
 

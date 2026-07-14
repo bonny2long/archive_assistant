@@ -222,8 +222,13 @@ def _positive_int(value, default: int | None = None) -> int | None:
 
 EXPLICIT_DISC_TRACK_PREFIXES = (
     re.compile(r"^\s*0*(\d+)[-._]0*(\d+)\b"),
-    re.compile(r"^\s*0*(\d+)\s+-\s+0*(\d+)(?=\s+-\s+|$)"),
+    re.compile(r"^\s*0*(\d+)\s+-\s+0*(\d+)(?=\s+-\s+)"),
     re.compile(r"^\s*disc\s*0*(\d+)\s+track\s*0*(\d+)\b", re.IGNORECASE),
+)
+
+VINYL_SIDE_TRACK_PREFIX = re.compile(
+    r"^\s*([A-H])\s*0*(\d+)\b(?:\s*[-._)]|\s+|$)",
+    re.IGNORECASE,
 )
 
 
@@ -240,6 +245,10 @@ def _filename_track_numbers(filename: str) -> tuple[int | None, int | None, str 
     combined = _explicit_disc_track_prefix(name)
     if combined:
         return int(combined.group(1)), int(combined.group(2)), "combined_disc_track_filename_prefix"
+    vinyl_side = VINYL_SIDE_TRACK_PREFIX.match(name)
+    if vinyl_side:
+        disc = ord(vinyl_side.group(1).upper()) - ord("A") + 1
+        return disc, int(vinyl_side.group(2)), "vinyl_side_filename_prefix"
     single = re.match(r"^\s*0*(\d+)\s*(?:[-._\s]+|$)", name)
     if single:
         return None, int(single.group(1)), "filename_prefix"
@@ -365,7 +374,10 @@ def find_music_track_number_conflicts(files: list) -> dict:
     filename_preferred_count = sum(
         1 for evidence in evidences
         if str(evidence.get("preferred_source") or "").startswith("filename")
-        or evidence.get("preferred_source") == "combined_disc_track_filename_prefix"
+        or evidence.get("preferred_source") in {
+            "combined_disc_track_filename_prefix",
+            "vinyl_side_filename_prefix",
+        }
     )
     ambiguous_count = sum(
         1 for evidence in evidences
@@ -396,7 +408,10 @@ def apply_track_number_conflict_warnings(metadata: dict, files: list) -> dict:
         filename = _filename_for_track_item(item, item_metadata)
         evidence = track_number_evidence(item_metadata, filename)
         item_metadata["track_number_evidence"] = evidence
-        if hasattr(item, "metadata_json"):
+        if isinstance(item, dict):
+            item.clear()
+            item.update(item_metadata)
+        elif hasattr(item, "metadata_json"):
             item.metadata_json = item_metadata
         summary_files.append(item)
 
@@ -410,13 +425,20 @@ def apply_track_number_conflict_warnings(metadata: dict, files: list) -> dict:
             warnings.append("duplicate_embedded_tracknumber")
             if evidence.get("filename_track") is not None:
                 evidence["resolved_track"] = evidence["filename_track"]
-                evidence["preferred_source"] = "filename_prefix"
+                if evidence.get("preferred_source") not in {
+                    "combined_disc_track_filename_prefix",
+                    "vinyl_side_filename_prefix",
+                }:
+                    evidence["preferred_source"] = "filename_prefix"
                 warnings.append("track_order_source_filename_preferred")
             else:
                 warnings.append("track_order_ambiguous")
             evidence["warnings"] = list(dict.fromkeys(warnings))
             item_metadata["track_number_evidence"] = evidence
-            if hasattr(item, "metadata_json"):
+            if isinstance(item, dict):
+                item.clear()
+                item.update(item_metadata)
+            elif hasattr(item, "metadata_json"):
                 item.metadata_json = item_metadata
 
     summary = find_music_track_number_conflicts(summary_files)
@@ -572,6 +594,16 @@ def normalize_track_title_for_destination(
             if expected_track is not None and parsed_track != expected_track:
                 break
             next_value = _clean_spacing(remainder)
+            if not next_value or next_value == current:
+                break
+            current = next_value
+            continue
+        vinyl_side = VINYL_SIDE_TRACK_PREFIX.match(current)
+        if vinyl_side:
+            parsed_track = int(vinyl_side.group(2))
+            if expected_track is not None and parsed_track != expected_track:
+                break
+            next_value = _clean_spacing(current[vinyl_side.end():])
             if not next_value or next_value == current:
                 break
             current = next_value

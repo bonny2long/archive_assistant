@@ -28,7 +28,11 @@ from app.services.library_manifest import (
 )
 from app.services.move_manifest import write_move_manifest
 from app.services.parent_candidate_materialization import build_parent_candidate_summary
-from app.services.duplicate_fragment_review import duplicate_fragment_summary_for_batch, music_track_completeness_for_batch
+from app.services.duplicate_fragment_review import (
+    duplicate_fragment_summary_for_batch,
+    format_music_track_positions,
+    music_track_completeness_for_batch,
+)
 
 
 def _music_track_completeness_blocker(batch: IngestBatch) -> str | None:
@@ -41,11 +45,17 @@ def _music_track_completeness_blocker(batch: IngestBatch) -> str | None:
     status = completeness.get("completeness_status")
     if status == "incomplete":
         missing = completeness.get("missing_track_numbers") or []
-        missing_text = ", ".join(str(number) for number in missing)
+        missing_text = format_music_track_positions(
+            completeness.get("missing_track_positions"),
+            missing,
+        )
         return f"Music album is missing track numbers: {missing_text}." if missing_text else "Music album has missing tracks before move."
     if status == "conflict":
         duplicates = completeness.get("duplicate_track_numbers") or []
-        duplicate_text = ", ".join(str(number) for number in duplicates)
+        duplicate_text = format_music_track_positions(
+            completeness.get("duplicate_track_positions"),
+            duplicates,
+        )
         return f"Music album has conflicting track numbers: {duplicate_text}." if duplicate_text else "Music album has conflicting tracks before move."
     return None
 

@@ -8,13 +8,21 @@ from sqlalchemy.orm import Session
 
 from app.models.archive import IngestBatch, IngestFile
 from app.models.media_metadata import (
+    CandidateMember,
     FragmentReconstructionDecision,
     MediaIdentityCandidate,
     MixedMediaFlag,
     SourceFragment,
     UniversalIngestionReviewAction,
 )
-from app.services.universal_ingestion import snapshot_universal_ingestion_boundary
+from app.services.universal_ingestion import (
+    AUDIOBOOK_EXTENSIONS,
+    AUDIO_EXTENSIONS,
+    COMIC_EXTENSIONS,
+    EBOOK_EXTENSIONS,
+    VIDEO_EXTENSIONS,
+    snapshot_universal_ingestion_boundary,
+)
 from app.services.metadata_candidates import (
     is_generated_timestamp_value,
     is_generic_track_value,
@@ -24,6 +32,7 @@ from app.services.metadata_candidates import (
 ROUTING_DECISIONS = {
     "music_editor_allowed",
     "audiobook_editor_allowed",
+    "media_editor_allowed",
     "universal_review_required",
     "universal_review_recommended",
     "blocked_conflict",
@@ -75,6 +84,36 @@ RECOMMENDED_REASONS = {
 }
 BLOCKING_FLAG_TYPES = {"mixed_media_source", "candidate_media_type_conflict"}
 UNKNOWN_VALUES = {"", "unknown", "unknown album", "unknown artist", "none", "n/a"}
+
+EXPECTED_CANDIDATE_TYPES = {
+    "music_album": {"music"},
+    "music_discography": {"music"},
+    "audiobook": {"audiobook"},
+    "book": {"book", "ebook", "comic"},
+    "video_movie": {"movie"},
+    "video_tv_show": {"tv"},
+    "video_tv_episode": {"tv"},
+}
+
+PRIMARY_EXTENSIONS = {
+    "music_album": AUDIO_EXTENSIONS,
+    "music_discography": AUDIO_EXTENSIONS,
+    "audiobook": AUDIO_EXTENSIONS | AUDIOBOOK_EXTENSIONS,
+    "book": EBOOK_EXTENSIONS | COMIC_EXTENSIONS,
+    "video_movie": VIDEO_EXTENSIONS,
+    "video_tv_show": VIDEO_EXTENSIONS,
+    "video_tv_episode": VIDEO_EXTENSIONS,
+}
+
+DEFAULT_EDITORS = {
+    "music_album": "music_album",
+    "music_discography": "music_discography",
+    "audiobook": "audiobook",
+    "book": "book",
+    "video_movie": "movie",
+    "video_tv_show": "tv",
+    "video_tv_episode": "tv",
+}
 
 
 def _last_path_segment(value: str) -> str:
@@ -200,6 +239,60 @@ def _is_coherent_single_audiobook(
     )
 
 
+def _default_editor(batch: IngestBatch, target_editor: str | None) -> str:
+    return target_editor or DEFAULT_EDITORS.get(batch.detected_type, "media")
+
+
+def _blocked_media_editors(batch: IngestBatch, default_editor: str) -> list[str]:
+    editors = [default_editor]
+    if batch.detected_type in {"music_album", "music_discography"}:
+        editors.append("music_discography")
+    return list(dict.fromkeys(editors))
+
+
+def _file_extension(ingest_file: IngestFile) -> str:
+    return str(
+        ingest_file.extension or Path(ingest_file.file_name).suffix
+    ).casefold()
+
+
+def _is_scoped_single_media_object(
+    db: Session,
+    batch: IngestBatch,
+    candidates: list[MediaIdentityCandidate],
+) -> bool:
+    """Prove one candidate owns every primary file attached to the batch."""
+    if len(candidates) != 1:
+        return False
+    expected_types = EXPECTED_CANDIDATE_TYPES.get(batch.detected_type)
+    primary_extensions = PRIMARY_EXTENSIONS.get(batch.detected_type)
+    candidate = candidates[0]
+    if (
+        not expected_types
+        or not primary_extensions
+        or (candidate.candidate_media_type or "").casefold() not in expected_types
+        or _candidate_has_chunk_identity(candidate)
+    ):
+        return False
+
+    attached_file_ids = {ingest_file.id for ingest_file in batch.files}
+    primary_file_ids = {
+        ingest_file.id
+        for ingest_file in batch.files
+        if _file_extension(ingest_file) in primary_extensions
+    }
+    if not primary_file_ids:
+        return False
+    candidate_file_ids = {
+        member.batch_file_id
+        for member in db.query(CandidateMember)
+        .filter(CandidateMember.candidate_id == candidate.id)
+        .all()
+        if member.role_in_candidate != "support"
+    }
+    return primary_file_ids == (candidate_file_ids & attached_file_ids)
+
+
 def _single_music_candidate_is_approved(
     db: Session,
     batch_id: int,
@@ -312,7 +405,7 @@ def get_batch_routing_decision(
         raise ValueError("Batch not found")
     source_identity_risk = _batch_has_source_identity(batch)
     embedded_album_value_count = _embedded_album_value_count(db, batch_id)
-    default_editor = "audiobook" if batch.detected_type == "audiobook" else (target_editor or "music_album")
+    default_editor = _default_editor(batch, target_editor)
     has_analysis = db.query(SourceFragment.id).filter(SourceFragment.batch_id == batch_id).first() is not None
     if not has_analysis:
         if snapshot:
@@ -326,7 +419,7 @@ def get_batch_routing_decision(
                 "universal_review_required",
                 reasons,
                 allowed_editors=["universal"],
-                blocked_editors=list(dict.fromkeys([default_editor, "music_discography"])),
+                blocked_editors=_blocked_media_editors(batch, default_editor),
                 has_analysis=False,
                 embedded_album_value_count=embedded_album_value_count,
                 source_identity_risk=source_identity_risk,
@@ -336,7 +429,7 @@ def get_batch_routing_decision(
                 batch_id,
                 "not_analyzed",
                 ["universal_analysis_missing"],
-                allowed_editors=[target_editor or default_editor],
+                allowed_editors=[default_editor],
                 blocked_editors=[],
                 has_analysis=False,
                 embedded_album_value_count=embedded_album_value_count,
@@ -353,6 +446,12 @@ def get_batch_routing_decision(
         batch_metadata.get("source_origins_resolved") is True
         and batch_metadata.get("duplicate_fragment_review_state") == "reviewed_merged"
     )
+    scoped_single_media_object = _is_scoped_single_media_object(db, batch, candidates)
+    confirmed_scoped_single_media_object = bool(
+        scoped_single_media_object
+        and batch.metadata_confirmed
+        and batch_metadata.get("review_confirmed")
+    )
 
     reasons: list[str] = []
     if any(decision.decision == "blocked_conflict" for decision in decisions):
@@ -362,7 +461,7 @@ def get_batch_routing_decision(
             "blocked_conflict",
             reasons,
             allowed_editors=["universal"],
-            blocked_editors=list(dict.fromkeys([default_editor, "music_discography"])),
+            blocked_editors=_blocked_media_editors(batch, default_editor),
             has_analysis=True,
             candidates=candidates,
             flags=flags,
@@ -375,23 +474,26 @@ def get_batch_routing_decision(
     if len(candidates) > 1:
         _add_reason(reasons, "multiple_candidate_groups")
 
-    media_types = {candidate.candidate_media_type for candidate in candidates}
+    media_types = {
+        (candidate.candidate_media_type or "unknown").casefold()
+        for candidate in candidates
+    }
     coherent_single_audiobook = _is_coherent_single_audiobook(batch, candidates)
-    if batch.detected_type == "audiobook":
-        unexpected_media = media_types - {"audiobook"}
-        if unexpected_media:
-            _add_reason(reasons, "mixed_media_detected")
-    else:
+    expected_media_types = EXPECTED_CANDIDATE_TYPES.get(batch.detected_type, {"music"})
+    unexpected_media = media_types - expected_media_types
+    if batch.detected_type in {"music_album", "music_discography"}:
         non_music = media_types - {"music"}
         if "audiobook" in non_music:
             _add_reason(reasons, "audiobook_in_music_batch")
-        if "ebook" in non_music or "comic" in non_music:
+        if {"book", "ebook", "comic"} & non_music:
             _add_reason(reasons, "book_or_ebook_in_music_batch")
         if "movie" in non_music or "tv" in non_music:
             _add_reason(reasons, "movie_or_tv_in_music_batch")
         if non_music:
             _add_reason(reasons, "non_music_candidate_present")
             _add_reason(reasons, "mixed_media_detected")
+    elif unexpected_media:
+        _add_reason(reasons, "mixed_media_detected")
 
     has_blocking_flags = any(
         flag.flag_type in BLOCKING_FLAG_TYPES and flag.severity in {"review", "error"}
@@ -417,16 +519,19 @@ def get_batch_routing_decision(
         if "non_music_candidate_present" not in reasons:
             _add_reason(reasons, "weak_discography_identity")
 
-    if _confirmed_materialized_music_child(batch, candidates):
-        # A confirmed child owns scoped files and keeps source fragments only as
-        # evidence. Do not make the operator repeat parent reconstruction review.
+    if _confirmed_materialized_music_child(batch, candidates) or confirmed_scoped_single_media_object:
+        # Confirmed, file-scoped objects keep reconstruction rows as evidence.
+        # They do not require the operator to repeat the same review decision.
+        resolved_evidence_reasons = {
+            "source_fragment_group_detected",
+            "reconstruction_review_required",
+        }
+        if confirmed_scoped_single_media_object:
+            resolved_evidence_reasons.add("multiple_embedded_album_values")
         reasons = [
             reason
             for reason in reasons
-            if reason not in {
-                "source_fragment_group_detected",
-                "reconstruction_review_required",
-            }
+            if reason not in resolved_evidence_reasons
         ]
 
     required_reasons = {reason for reason in reasons if reason in REQUIRED_REASONS}
@@ -438,7 +543,7 @@ def get_batch_routing_decision(
     if required_reasons:
         decision = "universal_review_required"
         allowed_editors = ["universal"]
-        blocked_editors = list(dict.fromkeys([default_editor, "music_discography"]))
+        blocked_editors = _blocked_media_editors(batch, default_editor)
     elif any(reason in RECOMMENDED_REASONS for reason in reasons):
         decision = "universal_review_recommended"
         allowed_editors = list(dict.fromkeys([default_editor, "universal"]))
@@ -448,10 +553,15 @@ def get_batch_routing_decision(
         reasons = reasons or ["no_blocking_issues"]
         allowed_editors = ["audiobook", "universal"]
         blocked_editors = []
-    else:
+    elif batch.detected_type in {"music_album", "music_discography"}:
         decision = "music_editor_allowed"
         reasons = reasons or ["no_blocking_issues"]
         allowed_editors = ["music_album", "music_discography", "universal"]
+        blocked_editors = []
+    else:
+        decision = "media_editor_allowed"
+        reasons = reasons or ["no_blocking_issues"]
+        allowed_editors = list(dict.fromkeys([default_editor, "universal"]))
         blocked_editors = []
 
     return _routing_result(

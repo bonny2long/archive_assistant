@@ -128,6 +128,7 @@ def main() -> int:
         ("1-02 - N95.mp3", 1, 2, "N95"),
         ("01 - 02 - Coeur D'Alene.flac", 1, 2, "Coeur D'Alene"),
         ("02 - 2000 Watts.flac", 1, 2, "2000 Watts"),
+        ("05 - 405.flac", 1, 5, "405"),
         ("162 - Final Chapter.mp3", 1, 162, "Final Chapter"),
         ("1.02 - Dot Syntax.flac", 1, 2, "Dot Syntax"),
         ("1_02 - Underscore Syntax.flac", 1, 2, "Underscore Syntax"),
@@ -212,6 +213,50 @@ def main() -> int:
         repair_files[11].metadata_json["track_number_evidence"]["disc"] == 1
         and repair_files[11].metadata_json["track_number_evidence"]["resolved_track"] == 12
         and all(item.id == number for number, item in enumerate(repair_files, start=1)),
+    )
+
+    vinyl_files = [
+        track(
+            index,
+            f"{side}{side_track} Vinyl Track {side}{side_track}.flac",
+            "1",
+            "1",
+            f"Vinyl Track {side}{side_track}",
+        )
+        for index, (side, side_track) in enumerate(
+            [
+                *(("A", number) for number in range(1, 6)),
+                *(("B", number) for number in range(1, 7)),
+            ],
+            start=1,
+        )
+    ]
+    vinyl_batch = SimpleNamespace(
+        id=18,
+        detected_type="music_album",
+        status="pending_review",
+        files=vinyl_files,
+        metadata_json={
+            "artist": "Death Cab for Cutie",
+            "album": "Narrow Stairs",
+            "year": "2008",
+            "track_count": 11,
+            "disc_count": 1,
+            "metadata_warnings": ["track_number_conflict_detected"],
+        },
+        updated_at=None,
+    )
+    vinyl_result = rebuild_pending_music_track_metadata(vinyl_batch)
+    failures += check(
+        "vinyl A/B side positions do not conflict with each other",
+        vinyl_result["track_count"] == 11
+        and vinyl_result["disc_count"] == 2
+        and len(vinyl_result["present_track_positions"]) == 11
+        and vinyl_result["missing_track_positions"] == []
+        and vinyl_result["duplicate_track_positions"] == []
+        and vinyl_result["completeness_status"] == "complete"
+        and vinyl_files[5].metadata_json["track_number_evidence"]["disc"] == 2
+        and vinyl_files[5].metadata_json["track_number_evidence"]["resolved_track"] == 1,
     )
 
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})

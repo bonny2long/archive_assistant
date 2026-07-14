@@ -253,8 +253,11 @@ def _batch_row(batch: IngestBatch) -> dict[str, Any]:
         row.update({
             "track_completeness": completeness,
             "present_track_numbers": completeness["present_track_numbers"],
+            "present_track_positions": completeness["present_track_positions"],
             "missing_track_numbers": completeness["missing_track_numbers"],
+            "missing_track_positions": completeness["missing_track_positions"],
             "duplicate_track_numbers": completeness["duplicate_track_numbers"],
+            "duplicate_track_positions": completeness["duplicate_track_positions"],
             "track_number_conflicts": completeness["track_number_conflicts"],
             "completeness_status": completeness["completeness_status"],
         })
@@ -833,6 +836,14 @@ def _track_int(value: object) -> int | None:
     return number if number > 0 else None
 
 
+def _track_total_int(metadata: dict[str, Any]) -> int | None:
+    for key in ("tracktotal", "totaltracks", "total_tracks", "track_total"):
+        total = _track_int(_metadata_value(metadata, key))
+        if total is not None:
+            return total
+    return None
+
+
 def _filename_track_int(ingest_file: IngestFile) -> int | None:
     stem = Path(ingest_file.file_name or "").stem
     match = re.match(r"^\s*(\d+)(?:\s*[-._)]|\s+)", stem)
@@ -843,69 +854,104 @@ def _filename_track_int(ingest_file: IngestFile) -> int | None:
 
 
 def _music_track_completeness(audio_files: list[IngestFile], metadata: dict[str, Any]) -> dict[str, Any]:
-    by_track: dict[int, list[IngestFile]] = defaultdict(list)
+    by_position: dict[tuple[int, int], list[IngestFile]] = defaultdict(list)
+    expected_by_disc: dict[int, int] = {}
     evidence_sources: set[str] = set()
     for ingest_file in audio_files:
         key = _resolved_music_track_key(ingest_file)
         if key:
+            disc_number = _track_int(key[0]) or 1
             track_number = _track_int(key[1])
             if track_number is not None:
-                by_track[track_number].append(ingest_file)
+                by_position[(disc_number, track_number)].append(ingest_file)
+                expected_by_disc[disc_number] = max(
+                    expected_by_disc.get(disc_number, 0),
+                    track_number,
+                    _track_total_int(ingest_file.metadata_json or {}) or 0,
+                )
         evidence = resolved_music_track_evidence(ingest_file.metadata_json, ingest_file.file_name)
         evidence_sources.add(str(evidence.get("preferred_source") or "unknown"))
 
-    if evidence_sources and all(source.startswith("filename") or source == "combined_disc_track_filename_prefix" for source in evidence_sources):
+    filename_sources = {
+        "filename_prefix",
+        "combined_disc_track_filename_prefix",
+        "vinyl_side_filename_prefix",
+    }
+    if evidence_sources and all(source in filename_sources for source in evidence_sources):
         track_number_source = "filename"
     elif evidence_sources == {"embedded_tracknumber"}:
         track_number_source = "embedded"
     else:
         track_number_source = "resolved"
 
-    present = sorted(by_track)
-    duplicate_numbers = sorted(number for number, files in by_track.items() if len(files) > 1)
+    present_positions = [
+        {"disc_number": disc, "track_number": track}
+        for disc, track in sorted(by_position)
+    ]
+    present = sorted({track for _disc, track in by_position})
+    duplicate_position_keys = [
+        position for position, files in sorted(by_position.items()) if len(files) > 1
+    ]
+    duplicate_positions = [
+        {"disc_number": disc, "track_number": track}
+        for disc, track in duplicate_position_keys
+    ]
+    duplicate_numbers = sorted({track for _disc, track in duplicate_position_keys})
     conflicts: list[dict[str, Any]] = []
-    for number, files in sorted(by_track.items()):
+    for (disc, track), files in sorted(by_position.items()):
         titles = {(_file_title(file) or "") for file in files}
         if len(titles) > 1:
             conflicts.append({
-                "track_number": number,
+                "disc_number": disc,
+                "track_number": track,
                 "file_ids": [file.id for file in files],
                 "titles": sorted(titles),
             })
 
-    expected_total = None
-    for key in ("expected_track_count", "total_tracks", "track_total", "track_count"):
-        value = metadata.get(key)
-        try:
-            number = int(value)
-        except (TypeError, ValueError):
-            continue
-        if number > 0:
-            expected_total = number
-            break
-    max_observed = max(present) if present else None
-    if expected_total is None and max_observed is not None:
-        expected_total = max_observed
-    elif expected_total is not None and max_observed is not None:
-        expected_total = max(expected_total, max_observed)
+    if len(expected_by_disc) == 1:
+        disc = next(iter(expected_by_disc))
+        for key in ("expected_track_count", "total_tracks", "track_total", "track_count"):
+            try:
+                expected_total = int(metadata.get(key))
+            except (TypeError, ValueError):
+                continue
+            if expected_total > 0:
+                expected_by_disc[disc] = max(expected_by_disc[disc], expected_total)
+                break
 
-    missing = [] if expected_total is None else [number for number in range(1, expected_total + 1) if number not in by_track]
+    missing_position_keys = [
+        (disc, track)
+        for disc, expected_total in sorted(expected_by_disc.items())
+        for track in range(1, expected_total + 1)
+        if (disc, track) not in by_position
+    ]
+    missing_positions = [
+        {"disc_number": disc, "track_number": track}
+        for disc, track in missing_position_keys
+    ]
+    missing = sorted({track for _disc, track in missing_position_keys})
     if not present:
         status = "unknown"
-    elif conflicts or duplicate_numbers:
+    elif conflicts or duplicate_positions:
         status = "conflict"
-    elif missing:
+    elif missing_positions:
         status = "incomplete"
     else:
         status = "complete"
 
     return {
         "present_track_numbers": present,
+        "present_track_positions": present_positions,
         "missing_track_numbers": missing,
+        "missing_track_positions": missing_positions,
         "duplicate_track_numbers": duplicate_numbers,
+        "duplicate_track_positions": duplicate_positions,
         "track_number_conflicts": conflicts,
         "completeness_status": status,
         "track_number_source": track_number_source,
+        "expected_track_count_by_disc": {
+            str(disc): total for disc, total in sorted(expected_by_disc.items())
+        },
     }
 
 
@@ -914,11 +960,15 @@ def music_track_completeness_for_batch(batch: IngestBatch) -> dict[str, Any]:
     if _media_type(batch, metadata) != "music_album":
         return {
             "present_track_numbers": [],
+            "present_track_positions": [],
             "missing_track_numbers": [],
+            "missing_track_positions": [],
             "duplicate_track_numbers": [],
+            "duplicate_track_positions": [],
             "track_number_conflicts": [],
             "completeness_status": "unknown",
             "track_number_source": "unknown",
+            "expected_track_count_by_disc": {},
         }
     audio_files = [
         ingest_file
@@ -926,6 +976,21 @@ def music_track_completeness_for_batch(batch: IngestBatch) -> dict[str, Any]:
         if _is_music_audio_file(ingest_file)
     ]
     return _music_track_completeness(audio_files, metadata)
+
+
+def format_music_track_positions(
+    positions: list[dict[str, Any]] | None,
+    fallback_numbers: list[int] | None = None,
+) -> str:
+    normalized = positions or []
+    if normalized:
+        discs = {int(item.get("disc_number") or 1) for item in normalized}
+        if len(discs) > 1 or any(disc != 1 for disc in discs):
+            return ", ".join(
+                f"disc {int(item.get('disc_number') or 1)} track {int(item['track_number'])}"
+                for item in normalized
+            )
+    return ", ".join(str(number) for number in (fallback_numbers or []))
 
 
 def _rebuild_canonical_metadata(
@@ -973,8 +1038,11 @@ def _rebuild_canonical_metadata(
         completeness = _music_track_completeness(audio_files, metadata)
         metadata["track_completeness"] = completeness
         metadata["present_track_numbers"] = completeness["present_track_numbers"]
+        metadata["present_track_positions"] = completeness["present_track_positions"]
         metadata["missing_track_numbers"] = completeness["missing_track_numbers"]
+        metadata["missing_track_positions"] = completeness["missing_track_positions"]
         metadata["duplicate_track_numbers"] = completeness["duplicate_track_numbers"]
+        metadata["duplicate_track_positions"] = completeness["duplicate_track_positions"]
         metadata["track_number_conflicts"] = completeness["track_number_conflicts"]
         metadata["completeness_status"] = completeness["completeness_status"]
         if rebuilt_format is None or rebuilt_destination is None:
