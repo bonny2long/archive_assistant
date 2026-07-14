@@ -579,17 +579,65 @@ def _audiobook_candidate_key(
         "confidence": confidence,
     }
 
-def _bookish_candidate_key(item: ClassifiedFile, media_type: str) -> tuple[str, dict[str, Any]]:
+def _source_file_name(value: Any) -> str:
+    if value is None:
+        return ""
+    return PureWindowsPath(str(value).strip()).name.casefold()
+
+
+def _parent_book_item(
+    batch: IngestBatch | None,
+    ingest_file: IngestFile,
+) -> dict[str, Any] | None:
+    if batch is None:
+        return None
+    metadata = batch.metadata_json if isinstance(batch.metadata_json, dict) else {}
+    book_items = metadata.get("book_items")
+    if not isinstance(book_items, list):
+        return None
+    file_names = {
+        _source_file_name(ingest_file.file_name),
+        _source_file_name(ingest_file.file_path),
+    }
+    file_names.discard("")
+    for book_item in book_items:
+        if not isinstance(book_item, dict) or not book_item.get("include", True):
+            continue
+        source_names = {
+            _source_file_name(book_item.get("source_file")),
+            _source_file_name(book_item.get("source_key")),
+        }
+        if file_names.intersection(source_names):
+            return book_item
+    return None
+
+
+def _bookish_candidate_key(
+    item: ClassifiedFile,
+    media_type: str,
+    batch: IngestBatch | None = None,
+) -> tuple[str, dict[str, Any]]:
     fields = _metadata_fields(item.ingest_file)
-    title = _field(fields, "title") or re.sub(r"[._-]+", " ", Path(item.ingest_file.file_name).stem).strip()
-    author = _field(fields, "author", "creator", "artist")
+    parent_item = _parent_book_item(batch, item.ingest_file) if media_type == "ebook" else None
+    title = (
+        _norm(parent_item.get("title")) if parent_item else None
+    ) or _field(fields, "title") or re.sub(r"[._-]+", " ", Path(item.ingest_file.file_name).stem).strip()
+    author = (
+        _norm(parent_item.get("author")) if parent_item else None
+    ) or _field(fields, "author", "creator", "artist")
     key = f"{media_type}:{_key_part(author)}:{_key_part(title)}"
     return key, {
         "author": author,
         "title": title,
-        "series": _field(fields, "series"),
-        "series_index": _field(fields, "series_index", "issue", "volume"),
-        "confidence": 0.72 if author else 0.58,
+        "year": (_norm(parent_item.get("year")) if parent_item else None) or _field(fields, "year", "date"),
+        "series": (_norm(parent_item.get("series")) if parent_item else None) or _field(fields, "series"),
+        "series_index": (
+            _norm(parent_item.get("series_index")) if parent_item else None
+        ) or _field(fields, "series_index", "issue", "volume"),
+        "format": (_norm(parent_item.get("format")) if parent_item else None) or item.ingest_file.extension.lstrip(".").upper(),
+        "source_file": parent_item.get("source_file") if parent_item else item.ingest_file.file_name,
+        "identity_source": "parent_book_item" if parent_item else "embedded_or_filename",
+        "confidence": 0.94 if parent_item and author and title else 0.72 if author else 0.58,
     }
 
 
@@ -637,7 +685,7 @@ def build_candidate_drafts(
             key, evidence = _audiobook_candidate_key(item, batch, single_book_context)
             media_type, title, creator = "audiobook", evidence.get("title"), evidence.get("author")
         elif item.media_class == "ebook":
-            key, evidence = _bookish_candidate_key(item, "ebook")
+            key, evidence = _bookish_candidate_key(item, "ebook", batch)
             media_type, title, creator = "ebook", evidence.get("title"), evidence.get("author")
         elif item.media_class == "comic":
             key, evidence = _bookish_candidate_key(item, "comic")

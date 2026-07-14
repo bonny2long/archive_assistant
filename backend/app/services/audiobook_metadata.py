@@ -27,6 +27,10 @@ AUDIOBOOK_HINT_RE = re.compile(
     r"narrated|narrator|read\s+by)\b",
     re.I,
 )
+EMBEDDED_AUDIOBOOK_GENRE_RE = re.compile(
+    r"\b(audio\s*book|audiobook|spoken\s+word|audio\s+drama)\b",
+    re.I,
+)
 CHAPTER_HINT_RE = re.compile(
     r"\b(chapter|chap|ch\.?|part|pt\.?|disc|disk|cd)\s*0*\d+\b",
     re.I,
@@ -177,6 +181,77 @@ def has_explicit_audiobook_signal(path: Path) -> bool:
             )
             or AUDIOBOOK_HINT_RE.search(path.name)
         )
+    )
+
+
+def _representative_audio_sample(
+    root: Path,
+    audio_files: list[Path],
+    *,
+    limit: int = 16,
+) -> list[Path]:
+    ordered = sorted(set(audio_files))
+    if root.is_file():
+        return ordered[:1]
+
+    by_top_level_folder: dict[str, Path] = {}
+    for candidate in ordered:
+        try:
+            relative = candidate.relative_to(root)
+        except ValueError:
+            relative = Path(candidate.name)
+        group = relative.parts[0] if len(relative.parts) > 1 else "."
+        by_top_level_folder.setdefault(group.casefold(), candidate)
+
+    selected = list(by_top_level_folder.values())
+    selected_set = set(selected)
+    selected.extend(
+        candidate
+        for candidate in ordered
+        if candidate not in selected_set
+    )
+    return selected[:limit]
+
+
+def has_embedded_audiobook_signal(
+    path: Path,
+    audio_files: list[Path] | None = None,
+    *,
+    sample_limit: int = 16,
+) -> bool:
+    """Return true when representative files explicitly identify spoken books."""
+    if audio_files is None:
+        candidates = [path] if path.is_file() else [
+            candidate for candidate in path.rglob("*") if candidate.is_file()
+        ]
+        audio_files = [
+            candidate for candidate in candidates
+            if is_audiobook_audio_file(candidate)
+        ]
+    sample = _representative_audio_sample(
+        path,
+        audio_files,
+        limit=sample_limit,
+    )
+    if not sample:
+        return False
+
+    readable_count = 0
+    positive_count = 0
+    for candidate in sample:
+        embedded = read_embedded_metadata(candidate, media_type="audio")
+        if not embedded.read_ok:
+            continue
+        readable_count += 1
+        genre = str(embedded.fields.get("genre") or "")
+        if EMBEDDED_AUDIOBOOK_GENRE_RE.search(genre):
+            positive_count += 1
+
+    if readable_count == 1:
+        return positive_count == 1
+    return (
+        positive_count >= 2
+        and positive_count / max(1, readable_count) >= 0.60
     )
 
 

@@ -9,6 +9,7 @@ TV_TYPES = {"video_tv_show", "video_tv_episode"}
 BOOK_TYPES = {"book"}
 AUDIOBOOK_TYPES = {"audiobook"}
 QUARANTINE_TYPES = {"unknown_type", "unsupported_file"}
+DISPLAY_SEPARATOR = " | "
 
 
 def _plural(count: int, singular: str, plural: str | None = None) -> str:
@@ -191,7 +192,7 @@ def build_batch_display_fields(batch: IngestBatch, parent_summary: dict | None =
             "media_category": "tv",
             "media_label": "TV Show",
             "primary_name": metadata.get("show_title") or "Unknown TV Show",
-            "secondary_name": " Ãƒâ€šÃ‚Â· ".join(parts),
+            "secondary_name": DISPLAY_SEPARATOR.join(parts),
             "item_label": "videos",
             "item_count": video_count or episode_count,
             "edit_kind": "tv_show",
@@ -216,7 +217,7 @@ def build_batch_display_fields(batch: IngestBatch, parent_summary: dict | None =
             "media_category": "books",
             "media_label": "Book",
             "primary_name": metadata.get("title") or "Unknown Title",
-            "secondary_name": f"{author} Ãƒâ€šÃ‚Â· {year}" if year else author,
+            "secondary_name": DISPLAY_SEPARATOR.join([author, year]) if year else author,
             "item_label": "book files",
             "item_count": int(metadata.get("book_file_count") or 0),
             "edit_kind": "book",
@@ -236,7 +237,7 @@ def build_batch_display_fields(batch: IngestBatch, parent_summary: dict | None =
             "media_category": "audiobooks",
             "media_label": "Audiobook",
             "primary_name": author,
-            "secondary_name": " Ãƒâ€šÃ‚Â· ".join(details),
+            "secondary_name": DISPLAY_SEPARATOR.join(details),
             "item_label": "audio files",
             "item_count": int(metadata.get("audiobook_file_count") or 0),
             "edit_kind": "audiobook",

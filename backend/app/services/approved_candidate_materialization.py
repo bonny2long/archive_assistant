@@ -18,7 +18,9 @@ from app.services.batch_split import (
     _suggested_metadata as _music_suggested_metadata,
 )
 from app.services.audiobook_metadata import audiobook_destination
+from app.services.book_metadata import build_book_item_destination
 from app.services.destination_authority import rebuild_music_batch_destination_from_attached_files
+from app.services.metadata_candidates import METADATA_ASSIST_VERSION
 from app.services.parent_candidate_materialization import (
     PARENT_CONTAINER_DRAINED,
     PARENT_REVIEW_IN_PROGRESS,
@@ -28,9 +30,13 @@ from app.services.parent_candidate_materialization import (
     get_child_batch_count,
     get_parent_container_display_state,
 )
+from app.services.review_state import build_review_state
+from app.services.title_display import clean_display_title, destination_title
 
 CLOSED_PARENT_STATUSES = {"moved", "move_failed", "merged"}
 GENERIC_AUDIO_EXTENSIONS = {".mp3", ".flac", ".m4a", ".aac", ".wav", ".ogg", ".opus", ".wma", ".aiff", ".alac"}
+BOOK_EXTENSIONS = {".epub", ".pdf", ".mobi", ".azw", ".azw3"}
+ARTWORK_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 
 
 class MaterializationError(ValueError):
@@ -136,6 +142,219 @@ def _is_generic_audio_file(file: IngestFile) -> bool:
     role = str(file.detected_role or "").casefold()
     ext = str(file.extension or Path(file.file_name or "").suffix).casefold()
     return ext in GENERIC_AUDIO_EXTENSIONS or role in {"audio", "audio_track", "music_audio", "music_track", "discography_track"}
+
+
+def _normalized_source_name(value: Any) -> str:
+    if value is None:
+        return ""
+    return Path(str(value).replace("\\", "/")).name.casefold()
+
+
+def _parent_book_item(
+    parent_batch: IngestBatch,
+    files: list[IngestFile],
+) -> dict[str, Any] | None:
+    parent_metadata = (
+        parent_batch.metadata_json
+        if isinstance(parent_batch.metadata_json, dict)
+        else {}
+    )
+    book_items = parent_metadata.get("book_items")
+    if not isinstance(book_items, list):
+        return None
+    file_names = {
+        name
+        for ingest_file in files
+        for name in (
+            _normalized_source_name(ingest_file.file_name),
+            _normalized_source_name(ingest_file.file_path),
+        )
+        if name
+    }
+    for item in book_items:
+        if not isinstance(item, dict) or not item.get("include", True):
+            continue
+        source_names = {
+            _normalized_source_name(item.get("source_file")),
+            _normalized_source_name(item.get("source_key")),
+        }
+        if file_names.intersection(source_names):
+            return item
+    return None
+
+
+def _book_child_state(
+    parent_batch: IngestBatch,
+    files: list[IngestFile],
+    *,
+    candidate: MediaIdentityCandidate | None = None,
+    existing_metadata: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], dict[str, Any], str] | None:
+    item = _parent_book_item(parent_batch, files)
+    if item is None:
+        return None
+
+    metadata = dict(existing_metadata or {})
+    primary_files = [
+        ingest_file
+        for ingest_file in files
+        if str(
+            ingest_file.extension or Path(ingest_file.file_name).suffix
+        ).casefold() in BOOK_EXTENSIONS
+    ]
+    artwork_files = [
+        ingest_file
+        for ingest_file in files
+        if str(
+            ingest_file.extension or Path(ingest_file.file_name).suffix
+        ).casefold() in ARTWORK_EXTENSIONS
+    ]
+    title = str(
+        item.get("title")
+        or (candidate.candidate_title if candidate else None)
+        or metadata.get("title")
+        or "Unknown Title"
+    ).strip()
+    author = str(
+        item.get("author")
+        or (candidate.candidate_primary_creator if candidate else None)
+        or metadata.get("author")
+        or "Unknown Author"
+    ).strip()
+    year = item.get("year")
+    if year is None and candidate is not None:
+        year = candidate.candidate_year
+    if year is None:
+        year = metadata.get("year")
+    year = str(year).strip() if year else None
+    book_format = str(
+        item.get("format")
+        or item.get("book_format")
+        or (primary_files[0].extension.lstrip(".") if primary_files else None)
+        or metadata.get("format")
+        or "EPUB"
+    ).upper()
+    parent_metadata = (
+        parent_batch.metadata_json
+        if isinstance(parent_batch.metadata_json, dict)
+        else {}
+    )
+    destination = build_book_item_destination(
+        books_root=settings.books_dir,
+        item={
+            **item,
+            "title": title,
+            "author": author,
+            "year": year,
+            "format": book_format,
+        },
+        collection_title=parent_metadata.get("collection_title"),
+        keep_collection_together=bool(
+            parent_metadata.get("keep_collection_together")
+        ),
+    )
+    primary_name = (
+        str(item.get("source_file") or "").strip()
+        or (primary_files[0].file_name if primary_files else files[0].file_name)
+    )
+    warnings: list[str] = []
+    if author.casefold() in {
+        "",
+        "unknown",
+        "unknown author",
+        "unknown creator",
+        "unkn",
+    }:
+        warnings.append("book_author_missing")
+    if title.casefold() in {"", "unknown title"}:
+        warnings.append("book_title_missing")
+    if not year:
+        warnings.append("book_year_missing")
+
+    metadata.update({
+        "media_kind": "book",
+        "metadata_assist_version": str(
+            item.get("metadata_assist_version") or METADATA_ASSIST_VERSION
+        ),
+        "review_type": "book",
+        "review_mode": "single_item",
+        "author": author,
+        "title": title,
+        "metadata_title": title,
+        "display_title": str(
+            item.get("display_title") or clean_display_title(title)
+        ),
+        "destination_title": str(
+            item.get("destination_title") or destination_title(title)
+        ),
+        "year": year,
+        "series": item.get("series"),
+        "series_index": item.get("series_index"),
+        "format": book_format,
+        "book_format": book_format,
+        "book_file_count": len(primary_files),
+        "book_files": [ingest_file.file_name for ingest_file in primary_files],
+        "primary_book_file": primary_name,
+        "file_count": len(files),
+        "files": [ingest_file.file_name for ingest_file in files],
+        "artwork_count": len(artwork_files),
+        "artwork_files": [ingest_file.file_name for ingest_file in artwork_files],
+        "matched_artwork": item.get("matched_artwork"),
+        "alternate_formats": list(item.get("alternate_formats") or []),
+        "metadata_candidates": dict(item.get("metadata_candidates") or {}),
+        "candidate_notes": list(item.get("candidate_notes") or []),
+        "candidate_runtime": dict(item.get("candidate_runtime") or {}),
+        "accepted_unknown_author": bool(item.get("accepted_unknown_author")),
+        "accepted_unknown_year": bool(item.get("accepted_unknown_year")),
+        "lookup_later": bool(item.get("lookup_later")),
+        "suggested_destination_preview": str(destination),
+        "metadata_quality": (
+            "weak"
+            if {"book_author_missing", "book_title_missing"}.intersection(warnings)
+            else "good"
+        ),
+        "metadata_warnings": warnings,
+        "confidence": max(
+            float(item.get("confidence") or 0.0),
+            float(candidate.candidate_confidence or 0.0) if candidate else 0.0,
+            0.9,
+        ),
+        "source_parent_batch_id": parent_batch.id,
+        "source_parent_path": parent_batch.source_path,
+        "source_candidate_id": (
+            candidate.id
+            if candidate is not None
+            else metadata.get("source_candidate_id")
+        ),
+        "candidate_key": (
+            candidate.candidate_key
+            if candidate is not None
+            else metadata.get("candidate_key")
+        ),
+        "review_origin": "approved_candidate_materialization",
+    })
+    metadata = build_review_state("book", metadata)
+    suggested_metadata = {
+        "metadata_assist_version": metadata["metadata_assist_version"],
+        "author": author,
+        "title": title,
+        "year": year,
+        "series": item.get("series"),
+        "series_index": item.get("series_index"),
+        "format": book_format,
+        "sources": {
+            field: "reviewed parent book item"
+            for field in (
+                "author",
+                "title",
+                "year",
+                "series",
+                "series_index",
+                "format",
+            )
+        },
+    }
+    return metadata, suggested_metadata, str(destination)
 
 
 def _candidate_metadata(candidate: MediaIdentityCandidate, files: list[IngestFile], parent_batch: IngestBatch, detected_type: str | None = None) -> dict[str, Any]:
@@ -334,6 +553,23 @@ def _create_child_batch(db: Session, parent_batch: IngestBatch, candidate: Media
         metadata = _music_child_metadata(candidate, files, parent_batch)
         suggested_metadata = _music_suggested_metadata(metadata)
         suggested_destination = _library_album_destination(metadata)
+    elif detected_type == "book":
+        book_state = _book_child_state(
+            parent_batch,
+            files,
+            candidate=candidate,
+        )
+        if book_state is not None:
+            metadata, suggested_metadata, suggested_destination = book_state
+        else:
+            metadata = _candidate_metadata(
+                candidate,
+                files,
+                parent_batch,
+                detected_type,
+            )
+            suggested_metadata = _suggested_metadata(candidate, detected_type)
+            suggested_destination = None
     else:
         metadata = _candidate_metadata(candidate, files, parent_batch, detected_type)
         suggested_metadata = _suggested_metadata(candidate, detected_type)
@@ -377,6 +613,115 @@ def _create_child_batch(db: Session, parent_batch: IngestBatch, candidate: Media
     _mark_candidate_materialized(db, parent_batch.id, candidate.id)
     parent_batch.updated_at = timestamp
     return child_batch.id
+
+
+def repair_materialized_book_children(
+    db: Session,
+    *,
+    parent_batch_id: int | None = None,
+    apply: bool = False,
+) -> dict[str, Any]:
+    children = (
+        db.query(IngestBatch)
+        .options(selectinload(IngestBatch.files))
+        .filter(
+            IngestBatch.detected_type == "book",
+            IngestBatch.status.in_({"pending_review", "needs_metadata_review"}),
+        )
+        .all()
+    )
+    parent_cache: dict[int, IngestBatch | None] = {}
+    repairable_ids: list[int] = []
+    repaired_ids: list[int] = []
+    unmatched_ids: list[int] = []
+    skipped_confirmed_ids: list[int] = []
+    timestamp = now_utc()
+
+    for child in children:
+        existing = child.metadata_json if isinstance(child.metadata_json, dict) else {}
+        source_parent_id = int(existing.get("source_parent_batch_id") or 0)
+        if not source_parent_id:
+            continue
+        if parent_batch_id is not None and source_parent_id != parent_batch_id:
+            continue
+        if child.metadata_confirmed:
+            skipped_confirmed_ids.append(child.id)
+            continue
+        if source_parent_id not in parent_cache:
+            parent_cache[source_parent_id] = db.get(IngestBatch, source_parent_id)
+        parent = parent_cache[source_parent_id]
+        if parent is None:
+            unmatched_ids.append(child.id)
+            continue
+        state = _book_child_state(
+            parent,
+            list(child.files),
+            existing_metadata=existing,
+        )
+        if state is None:
+            unmatched_ids.append(child.id)
+            continue
+        metadata, suggested_metadata, suggested_destination = state
+        current_signature = (
+            existing.get("title"),
+            existing.get("author"),
+            existing.get("year"),
+            existing.get("format"),
+            existing.get("primary_book_file"),
+            child.suggested_destination,
+            (child.suggested_metadata or {}).get("title"),
+            (child.suggested_metadata or {}).get("author"),
+        )
+        desired_signature = (
+            metadata.get("title"),
+            metadata.get("author"),
+            metadata.get("year"),
+            metadata.get("format"),
+            metadata.get("primary_book_file"),
+            suggested_destination,
+            suggested_metadata.get("title"),
+            suggested_metadata.get("author"),
+        )
+        if current_signature == desired_signature:
+            continue
+        repairable_ids.append(child.id)
+        if not apply:
+            continue
+
+        audit = list(existing.get("book_child_metadata_repair_audit") or [])
+        audit.append({
+            "repaired_at": timestamp.isoformat(),
+            "source_parent_batch_id": source_parent_id,
+            "source_file": metadata.get("primary_book_file"),
+            "reason": "Restored reviewed parent book item metadata.",
+        })
+        metadata["book_child_metadata_repair_audit"] = audit
+        child.metadata_json = metadata
+        child.suggested_metadata = suggested_metadata
+        child.suggested_destination = suggested_destination
+        child.confidence = max(
+            float(child.confidence or 0.0),
+            float(metadata.get("confidence") or 0.0),
+        )
+        child.status = (
+            "needs_metadata_review"
+            if metadata.get("blocking_review_items")
+            else "pending_review"
+        )
+        child.updated_at = timestamp
+        repaired_ids.append(child.id)
+
+    if apply:
+        db.commit()
+    return {
+        "apply": apply,
+        "repairable_child_batch_ids": repairable_ids,
+        "repaired_child_batch_ids": repaired_ids,
+        "unmatched_child_batch_ids": unmatched_ids,
+        "skipped_confirmed_child_batch_ids": skipped_confirmed_ids,
+        "repairable_count": len(repairable_ids),
+        "repaired_count": len(repaired_ids),
+    }
 
 
 def _materialize_candidate(db: Session, parent_batch: IngestBatch, candidate: MediaIdentityCandidate) -> tuple[int, bool]:

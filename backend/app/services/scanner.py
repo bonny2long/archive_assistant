@@ -83,6 +83,7 @@ from app.services.audiobook_metadata import (
     build_audiobook_file_metadata,
     build_audiobook_metadata,
     collect_audiobook_files,
+    has_embedded_audiobook_signal,
     has_explicit_audiobook_signal,
     is_audiobook_audio_file,
     looks_like_generic_multidisc_audiobook_source,
@@ -262,6 +263,8 @@ def classify_ingest_item(path: Path) -> str:
         if has_explicit_audiobook_signal(path):
             return "audiobook"
         if looks_like_generic_multidisc_audiobook_source(path):
+            return "audiobook"
+        if has_embedded_audiobook_signal(path, audio_files):
             return "audiobook"
     if looks_like_discography_parent(
         path,
