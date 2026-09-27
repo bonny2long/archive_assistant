@@ -191,6 +191,10 @@ export const api = {
     request<BatchSummary>(`/batches/${id}/quarantine`, "POST"),
   restoreQuarantinedBatch: (id: number) =>
     request<BatchSummary>(`/batches/${id}/restore-quarantine`, "POST"),
+  discardQuarantinedBatch: (id: number, reason: string) =>
+    request<BatchSummary>(`/batches/${id}/discard-quarantine`, "POST", { reason }),
+  undoDiscardQuarantinedBatch: (id: number) =>
+    request<BatchSummary>(`/batches/${id}/undo-discard`, "POST"),
   moveApproved: () => request<MoveResult>("/move/approved", "POST"),
   preflightSelectedMove: (batchIds: number[]) =>
     request<SelectedMovePreflight>("/move/selected/preflight", "POST", { batch_ids: batchIds }),

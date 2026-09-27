@@ -23,6 +23,7 @@ from app.services.universal_ingestion import (
     VIDEO_EXTENSIONS,
     snapshot_universal_ingestion_boundary,
 )
+from app.services.disc_markers import split_disc_suffix
 from app.services.metadata_candidates import (
     is_generated_timestamp_value,
     is_generic_track_value,
@@ -186,6 +187,12 @@ def _embedded_album_value_count(db: Session, batch_id: int) -> int:
                     or is_generic_track_value(text)
                 ):
                     continue
+                parts = str(ingest_file.file_path).replace("\\", "/").split("/")
+                text, _disc = split_disc_suffix(
+                    text,
+                    disc_tag=source.get("disc_number") or source.get("discnumber"),
+                    folder_name=parts[-2] if len(parts) > 1 else None,
+                )
                 value = _normalized_identity(text)
                 if value:
                     values.add(value)
@@ -304,6 +311,27 @@ def _single_music_candidate_is_approved(
     return db.query(UniversalIngestionReviewAction.id).filter(
         UniversalIngestionReviewAction.batch_id == batch_id,
         UniversalIngestionReviewAction.candidate_id == candidate_id,
+        UniversalIngestionReviewAction.action_type == "approve_candidate",
+        UniversalIngestionReviewAction.decision_status != "cleared",
+    ).first() is not None
+
+
+def _single_audiobook_candidate_is_approved(
+    db: Session,
+    batch: IngestBatch,
+    candidates: list[MediaIdentityCandidate],
+) -> bool:
+    """One coherent multi-disc book whose grouping the operator approved.
+
+    Mirrors the music rule: after the operator approves the single candidate,
+    per-disc album tags ("Dune Disc 1", a stray typo on one disc) and disc
+    folders are evidence, not a reason to create another child batch.
+    """
+    if not _is_coherent_single_audiobook(batch, candidates):
+        return False
+    return db.query(UniversalIngestionReviewAction.id).filter(
+        UniversalIngestionReviewAction.batch_id == batch.id,
+        UniversalIngestionReviewAction.candidate_id == candidates[0].id,
         UniversalIngestionReviewAction.action_type == "approve_candidate",
         UniversalIngestionReviewAction.decision_status != "cleared",
     ).first() is not None
@@ -539,6 +567,9 @@ def get_batch_routing_decision(
         # One reconstructed album has already passed the operator decision.
         # Its source fragments do not require creating another child batch.
         required_reasons.discard("source_fragment_group_detected")
+    if _single_audiobook_candidate_is_approved(db, batch, candidates):
+        required_reasons.discard("source_fragment_group_detected")
+        required_reasons.discard("multiple_embedded_album_values")
 
     if required_reasons:
         decision = "universal_review_required"

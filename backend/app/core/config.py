@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     quarantine_reports_dir: Path = (
         data_root / "_REPORTS" / "archive-assistant" / "quarantine-reports"
     )
+    dispositions_dir: Path = (
+        data_root / "_REPORTS" / "archive-assistant" / "dispositions"
+    )
 
     database_url: str = f"sqlite:///{backend_dir / 'archive_assistant.db'}"
 
@@ -96,6 +99,12 @@ class Settings(BaseSettings):
                 / "_REPORTS"
                 / "archive-assistant"
                 / "quarantine-reports"
+            ),
+            "dispositions_dir": (
+                self.data_root
+                / "_REPORTS"
+                / "archive-assistant"
+                / "dispositions"
             ),
         }
         for field_name, value in derived_paths.items():

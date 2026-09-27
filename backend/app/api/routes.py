@@ -13,6 +13,7 @@ from app.schemas.archive import (
     BatchMoveSummary,
     BatchMetadataQualityOut,
     BatchMediaTypeUpdate,
+    QuarantineDiscardRequest,
     BatchMediaTypeRecoveryRepairRequest,
     BatchMetadataUpdate,
     MetadataEnrichmentApplyRequest,
@@ -93,7 +94,13 @@ from app.services.mover import (
     move_approved_batches,
     preflight_selected_batches,
 )
-from app.services.quarantine import quarantine_batch, restore_quarantined_batch
+from app.services.quarantine import (
+    discard_quarantined_batch,
+    quarantine_batch,
+    record_rejection,
+    restore_quarantined_batch,
+    revoke_discard,
+)
 from app.services.video_metadata import safe_movie_path_part, safe_tv_path_part
 from app.services.tv_review import apply_tv_episode_review_patches, sync_tv_episode_metadata_to_ingest_files
 from app.services.review_items import (
@@ -2269,8 +2276,13 @@ def approve_batch(batch_id: int, db: Session = Depends(get_db)):
         routing_reasons = set(routing_decision.get("reasons", []))
         if "source_folder_name_used_as_identity" in routing_reasons:
             routing_message = "Source folder name detected as identity. Review and create child batches before approval."
-        elif routing_reasons & {"multiple_candidate_groups", "multiple_embedded_album_values"}:
+        elif "multiple_candidate_groups" in routing_reasons:
             routing_message = "Create child batches before approving. This source batch contains multiple candidate groups."
+        elif "multiple_embedded_album_values" in routing_reasons:
+            routing_message = (
+                "Files carry different album tags. Approve the candidate grouping "
+                "in Review Workspace before approval."
+            )
         elif routing_decision["decision"] == "blocked_conflict":
             routing_message = "Resolve the blocking candidate conflict in Review Workspace before approval."
         else:
@@ -2401,14 +2413,23 @@ def reject_batch(batch_id: int, db: Session = Depends(get_db)):
     batch = db.get(IngestBatch, batch_id)
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
-    if batch.status in {"moved", "merged"}:
+    if batch.status in {"moved", "merged", "quarantined", "discard_approved"}:
         raise HTTPException(
             status_code=400,
             detail=f"Cannot reject batch with status {batch.status}",
         )
+    status_before = batch.status
     batch.status = "rejected"
     batch.updated_at = now_utc()
     db.commit()
+    try:
+        record_rejection(db, batch, status_before)
+    except OSError as exc:
+        return ApproveResponse(
+            batch_id=batch.id,
+            status=batch.status,
+            message=f"Batch rejected, but the disposition record failed: {exc}",
+        )
     return ApproveResponse(batch_id=batch.id, status=batch.status, message="Batch rejected")
 
 
@@ -2449,7 +2470,47 @@ def restore_quarantine_batch(batch_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _batch_to_summary(
         batch,
-        action_message=f"Restored to ingest: {destination}",
+        action_message=(
+            f"Restored to ingest: {destination}. "
+            "Run Scan ingest to re-classify it."
+        ),
+    )
+
+
+@router.post("/batches/{batch_id}/discard-quarantine", response_model=BatchSummary)
+def discard_quarantine_batch(
+    batch_id: int,
+    payload: QuarantineDiscardRequest,
+    db: Session = Depends(get_db),
+):
+    batch = db.get(IngestBatch, batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    try:
+        location = discard_quarantined_batch(db, batch, payload.reason)
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _batch_to_summary(
+        batch,
+        action_message=(
+            f"Marked for discard. Nothing was deleted; it stays in {location} "
+            "until Cleaner's waiting period passes."
+        ),
+    )
+
+
+@router.post("/batches/{batch_id}/undo-discard", response_model=BatchSummary)
+def undo_discard_quarantine_batch(batch_id: int, db: Session = Depends(get_db)):
+    batch = db.get(IngestBatch, batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    try:
+        revoke_discard(db, batch)
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _batch_to_summary(
+        batch,
+        action_message="Discard undone. The item is back in quarantine.",
     )
 
 
@@ -2469,11 +2530,45 @@ def list_quarantine_reports():
     return reports
 
 
+# Moved, merged, and quarantine-held batches no longer own files in ingest,
+# so sending them to recovery would make them look approvable again.
+RECOVERY_REFUSED_STATUSES = {"moved", "merged", "quarantined", "discard_approved"}
+
+
 @router.post("/batches/{batch_id}/recovery", response_model=ApproveResponse)
 def send_to_recovery(batch_id: int, db: Session = Depends(get_db)):
     batch = db.get(IngestBatch, batch_id)
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
+    if batch.status in RECOVERY_REFUSED_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot send a batch with status {batch.status} to recovery",
+        )
+    if batch.detected_type in {"unknown_type", "unsupported_file"}:
+        # Unknown items have no metadata to recover. The way back into the
+        # workflow is quarantine review, and only while the files are still
+        # in ingest.
+        source = Path(batch.source_path)
+        in_ingest = source.exists() and source.resolve().is_relative_to(
+            settings.ingest_root.resolve()
+        )
+        if not in_ingest:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "This item's files are no longer in ingest, so it cannot "
+                    "return to review. Run Scan ingest to retire it."
+                ),
+            )
+        batch.status = "needs_quarantine_review"
+        batch.updated_at = now_utc()
+        db.commit()
+        return ApproveResponse(
+            batch_id=batch.id,
+            status=batch.status,
+            message="Batch returned to quarantine review",
+        )
     batch.status = "metadata_recovery"
     batch.updated_at = now_utc()
     db.commit()

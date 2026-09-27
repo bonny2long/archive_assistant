@@ -25,6 +25,8 @@ type Props = {
   onRecovery: (id: number) => void;
   onQuarantine: (id: number) => void;
   onRestoreQuarantine: (id: number) => void;
+  onDiscardQuarantine: (id: number) => void;
+  onUndoDiscard: (id: number) => void;
   onEdit: (batch: BatchSummary) => void;
   onOpenWorkspace: (batch: BatchSummary, forceUniversal?: boolean) => void;
   onMoveBatch: (id: number) => Promise<void>;
@@ -42,6 +44,7 @@ function pillClass(status: string): string {
 }
 
 function statusLabel(status: string): string {
+  if (status === "discard_approved") return "Marked for discard";
   return status.replace(/_/g, " ");
 }
 
@@ -164,6 +167,8 @@ export default function BatchRow({
   onRecovery,
   onQuarantine,
   onRestoreQuarantine,
+  onDiscardQuarantine,
+  onUndoDiscard,
   onEdit,
   onOpenWorkspace,
   onMoveBatch,
@@ -171,7 +176,8 @@ export default function BatchRow({
 }: Props) {
   const awaitingQuarantine = batch.status === "needs_quarantine_review";
   const quarantined = batch.status === "quarantined";
-  const quarantineReview = awaitingQuarantine || quarantined;
+  const discardApproved = batch.status === "discard_approved";
+  const quarantineReview = awaitingQuarantine || quarantined || discardApproved;
   const mediaLabel = getBatchMediaLabel(batch);
   const primaryName = getBatchPrimaryName(batch);
   const secondaryName = getBatchSecondaryName(batch);
@@ -284,15 +290,38 @@ export default function BatchRow({
               }
             </button>
           ) : quarantined ? (
+            <>
+              <button
+                className="btn btn--compact quarantine-restore-action"
+                title="Move back to ingest for review"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onRestoreQuarantine(batch.id);
+                }}
+              >
+                <i className="ti ti-restore" /> Restore to ingest
+              </button>
+              <button
+                className="btn btn--compact quarantine-discard-action"
+                title="Mark as not needed. Nothing is deleted now."
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onDiscardQuarantine(batch.id);
+                }}
+              >
+                <i className="ti ti-trash-x" /> Discard
+              </button>
+            </>
+          ) : discardApproved ? (
             <button
               className="btn btn--compact quarantine-restore-action"
-              title="Restore to ingest"
+              title="Cancel the discard decision and keep the item in quarantine"
               onClick={(event) => {
                 event.stopPropagation();
-                onRestoreQuarantine(batch.id);
+                onUndoDiscard(batch.id);
               }}
             >
-              <i className="ti ti-restore" /> Restore to ingest
+              <i className="ti ti-arrow-back-up" /> Undo discard
             </button>
           ) : <button
             className="btn-sm"
@@ -335,8 +364,16 @@ export default function BatchRow({
           )}
           <button
             className="btn-sm"
-            title={drainedParent ? "Processed source containers are retained as audit evidence." : "Send to recovery"}
-            disabled={quarantineReview || drainedParent}
+            title={
+              drainedParent
+                ? "Processed source containers are retained as audit evidence."
+                : batch.status === "moved"
+                  ? "Moved batches cannot return to recovery."
+                  : ["unknown_type", "unsupported_file"].includes(batch.detected_type)
+                    ? "Return to quarantine review"
+                    : "Send to recovery"
+            }
+            disabled={quarantineReview || drainedParent || batch.status === "moved"}
             style={{ color: "var(--text-secondary)" }}
             onClick={(event) => { event.stopPropagation(); onRecovery(batch.id); }}
           >

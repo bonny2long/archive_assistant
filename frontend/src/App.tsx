@@ -23,6 +23,7 @@ import type {
   TvEpisodeReviewUpdate,
   UniversalReviewActionUpdate,
 } from "./types/archive";
+import { QUARANTINE_TAB_STATUSES } from "./types/archive";
 import { api } from "./api/client";
 import ActionBar from "./components/ActionBar";
 import SuiteNav from "./components/SuiteNav";
@@ -259,7 +260,7 @@ export default function App() {
     if (tab === "pending") return isPendingReviewBatch(batch);
     if (tab === "needs_metadata") return isNeedsMetadataBatch(batch);
     if (tab === "quarantine") {
-      return ["needs_quarantine_review", "quarantined"].includes(batch.status);
+      return QUARANTINE_TAB_STATUSES.includes(batch.status);
     }
     return batch.status === tab;
   });
@@ -269,7 +270,7 @@ export default function App() {
     pending: batches.filter(isPendingReviewBatch).length,
     needs_metadata: batches.filter(isNeedsMetadataBatch).length,
     quarantine: batches.filter(
-      (batch) => ["needs_quarantine_review", "quarantined"].includes(batch.status),
+      (batch) => QUARANTINE_TAB_STATUSES.includes(batch.status),
     ).length,
     approved: batches.filter((batch) => batch.status === "approved").length,
     moved: batches.filter((batch) => batch.status === "moved").length,
@@ -466,21 +467,27 @@ export default function App() {
 
   const handleReject = async (id: number) => {
     try {
-      await api.rejectBatch(id);
-      showToast(`Batch ${id} rejected`);
+      const result = await api.rejectBatch(id);
+      showToast(result.message ?? `Batch ${id} rejected`);
       await loadBatches({ mode: "refresh" });
-    } catch {
-      showToast("Reject failed", "error");
+    } catch (rejectError: unknown) {
+      showToast(
+        rejectError instanceof Error ? rejectError.message : "Reject failed",
+        "error",
+      );
     }
   };
 
   const handleRecovery = async (id: number) => {
     try {
-      await api.sendToRecovery(id);
-      showToast(`Batch ${id} sent to recovery`);
+      const result = await api.sendToRecovery(id);
+      showToast(result.message ?? `Batch ${id} sent to recovery`);
       await loadBatches({ mode: "refresh" });
-    } catch {
-      showToast("Recovery failed", "error");
+    } catch (recoveryError: unknown) {
+      showToast(
+        recoveryError instanceof Error ? recoveryError.message : "Recovery failed",
+        "error",
+      );
     }
   };
 
@@ -505,10 +512,48 @@ export default function App() {
     }
   };
 
+  const handleDiscardQuarantine = async (id: number) => {
+    const reason = window.prompt(
+      "Mark this quarantined item for discard?\n\n"
+      + "Nothing is deleted now. The item stays in quarantine and Cleaner may "
+      + "remove it after its waiting period. You can undo this until then.\n\n"
+      + "Why is it not needed? (for example: damaged, duplicate, not wanted)",
+    );
+    if (reason === null) return;
+    if (reason.trim().length < 3) {
+      showToast("A discard reason is required", "error");
+      return;
+    }
+    try {
+      const result = await api.discardQuarantinedBatch(id, reason.trim());
+      showToast(result.action_message ?? "Marked for discard");
+      await loadBatches({ mode: "refresh" });
+    } catch (discardError: unknown) {
+      showToast(
+        discardError instanceof Error ? discardError.message : "Discard failed",
+        "error",
+      );
+    }
+  };
+
+  const handleUndoDiscard = async (id: number) => {
+    try {
+      const result = await api.undoDiscardQuarantinedBatch(id);
+      showToast(result.action_message ?? "Discard undone");
+      await loadBatches({ mode: "refresh" });
+    } catch (undoError: unknown) {
+      showToast(
+        undoError instanceof Error ? undoError.message : "Undo discard failed",
+        "error",
+      );
+    }
+  };
+
   const handleRestoreQuarantine = async (id: number) => {
     const confirmed = window.confirm(
       "Restore this quarantined item to _INGEST?\n\n"
-      + "The old quarantine batch will be retired so a new scan can classify it again.",
+      + "It goes back into Quarantine review. Run Scan ingest afterwards so "
+      + "any fixes you made are re-classified.",
     );
     if (!confirmed) return;
     try {
@@ -1067,6 +1112,8 @@ export default function App() {
           onRecovery={(id) => void handleRecovery(id)}
           onQuarantine={(id) => void handleQuarantine(id)}
           onRestoreQuarantine={(id) => void handleRestoreQuarantine(id)}
+          onDiscardQuarantine={(id) => void handleDiscardQuarantine(id)}
+          onUndoDiscard={(id) => void handleUndoDiscard(id)}
           onEdit={setEditingBatch}
           onOpenWorkspace={(batch, forceUniversal) => void handleOpenWorkspace(batch, forceUniversal)}
           onBulkApprove={() => {

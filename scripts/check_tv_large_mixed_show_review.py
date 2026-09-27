@@ -15,6 +15,7 @@ Tests:
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -32,14 +33,21 @@ PASS = "PASS"
 FAIL = "FAIL"
 
 
-def touch(path: Path) -> Path:
+def touch(path: Path, *, empty: bool = False) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.touch()
+    # Real episodes must be non-empty: the scanner ignores zero-byte videos
+    # as corrupt artifacts. Only the deliberate stub stays empty.
+    path.write_bytes(b"" if empty else b"x")
     return path
+
+
+FAILED_CHECKS: list[str] = []
 
 
 def check(description: str, condition: bool) -> None:
     status = PASS if condition else FAIL
+    if not condition:
+        FAILED_CHECKS.append(description)
     print(f"  [{status}] {description}")
 
 
@@ -78,7 +86,7 @@ def main() -> int:
         touch(show / "extra_video_that_cannot_be_parsed.mkv")
 
         # ── Zero-byte stub ──
-        touch(show / "Shingeki no Kyojin - S01E03 - stub.mkv")
+        touch(show / "Shingeki no Kyojin - S01E03 - stub.mkv", empty=True)
 
         # ── Sidecar ──
         touch(show / "tvshow.nfo")
@@ -106,13 +114,14 @@ def main() -> int:
 
         # ── Test 3: Special episodes (OADs, OVAs, Specials, Parts, Fractionals) ──
         print("\n── Special episodes ──")
-        check("7 special episodes", md["special_episode_count"] == 7)
+        # 2 OAD + 2 OVA + 2 SP/Special + 1 Part + 1 fractional
+        check("8 special episodes", md["special_episode_count"] == 8)
 
         specials = md.get("special_episodes", [])
         oad_items = [s for s in specials if s.get("destination_group") == "oad"]
         ova_items = [s for s in specials if s.get("destination_group") == "ova"]
-        specials_items = [s for s in specials if s.get("special_label", "").startswith("SP")]
-        part_items = [s for s in specials if s.get("destination_group") == "specials" and "P" in (s.get("special_label") or "")]
+        specials_items = [s for s in specials if str(s.get("special_label") or "").casefold().startswith("sp")]
+        part_items = [s for s in specials if s.get("destination_group") == "specials" and re.fullmatch(r"S\d+P\d+", str(s.get("special_label") or ""))]
         fractional_items = [s for s in specials if s.get("destination_group") == "specials" and "." in (s.get("special_label") or "")]
         check("2 OAD episodes", len(oad_items) == 2)
         check("2 OVA episodes", len(ova_items) == 2)
@@ -150,10 +159,16 @@ def main() -> int:
 
         # ── Test 7: Total video count ──
         print("\n── Count consistency ──")
-        expected_total = md["episode_count"] + md["special_episode_count"] + md["unresolved_video_count"]
+        # video_file_count is episodes + specials (normalize_tv_counts);
+        # unparseable files are reported separately as unresolved.
+        expected_total = md["episode_count"] + md["special_episode_count"]
         check(
-            f"video_file_count ({md['video_file_count']}) equals total ({expected_total})",
+            f"video_file_count ({md['video_file_count']}) equals episodes + specials ({expected_total})",
             md["video_file_count"] == expected_total,
+        )
+        check(
+            "every non-empty video is an episode, a special, or unresolved",
+            len(data["files"]["video"]) == expected_total + md["unresolved_video_count"],
         )
         check(
             "season_count is 2",
@@ -171,9 +186,9 @@ def main() -> int:
             ep_dest = _tv_episode_destination(dest, sf)
             group = s.get("destination_group", "")
             if group == "oad":
-                check(f"  OAD destination → OADs/ folder: {ep_dest}", ep_dest is not None and "OADs" in str(ep_dest))
+                check(f"  OAD destination -> Specials/ folder: {ep_dest}", ep_dest is not None and ep_dest.parent.name == "Specials")
             elif group == "ova":
-                check(f"  OVA destination → OVAs/ folder: {ep_dest}", ep_dest is not None and "OVAs" in str(ep_dest))
+                check(f"  OVA destination -> Specials/ folder: {ep_dest}", ep_dest is not None and ep_dest.parent.name == "Specials")
 
         # ── Test 9: Special group helper ──
         print("\n── Special group destinations ──")
@@ -181,12 +196,14 @@ def main() -> int:
         ova_folder = _tv_special_group_destination(dest, "ova")
         specials_folder = _tv_special_group_destination(dest, "specials")
         extras_folder = _tv_special_group_destination(dest, "extras")
-        check("OADs folder name", oad_folder.name == "OADs")
-        check("OVAs folder name", ova_folder.name == "OVAs")
+        # OAD/OVA share Specials/ so Jellyfin/Plex recognise them as specials.
+        check("OAD group uses Specials folder", oad_folder.name == "Specials")
+        check("OVA group uses Specials folder", ova_folder.name == "Specials")
         check("Specials folder name", specials_folder.name == "Specials")
         check("Extras folder name", extras_folder.name == "Extras")
 
     print()
+    failures += len(FAILED_CHECKS)
     if failures:
         print(f"Result: {failures} failure(s)")
     else:

@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 import re
 
+from app.services.disc_markers import split_disc_suffix
+from app.services.name_cleanup import strip_windows_copy_suffix
 from app.services.metadata_candidates import (
     METADATA_ASSIST_VERSION,
     add_candidate,
@@ -105,6 +107,7 @@ def _extract_year(text: str) -> tuple[str, str | None]:
 
 
 def parse_audiobook_name(value: str) -> dict:
+    value = strip_windows_copy_suffix(value)
     candidate = Path(value)
     raw = (
         candidate.stem
@@ -528,6 +531,14 @@ def build_audiobook_metadata_candidates(
     detected_discs: set[int] = set()
     for path in audio:
         embedded = extract_audio_metadata(path)
+        if embedded.get("title"):
+            # Album tags like "Dune Disc 1" name the book, not the disc.
+            book_title, _disc = split_disc_suffix(
+                embedded["title"],
+                disc_tag=embedded.get("disc_number"),
+                folder_name=path.parent.name,
+            )
+            embedded["title"] = book_title or embedded["title"]
         for field in ("author", "title", "year", "narrator"):
             candidate = make_candidate(
                 field,

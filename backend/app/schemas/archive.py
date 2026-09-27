@@ -578,6 +578,10 @@ class IngestBatchOut(BaseModel):
     class Config:
         from_attributes = True
 
+class QuarantineDiscardRequest(BaseModel):
+    reason: str
+
+
 class BatchMediaTypeUpdate(BaseModel):
     target_detected_type: Literal["music_album", "audiobook"]
     confirmed: bool = False
