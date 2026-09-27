@@ -920,14 +920,14 @@ def _tv_episode_destination(
     if preserve:
         if season_number is not None:
             folder = _tv_season_destination(destination, int(season_number))
-        elif destination_group in {"specials", "oad", "extras"}:
+        elif destination_group in {"specials", "oad", "ova", "extras"}:
             folder = _tv_special_group_destination(destination, destination_group)
         else:
             return None
         return folder / ingest_file.file_name
 
-    # Specials going to destination group folder (Specials / OADs / OVAs / Extras)
-    if is_special and destination_group in {"specials", "oad", "extras"}:
+    # Specials go to their group folder (OAD, OVA and specials all use Specials/; extras use Extras/)
+    if is_special and destination_group in {"specials", "oad", "ova", "extras"}:
         episode_title = str(metadata.get("episode_title") or "").strip()
         if special_label:
             file_name = (
@@ -1044,7 +1044,7 @@ def _validate_tv_file_metadata_ready(batch: IngestBatch) -> list[str]:
                 errors.append(f"{source}: preserve original filename requires season number or special group")
             continue
         if is_special:
-            if destination_group in {"specials", "oad", "extras"}:
+            if destination_group in {"specials", "oad", "ova", "extras"}:
                 if not special_label and not episode_code:
                     errors.append(f"{source}: special item requires special_label or episode_code")
             elif destination_group in {"season", ""}:

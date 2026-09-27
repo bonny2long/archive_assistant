@@ -1152,6 +1152,12 @@ export type TvEpisodeReviewUpdate = {
 
 export type TabKey = "all" | "pending" | "needs_metadata" | "quarantine" | "approved" | "moved";
 
+export const QUARANTINE_TAB_STATUSES = [
+  "needs_quarantine_review",
+  "quarantined",
+  "discard_approved",
+];
+
 export type WorkspaceCandidateState = "blocked" | "review" | "safe" | "approved";
 
 export type WorkspaceFilter =

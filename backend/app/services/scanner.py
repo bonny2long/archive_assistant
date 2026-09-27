@@ -4,11 +4,13 @@ from pathlib import Path
 from typing import Callable
 import re
 
+from sqlalchemy import and_, not_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.archive import IngestBatch, IngestFile
 from app.services.checksum import file_sha256
+from app.services.disc_markers import split_disc_suffix
 from app.services.music_metadata import (
     album_group_key,
     build_music_metadata_candidates,
@@ -148,6 +150,20 @@ RECOGNIZED_MEDIA_TYPES = {
 }
 
 QUARANTINE_TYPES = {"unknown_type", "unsupported_file"}
+
+# Quarantine-type rows in these states no longer own their ingest path: the
+# files were moved to quarantine, marked for discard, or the row was retired.
+# They must not stop a folder with the same name from being classified again.
+RETIRED_QUARANTINE_STATUSES = {"merged", "quarantined", "discard_approved"}
+
+
+def _not_retired_quarantine_row():
+    return not_(
+        and_(
+            IngestBatch.detected_type.in_(QUARANTINE_TYPES),
+            IngestBatch.status.in_(RETIRED_QUARANTINE_STATUSES),
+        )
+    )
 
 IGNORED_SIDECAR_ONLY_EXTENSIONS = {
     ".txt",
@@ -779,7 +795,6 @@ def _create_tv_batch(db: Session, source: Path) -> IngestBatch | None:
             IngestBatch.status.in_(
                 [
                     "needs_quarantine_review",
-                    "quarantined",
                     "needs_metadata_review",
                     "pending_review",
                 ]
@@ -835,7 +850,6 @@ def _create_movie_batch(db: Session, source: Path) -> IngestBatch | None:
             IngestBatch.status.in_(
                 [
                     "needs_quarantine_review",
-                    "quarantined",
                     "needs_metadata_review",
                     "pending_review",
                 ]
@@ -1248,6 +1262,7 @@ def _create_audiobook_batch(db: Session, source: Path) -> IngestBatch | None:
         .filter(
             IngestBatch.source_path == str(source),
             IngestBatch.status != "quarantined",
+            _not_retired_quarantine_row(),
         )
         .first()
     )
@@ -1426,7 +1441,9 @@ def repair_stale_media_batches(
         db.query(IngestBatch)
         .filter(
             IngestBatch.detected_type.in_(QUARANTINE_TYPES),
-            IngestBatch.status.in_(ACTIVE_REVIEW_STATUSES),
+            IngestBatch.status.in_(
+                ACTIVE_REVIEW_STATUSES | {"rejected", "metadata_recovery"}
+            ),
         )
         .all()
     )
@@ -1546,6 +1563,7 @@ def _create_unknown_batch(
         .filter(
             IngestBatch.source_path == str(path),
             IngestBatch.status != "quarantined",
+            _not_retired_quarantine_row(),
         )
         .first()
     )
@@ -2267,6 +2285,15 @@ def scan_music_ingest(
     for path in audio_files:
         metadata = extract_music_metadata(path)
         metadata["source_filename"] = path.name
+        album_without_disc, album_disc = split_disc_suffix(
+            metadata.get("album"),
+            disc_tag=metadata.get("discnumber"),
+            folder_name=path.parent.name,
+        )
+        if album_disc is not None and album_without_disc:
+            # "The Wall (1)" on disc 1 in folder "CD 1" is disc 1 of "The Wall".
+            metadata["album_tag_with_disc"] = metadata.get("album")
+            metadata["album"] = album_without_disc
         file_metadata[str(path)] = metadata
         file_checksums[str(path)] = file_sha256(path)
 

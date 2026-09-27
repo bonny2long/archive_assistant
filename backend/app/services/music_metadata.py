@@ -7,6 +7,7 @@ from app.services.embedded_metadata_reader import (
     read_embedded_metadata,
 )
 from app.services.metadata_candidates import add_candidate, make_candidate
+from app.services.name_cleanup import strip_windows_copy_suffix
 
 AUDIO_EXTENSIONS = {".mp3", ".flac", ".m4a", ".aac", ".wav", ".ogg", ".opus"}
 ARTWORK_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
@@ -35,6 +36,23 @@ GENERIC_MUSIC_VALUES = {
     "various",
 }
 YEAR_PATTERN = re.compile(r"(?<!\d)(19\d{2}|20\d{2})(?!\d)")
+# "(2007 Remaster)", "[Remastered 2011]", "(10th Anniversary 2023)": the year
+# names an edition, not the original release, so it must not become the
+# release year suggested from the folder name.
+EDITION_YEAR_BRACKET = re.compile(
+    r"[\[(][^\])]*(?:remaster(?:ed)?|reissue|anniversary)[^\])]*[\])]",
+    re.IGNORECASE,
+)
+# Uploader/bitrate tags glued after the last bracket: "[FLAC] 88",
+# "[FLAC]-Sc4r3cr0w". Only a short number or a letters+digits handle is
+# dropped, never an ordinary word.
+TRAILING_TAG_AFTER_BRACKET = re.compile(
+    r"(\])\s*[-_]?\s*(?:\d{1,3}|(?=[A-Za-z0-9]*\d)(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{3,24})\s*$"
+)
+# Decorative symbols/emoji at the end of release names ("... [PMEDIA] ⭐️").
+TRAILING_DECORATION = re.compile(
+    "[\\s\u2600-\u27BF\u2B00-\u2BFF\uFE0F\U0001F300-\U0001FAFF]+$"
+)
 BRACKETED_TEXT = re.compile(r"[\[(][^\])]*(?:mp3|flac|pmedia|lossless|web|cd|vinyl|kbps|bit|remaster|deluxe)[^\])]*[\])]", re.IGNORECASE)
 TRAILING_RELEASE_NOISE = re.compile(
     r"""
@@ -96,6 +114,7 @@ def discography_artist_from_folder(value: str) -> str | None:
 
 
 def parse_discography_parent_folder(folder_name: str) -> dict:
+    folder_name = strip_windows_copy_suffix(folder_name)
     raw = folder_name.strip()
     removed_tokens: list[str] = []
 
@@ -273,7 +292,9 @@ def track_number_evidence(metadata: dict | None, filename: str) -> dict:
     filename_disc, filename_track, filename_source = _filename_track_numbers(filename)
     embedded_track, embedded_warning = _embedded_track_number(metadata)
     raw_disc = metadata.get("discnumber")
-    disc = filename_disc or _positive_int(raw_disc, 1) or 1
+    tag_disc = _positive_int(raw_disc, 1) if raw_disc not in (None, "") else None
+    disc = filename_disc or tag_disc or 1
+    disc_source = "filename" if filename_disc else "tag" if tag_disc else "default"
     warnings: list[str] = []
     if embedded_warning:
         warnings.append(embedded_warning)
@@ -304,6 +325,7 @@ def track_number_evidence(metadata: dict | None, filename: str) -> dict:
         "embedded_track": embedded_track,
         "resolved_track": resolved_track,
         "disc": disc,
+        "disc_source": disc_source,
         "preferred_source": preferred_source,
         "confidence": confidence,
         "warnings": list(dict.fromkeys(warnings)),
@@ -640,8 +662,19 @@ def _clean_album_text(value: str) -> str:
 
 def parse_music_folder_name(folder_name: str) -> dict[str, str | None]:
     """Extract a conservative artist/album/year suggestion from a release folder."""
+    folder_name = strip_windows_copy_suffix(folder_name)
     raw = folder_name.strip()
-    year_match = YEAR_PATTERN.search(raw)
+    raw = TRAILING_DECORATION.sub("", raw).strip()
+    raw = TRAILING_TAG_AFTER_BRACKET.sub(r"\1", raw).strip()
+    edition_spans = [match.span() for match in EDITION_YEAR_BRACKET.finditer(raw)]
+    year_match = next(
+        (
+            match
+            for match in YEAR_PATTERN.finditer(raw)
+            if not any(start <= match.start() < end for start, end in edition_spans)
+        ),
+        None,
+    )
     year = year_match.group(1) if year_match else None
 
     without_noise = BRACKETED_TEXT.sub("", raw).strip(" .-_")

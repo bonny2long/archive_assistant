@@ -17,6 +17,7 @@ from app.services.metadata_candidates import (
 )
 from app.services.pdf_metadata_reader import read_pdf_metadata
 from app.services.title_display import clean_display_title, destination_title
+from app.services.name_cleanup import strip_windows_copy_suffix
 
 BOOK_EXTENSIONS = {".epub", ".pdf"}
 BOOK_ALTERNATE_EXTENSIONS = {".mobi"}
@@ -301,6 +302,7 @@ def _extract_year(text: str) -> tuple[str, str | None]:
 
 def parse_book_name(value: str) -> dict:
     """Parse conservative book metadata from a filename or folder name."""
+    value = strip_windows_copy_suffix(value)
     candidate = Path(value)
     raw = (
         candidate.stem

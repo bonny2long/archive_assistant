@@ -22,6 +22,7 @@ from app.services.music_metadata import (
     parse_music_folder_name,
     resolved_music_track_evidence,
 )
+from app.services.disc_markers import is_disc_folder_name, split_disc_suffix
 from app.services.metadata_candidates import (
     is_generated_timestamp_value,
     is_generic_track_value,
@@ -126,12 +127,12 @@ def _discography_release_folder(ingest_file: IngestFile) -> tuple[str | None, st
     ]
     if not matches:
         physical_parent = parts[-2] if len(parts) > 1 else None
-        if physical_parent and not DISC_FOLDER_RE.match(physical_parent):
+        if physical_parent and not is_disc_folder_name(physical_parent):
             return physical_parent, container
         return container, container
     index = matches[-1]
     nested = parts[index + 1] if index + 1 < len(parts) - 1 else None
-    if not nested or DISC_FOLDER_RE.match(nested):
+    if not nested or is_disc_folder_name(nested):
         return container, container
     return nested, container
 
@@ -201,6 +202,9 @@ def _usable_audiobook_identity(value: Any) -> str | None:
     text = _norm(value)
     if not text:
         return None
+    text, _disc = split_disc_suffix(text)
+    if not text:
+        return None
     if (
         is_generic_unknown_value(text)
         or is_generated_timestamp_value(text)
@@ -216,7 +220,7 @@ def _stable_audiobook_root(ingest_file: IngestFile, relative_path: str) -> tuple
     directories = parts[:-1]
     root: str | None = None
     for index in range(len(directories) - 1, -1, -1):
-        if DISC_FOLDER_RE.fullmatch(directories[index]):
+        if DISC_FOLDER_RE.fullmatch(directories[index]) or is_disc_folder_name(directories[index]):
             if index > 0:
                 root = directories[index - 1]
             break
@@ -228,12 +232,15 @@ def _stable_audiobook_root(ingest_file: IngestFile, relative_path: str) -> tuple
         relative_parts = _path_parts(relative_path)
         relative_directories = relative_parts[:-1]
         for index in range(len(relative_directories) - 1, -1, -1):
-            if DISC_FOLDER_RE.fullmatch(relative_directories[index]) and index > 0:
+            if (
+                DISC_FOLDER_RE.fullmatch(relative_directories[index])
+                or is_disc_folder_name(relative_directories[index])
+            ) and index > 0:
                 root = relative_directories[index - 1]
                 break
         if root is None and relative_directories:
             fallback = relative_directories[-1]
-            if not DISC_FOLDER_RE.fullmatch(fallback) and not SOURCE_CHUNK_FOLDER_RE.search(fallback):
+            if not is_disc_folder_name(fallback) and not SOURCE_CHUNK_FOLDER_RE.search(fallback):
                 root = fallback
     return root, _key_part(root) if root else None
 
@@ -333,7 +340,7 @@ def classify_batch_files(batch: IngestBatch) -> list[ClassifiedFile]:
             }:
                 path_parts = _path_parts(str(ingest_file.file_path))
                 physical_parent = path_parts[-2] if len(path_parts) > 1 else None
-                if physical_parent and not DISC_FOLDER_RE.match(physical_parent):
+                if physical_parent and not is_disc_folder_name(physical_parent):
                     release_folder = physical_parent
                     discography_folder = path_parts[-3] if len(path_parts) > 2 else None
             if release_folder:
@@ -378,6 +385,14 @@ def _music_candidate_key(item: ClassifiedFile) -> tuple[str, dict[str, Any]]:
     album = (_norm(folder.get("album")) if folder else None) or _field(
         fields, "album", "release",
     )
+    path_parts = _path_parts(str(item.ingest_file.file_path))
+    physical_parent = path_parts[-2] if len(path_parts) > 1 else None
+    album_before_disc_split = album
+    album, album_disc = split_disc_suffix(
+        album,
+        disc_tag=_field(fields, "disc_number", "discnumber", "disc"),
+        folder_name=physical_parent,
+    )
     year = _norm(folder.get("year")) if folder else None
     if release_folder:
         key = (
@@ -405,6 +420,7 @@ def _music_candidate_key(item: ClassifiedFile) -> tuple[str, dict[str, Any]]:
         "release_type": _field(fields, "release_type"),
         "source_folder": release_folder,
         "discography_source_folder": discography_folder,
+        "album_disc_suffix_removed": album_before_disc_split if album_disc else None,
         "confidence": confidence,
     }
 
@@ -435,6 +451,19 @@ def _batch_audiobook_identity(batch: IngestBatch | None) -> dict[str, str | None
     }
 
 
+def _folder_disc_number(ingest_file: IngestFile) -> int | None:
+    """Disc number implied by the file's own folder: "CD 2", "Dune Disc 2"."""
+    parts = _path_parts(str(ingest_file.file_path))
+    folder = parts[-2] if len(parts) > 1 else ""
+    if not is_disc_folder_name(folder):
+        return None
+    _base, disc = split_disc_suffix(folder)
+    if disc is not None:
+        return disc
+    match = re.search(r"(\d+)", folder)
+    return int(match.group(1)) if match else None
+
+
 def _single_book_audiobook_context(
     batch: IngestBatch | None,
     classified: list[ClassifiedFile],
@@ -460,31 +489,41 @@ def _single_book_audiobook_context(
         return None
 
     usable_titles: set[str] = set()
+    title_file_counts: dict[str, int] = defaultdict(int)
     usable_authors: set[str] = set()
+    author_file_counts: dict[str, int] = defaultdict(int)
     generic_values: set[str] = set()
     seen_pairs: set[tuple[int | None, int]] = set()
     track_discs: dict[int, list[int | None]] = defaultdict(list)
     discs: set[int] = set()
     for item in audio_items:
+        file_titles: set[str] = set()
         for value in _metadata_field_values(item.ingest_file, "album", "book_title", "release"):
             usable = _usable_audiobook_identity(value)
             if usable:
                 usable_titles.add(_key_part(usable))
+                file_titles.add(_key_part(usable))
             else:
                 generic_values.add(value)
+        for title_key in file_titles:
+            title_file_counts[title_key] += 1
+        file_authors: set[str] = set()
         for value in _metadata_field_values(
             item.ingest_file, "author", "album_artist", "albumartist", "artist", "composer",
         ):
             usable = _usable_audiobook_identity(value)
             if usable:
                 usable_authors.add(_key_part(usable))
+                file_authors.add(_key_part(usable))
+        for author_key in file_authors:
+            author_file_counts[author_key] += 1
         fields = _metadata_fields(item.ingest_file)
         track_text = _track_number(_field(fields, "track_number", "tracknumber", "chapter"))
         disc_text = _track_number(_field(fields, "disc_number", "discnumber", "disc"))
         if not track_text:
             continue
         track = int(track_text)
-        disc = int(disc_text) if disc_text else None
+        disc = int(disc_text) if disc_text else _folder_disc_number(item.ingest_file)
         pair = (disc, track)
         if pair in seen_pairs:
             return None
@@ -493,13 +532,32 @@ def _single_book_audiobook_context(
         if disc is not None:
             discs.add(disc)
 
-    if usable_titles and usable_titles != {_key_part(batch_title)}:
-        return None
+    batch_title_key = _key_part(batch_title)
+    title_outliers: list[str] = []
+    if usable_titles and usable_titles != {batch_title_key}:
+        # Tolerate a stray tag (e.g. one disc tagged "Dune Dics 4") only when
+        # a clear majority of files carry the book title. Everything else
+        # (one book folder, one author, distinct disc/track pairs) must still
+        # hold, and the outliers stay visible in the evidence.
+        majority = title_file_counts.get(batch_title_key, 0) * 2 > len(audio_items)
+        if not majority:
+            return None
+        title_outliers = sorted(usable_titles - {batch_title_key})
     batch_author = _usable_audiobook_identity(batch_identity.get("author"))
     if batch_author:
         usable_authors.add(_key_part(batch_author))
+    author_outliers: list[str] = []
     if len(usable_authors) > 1:
-        return None
+        # Same rule as titles: one mistyped tag ("Frank Herber" on a single
+        # file) is tolerated only when a clear majority carry the batch author.
+        batch_author_key = _key_part(batch_author) if batch_author else None
+        majority = bool(
+            batch_author_key
+            and author_file_counts.get(batch_author_key, 0) * 2 > len(audio_items)
+        )
+        if not majority:
+            return None
+        author_outliers = sorted(usable_authors - {batch_author_key})
     for repeated_discs in track_discs.values():
         if len(repeated_discs) > 1 and (
             any(disc is None for disc in repeated_discs)
@@ -520,6 +578,8 @@ def _single_book_audiobook_context(
         "disc_count": len(discs),
         "primary_member_count": len(audio_items),
         "generic_embedded_values": sorted(generic_values),
+        "title_outliers": title_outliers,
+        "author_outliers": author_outliers,
         "single_book_multidisc_collapse": True,
         "identity_source": "approved_batch_identity_and_scoped_file_evidence",
         "confidence": 0.96,
@@ -799,10 +859,19 @@ def _detect_track_conflicts(candidates: Any) -> None:
                 evidence = resolved_music_track_evidence(member.ingest_file.metadata_json, member.ingest_file.file_name)
                 track = _track_number(str(evidence.get("resolved_track") or ""))
                 disc = _track_number(str(evidence.get("disc") or "1"))
+                disc_source = evidence.get("disc_source")
+                disc_is_known = (
+                    disc_source in {"filename", "tag"}
+                    if disc_source
+                    else bool(_field(fields, "disc_number", "discnumber", "disc"))
+                )
             else:
                 track = _track_number(_field(fields, "track_number", "tracknumber", "chapter"))
                 disc = _track_number(_field(fields, "disc_number", "discnumber"))
-            if disc:
+                disc_is_known = bool(disc)
+            # Only real disc evidence counts. The music fallback of disc 1 is a
+            # grouping default, not proof, and must not hide missing disc tags.
+            if disc and disc_is_known:
                 disc_values.add(disc)
             if track:
                 track_counts[track] += 1
@@ -984,8 +1053,22 @@ def _persist_decisions_and_flags(
                 examples=sorted(classes),
             )
     fragment_group_keys = {item.evidence.get("fragment_group_key") for item in classified if item.evidence.get("fragment_group_key")}
+    # "CD 1" / "Dune Disc 2" folders of one release are discs, not risky
+    # download chunks. Only skip the flag when everything forms one release.
+    disc_only_groups = {
+        str(key)
+        for key in fragment_group_keys
+        if all(
+            is_disc_folder_name(str(item.evidence.get("fragment_label") or ""))
+            for item in classified
+            if item.evidence.get("fragment_group_key") == key
+        )
+    }
+    single_release = len(candidates) == 1
     if not source_origins_resolved:
         for group_key in sorted(str(key) for key in fragment_group_keys):
+            if single_release and group_key in disc_only_groups:
+                continue
             _persist_flag(db, batch.id, "source_fragment_group_detected", "Sibling source fragments were detected and treated as evidence, not final grouping.", examples=[group_key])
     for draft in candidates.values():
         row = candidate_rows[draft.key]

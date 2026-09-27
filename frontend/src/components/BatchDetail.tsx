@@ -402,6 +402,35 @@ function DebugDetails({ batch, moveSummary, review }: Props) {
   );
 }
 
+function QuarantineHistory({ batch }: { batch: IngestBatch }) {
+  const raw = batch.metadata_json?.quarantine_history;
+  const history = Array.isArray(raw) ? raw : [];
+  if (history.length === 0) return null;
+  const labels: Record<string, string> = {
+    quarantined: "Moved to quarantine",
+    restored: "Restored to ingest",
+    discard_approved: "Marked for discard",
+    discard_revoked: "Discard undone",
+  };
+  return (
+    <section className="quarantine-history">
+      <div className="batch-detail__label">Quarantine history</div>
+      <ul>
+        {history.map((entry, index) => {
+          const item = (entry ?? {}) as Record<string, unknown>;
+          const event = String(item.event ?? "event");
+          const reason = item.reason ? ` - ${String(item.reason)}` : "";
+          return (
+            <li key={`${event}-${index}`}>
+              {String(item.at ?? "")} · {labels[event] ?? event}{reason}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 function QuarantineReviewDetail({ batch, moveSummary }: Props) {
   return (
     <div className="batch-detail">
@@ -432,7 +461,31 @@ function QuarantineReviewDetail({ batch, moveSummary }: Props) {
             {readableSourcePath(batch.source_path)}
           </div>
         </div>
+        {Boolean(batch.metadata_json?.quarantine_destination) && (
+          <div>
+            <div className="batch-detail__label">Quarantine location</div>
+            <div className="batch-detail__value batch-detail__path">
+              {metadataValue(batch, "quarantine_destination")}
+            </div>
+          </div>
+        )}
+        {Boolean(batch.metadata_json?.quarantined_at) && (
+          <div><div className="batch-detail__label">Quarantined at</div><div className="batch-detail__value">{metadataValue(batch, "quarantined_at")}</div></div>
+        )}
+        {Boolean(batch.metadata_json?.discard_reason) && (
+          <div><div className="batch-detail__label">Discard reason</div><div className="batch-detail__value">{metadataValue(batch, "discard_reason")}</div></div>
+        )}
+        {Boolean(batch.metadata_json?.discard_approved_at) && (
+          <div><div className="batch-detail__label">Marked for discard at</div><div className="batch-detail__value">{metadataValue(batch, "discard_approved_at")}</div></div>
+        )}
       </div>
+      {batch.status === "discard_approved" && (
+        <p className="quarantine-discard-note">
+          Nothing has been deleted. This item stays in quarantine until Cleaner's
+          waiting period passes. Use Undo discard to keep it.
+        </p>
+      )}
+      <QuarantineHistory batch={batch} />
       <DebugDetails batch={batch} moveSummary={moveSummary} />
     </div>
   );
@@ -1575,7 +1628,11 @@ export default function BatchDetail({ batch, moveSummary, review, onEditBatch }:
   if (isDrainedParentBatch(batch)) {
     return <DrainedParentDetail batch={batch} moveSummary={moveSummary} />;
   }
-  if (batch.status === "needs_quarantine_review" || batch.status === "quarantined") {
+  if (
+    batch.status === "needs_quarantine_review"
+    || batch.status === "quarantined"
+    || batch.status === "discard_approved"
+  ) {
     return <QuarantineReviewDetail batch={batch} moveSummary={moveSummary} />;
   }
   if (batch.detected_type === "music_album" && batch.status !== "moved") {

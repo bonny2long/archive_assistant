@@ -24,8 +24,10 @@ from app.services.scanner import (  # noqa: E402
 
 
 def touch(path: Path) -> Path:
+    # Non-empty on purpose: the scanner ignores zero-byte videos as corrupt
+    # download artifacts, so empty fixtures would test nothing.
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.touch()
+    path.write_bytes(b"x")
     return path
 
 

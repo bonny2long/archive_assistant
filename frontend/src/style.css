@@ -222,6 +222,10 @@ button:focus-visible, input:focus-visible {
 .media-type-label { color: var(--text-secondary); font-size: 12px; font-weight: 600; }
 .quarantine-action { color: var(--accent-amber); white-space: nowrap; }
 .quarantine-restore-action { color: var(--accent-blue); white-space: nowrap; }
+.quarantine-discard-action { color: var(--accent-red, #d9534f); white-space: nowrap; margin-left: 6px; }
+.quarantine-discard-note { margin: 12px 0 0; color: var(--text-secondary); }
+.quarantine-history { margin-top: 12px; }
+.quarantine-history ul { margin: 4px 0 0; padding-left: 18px; font-size: 0.85em; }
 
 /* Library summary */
 .library-summary {
@@ -357,6 +361,7 @@ button:focus-visible, input:focus-visible {
 .pill--moved { background: var(--pill-moved-bg); color: var(--pill-moved-fg); }
 .pill--needs_quarantine_review { background: var(--pill-pending-bg); color: var(--pill-pending-fg); }
 .pill--quarantined { background: var(--pill-approved-bg); color: var(--pill-approved-fg); }
+.pill--discard_approved { background: var(--pill-rejected-bg); color: var(--pill-rejected-fg); }
 
 /* Confidence bar */
 .conf-bar { display: flex; align-items: center; gap: 6px; }

@@ -2,6 +2,7 @@ import re
 from pathlib import Path
 
 from app.services.metadata_candidates import add_candidate, make_candidate
+from app.services.name_cleanup import strip_windows_copy_suffix
 
 
 VIDEO_EXTENSIONS = {
@@ -158,6 +159,7 @@ def folder_looks_like_tv_show(root: Path, video_files: list[Path]) -> bool:
 
 
 def parse_tv_folder_name(value: str) -> dict:
+    value = strip_windows_copy_suffix(value)
     raw = Path(value).name
     year_matches = list(YEAR_PATTERN.finditer(raw))
     year = year_matches[-1].group(1) if year_matches else None
@@ -212,6 +214,7 @@ def _release_tags(value: str) -> list[str]:
 
 
 def parse_movie_name(value: str) -> dict:
+    value = strip_windows_copy_suffix(value)
     name = Path(value).name
     raw = Path(name).stem if Path(name).suffix.lower() in VIDEO_EXTENSIONS else name
     year_matches = list(YEAR_PATTERN.finditer(raw))

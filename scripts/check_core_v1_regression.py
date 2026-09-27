@@ -38,6 +38,12 @@ CHECKS = [
     "scripts/check_parent_candidate_materialization_state.py",
     "scripts/check_split_child_metadata_scope_m4d5_2.py",
     "scripts/check_multi_artist_split_m4d5.py",
+    "scripts/check_quarantine_lifecycle.py",
+    "scripts/check_multidisc_disc_markers.py",
+    "scripts/check_release_folder_noise.py",
+    "scripts/check_universal_ingestion_m4d1.py",
+    "scripts/check_tv_show_hardening.py",
+    "scripts/check_tv_large_mixed_show_review.py",
 ]
 
 # These filesystem integration checks remain available for targeted/manual
@@ -56,6 +62,7 @@ def run_check(relative_path: str) -> None:
     print(f"\n=== RUNNING {relative_path} ===", flush=True)
     environment = os.environ.copy()
     environment["DEBUG"] = "true"
+    environment["PYTHONIOENCODING"] = "utf-8"
     environment["PYTHONPATH"] = str(ROOT / "backend")
 
     creationflags = (

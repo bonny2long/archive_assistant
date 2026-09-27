@@ -27,6 +27,10 @@ from app.services.music_metadata import (  # noqa: E402
     parse_music_folder_name,
 )
 from app.services.scanner import _create_discography_batch  # noqa: E402
+from app.models.archive import IngestBatch  # noqa: E402
+from app.models.media_metadata import MediaIdentityCandidate, UniversalIngestionReviewAction  # noqa: E402
+from app.services.approved_candidate_materialization import materialize_approved_candidates  # noqa: E402
+from app.services.universal_ingestion import snapshot_universal_ingestion_boundary  # noqa: E402
 
 
 def check(label: str, condition: bool) -> int:
@@ -203,31 +207,79 @@ def main() -> int:
             )
 
             assert batch is not None
+            # Current contract: a discography is a source container. It may not
+            # move as one unit; each album becomes its own child batch first.
             batch.status = "approved"
             db.commit()
             moved, errors = move_approved_batches(db)
-            destination = discographies / "Nas"
             failures += check(
-                "move preserves child album folders under discography root",
-                moved == 1
-                and not errors
-                and (destination / "1994 - Illmatic" / "01 - Genesis.mp3").exists()
-                and (
-                    destination
-                    / "1996 - It Was Written"
-                    / "01 - Album Intro.flac"
-                ).exists(),
+                "discography parent refuses a direct move",
+                moved == 0 and any("parent review container" in error for error in errors),
+            )
+            batch.status = "pending_review"
+            db.commit()
+
+            snapshot_universal_ingestion_boundary(db, batch)
+            db.commit()
+            candidates = (
+                db.query(MediaIdentityCandidate)
+                .filter(MediaIdentityCandidate.batch_id == batch.id)
+                .all()
+            )
+            for candidate in candidates:
+                db.add(UniversalIngestionReviewAction(
+                    batch_id=batch.id,
+                    candidate_id=candidate.id,
+                    action_type="approve_candidate",
+                    decision_status="active",
+                    reason="discography intake regression",
+                ))
+            db.commit()
+            materialize_approved_candidates(db, batch.id)
+            db.commit()
+            children = (
+                db.query(IngestBatch)
+                .filter(IngestBatch.id != batch.id, IngestBatch.status != "merged")
+                .all()
             )
             failures += check(
-                "discography parent move log is written",
-                (destination / "metadata" / "discography-move-log.json").exists(),
+                "each album becomes its own child batch",
+                len(candidates) == 2 and len(children) == 2,
+            )
+            for child in children:
+                child.status = "approved"
+            db.commit()
+            moved, errors = move_approved_batches(db)
+            library_files = {
+                path.name: path
+                for root_dir in (settings.music_flac_dir, settings.music_mp3_dir)
+                for path in root_dir.rglob("*")
+                if path.is_file()
+            }
+            genesis = next((path for name, path in library_files.items() if "Genesis" in name), None)
+            intro = next((path for name, path in library_files.items() if "Album Intro" in name), None)
+            failures += check(
+                "child albums move into the music library in their own folders",
+                moved == 2
+                and not errors
+                and genesis is not None
+                and intro is not None
+                and genesis.parent != intro.parent
+                and "Illmatic" in genesis.parent.name
+                and "It Was Written" in intro.parent.name,
+            )
+            failures += check(
+                "each moved album writes its move manifest",
+                genesis is not None
+                and intro is not None
+                and (genesis.parent / "metadata" / "move_manifest.json").exists()
+                and (intro.parent / "metadata" / "move_manifest.json").exists(),
             )
 
             reset = reset_music_test_data(db, apply=True)
             failures += check(
-                "dev reset restores discography tracks and clears the batch",
+                "dev reset restores discography tracks",
                 reset.restored_tracks == 2
-                and reset.cleared_batches == 1
                 and first.exists()
                 and second.exists(),
             )
