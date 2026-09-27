@@ -1,3 +1,5 @@
+> **Historical (2026-06-17).** This records the system as it was on that date. Paths, versions and behavior may be out of date. For the current state see [README.md](../README.md) and the NAS runbook v12.
+
 # Local Ready-Folder Bridge Setup - 2026-06-17 Checkpoint
 
 This dated checkpoint is kept for project history.
@@ -11,14 +13,14 @@ docs/INTAKE_WATCHER_BRIDGE.md
 Current shared local path:
 
 ```env
-DATA_ROOT=C:/Users/BonnyMakaniankhondo/Documents/GitHub/NAS/nas-data
-INGEST_ROOT=C:/Users/BonnyMakaniankhondo/Documents/GitHub/NAS/nas-data/_INGEST/ready
+DATA_ROOT=C:/NAS-Local/nas-data
+INGEST_ROOT=C:/NAS-Local/nas-data/_INGEST/ready
 ```
 
 Validate from the backend folder:
 
 ```powershell
-cd C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\archive-assistant-scaffold\archive-assistant-scaffold\backend
+cd C:\Dev\NAS\archive_assistant\backend
 
 python -c "from app.core.config import settings; print(settings.data_root); print(settings.ingest_root); print(settings.ingest_root.exists())"
 ```
@@ -26,8 +28,8 @@ python -c "from app.core.config import settings; print(settings.data_root); prin
 Expected:
 
 ```text
-C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\nas-data
-C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\nas-data\_INGEST\ready
+C:\NAS-Local\nas-data
+C:\NAS-Local\nas-data\_INGEST\ready
 True
 ```
 

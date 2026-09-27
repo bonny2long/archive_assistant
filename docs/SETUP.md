@@ -11,7 +11,7 @@ archive-assistant-scaffold/archive-assistant-scaffold
 Backend:
 
 ```powershell
-cd C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\archive-assistant-scaffold\archive-assistant-scaffold\backend
+cd C:\Dev\NAS\archive_assistant\backend
 
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
@@ -23,7 +23,7 @@ python -m uvicorn app.main:app --reload
 Frontend:
 
 ```powershell
-cd C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\archive-assistant-scaffold\archive-assistant-scaffold\frontend
+cd C:\Dev\NAS\archive_assistant\frontend
 
 npm install
 npm run dev
@@ -53,8 +53,8 @@ ARCHIVE_ASSISTANT_TIMEZONE=America/Chicago
 In local bridge mode, Archive Assistant scans the shared ready folder, not its own project `data/_INGEST`.
 
 ```env
-DATA_ROOT=C:/Users/BonnyMakaniankhondo/Documents/GitHub/NAS/nas-data
-INGEST_ROOT=C:/Users/BonnyMakaniankhondo/Documents/GitHub/NAS/nas-data/_INGEST/ready
+DATA_ROOT=C:/NAS-Local/nas-data
+INGEST_ROOT=C:/NAS-Local/nas-data/_INGEST/ready
 ```
 
 With `DATA_ROOT` set, Archive Assistant final output folders also resolve under `nas-data` unless a specific folder variable is explicitly overridden.
@@ -62,7 +62,7 @@ With `DATA_ROOT` set, Archive Assistant final output folders also resolve under 
 Validate:
 
 ```powershell
-cd C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\archive-assistant-scaffold\archive-assistant-scaffold\backend
+cd C:\Dev\NAS\archive_assistant\backend
 
 python -c "from app.core.config import settings; print(settings.data_root); print(settings.ingest_root); print(settings.ingest_root.exists())"
 ```

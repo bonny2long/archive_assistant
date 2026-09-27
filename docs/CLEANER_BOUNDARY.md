@@ -1,15 +1,24 @@
 # Cleaner Boundary
 
-Cleaner is not implemented in Archive Assistant v2.
+Cleaner is a separate app (`C:\Dev\NAS\cleaner`). Archive Assistant never cleans up or deletes anything; it hands Cleaner evidence on disk.
 
-## Future Cleaner May
+## Cleaner Today
 
 ```text
-Remove safe empty source folders after approved moves.
-Move uncertain leftovers to leftover-review.
-Move rejected/unsupported items to quarantine review.
-Log every cleanup action.
-Use development/production safety modes.
+Reports leftovers in ready, failed, staging, leftover-review and quarantine.
+Waits until a leftover is 30 days old (MIN_AGE_DAYS).
+Requires an Archive Assistant move manifest with verified destinations.
+Removes reviewed empty folders only, and only when all production gates are on.
+Logs every plan and every removal.
+```
+
+## Cleaner Later
+
+```text
+Read every move manifest per source folder and these disposition records.
+Ask Archive Assistant whether a source folder still has pending batches.
+Route deletions through a 14-day trash hold.
+Clean approved quarantine discards and known junk only after that.
 ```
 
 ## Cleaner Must Not
@@ -23,7 +32,7 @@ Run while Archive Assistant is processing a batch.
 Run without logs and rollback/audit trail.
 ```
 
-Do not add Cleaner behavior in docs as if it exists.
+Keep this document in step with Cleaner's README when Cleaner gains a new action.
 
 ## Disposition Records
 

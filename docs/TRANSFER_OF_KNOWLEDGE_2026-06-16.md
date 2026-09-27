@@ -1,3 +1,5 @@
+> **Historical (2026-06-16).** This records the system as it was on that date. Paths, versions and behavior may be out of date. For the current state see [README.md](../README.md) and the NAS runbook v12.
+
 # Transfer Of Knowledge - Archive Assistant
 
 Date: 2026-06-16
@@ -8,7 +10,7 @@ Use this file to start a fresh chat with context preserved. The current thread b
 
 Repository:
 
-`C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\archive-assistant-scaffold\archive-assistant-scaffold`
+`C:\Dev\NAS\archive_assistant`
 
 Main backend files involved recently:
 

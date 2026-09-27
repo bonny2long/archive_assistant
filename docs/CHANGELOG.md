@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-09-27 - Docs brought up to date
+
+- README, architecture, testing, roadmap, operations, safety, and Cleaner boundary rewritten for the current system and the runbook v12 layout.
+- Added `backend/.env.example`.
+- Dated handoff and audit documents are marked historical.
+
 ## 2026-09-27 - Pre-existing failures fixed
 
 - Fixed: OVA specials had no move destination because the episode mover only routed specials, OAD, and extras groups. OVAs now go to `Specials/` with the others.

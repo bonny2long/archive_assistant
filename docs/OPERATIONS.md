@@ -44,5 +44,8 @@ Check final media metadata folders and `_REPORTS`.
 
 ## Empty Shells And Leftovers
 
-Empty shells and leftovers are not Archive Assistant v2 cleanup work.
-Leave them visible until Cleaner/v3 is built and proven.
+Archive Assistant never cleans up. After a move, the download folder left in `ready` (empty shells, rip logs, cue sheets, `.nfo` files) is Cleaner's to report on. Cleaner waits 30 days, then lists it; it can remove reviewed empty folders only when its production gates are on.
+
+## Quarantine
+
+Open **Quarantine review**. Restore sends an item back to `ready` for another scan; Discard needs a reason and deletes nothing; Undo discard reverses it. Each decision writes a disposition record for Cleaner.

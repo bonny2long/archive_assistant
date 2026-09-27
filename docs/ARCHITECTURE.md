@@ -23,17 +23,18 @@ AA-QA1 does not remove old editors. Old modal editors remain available until eac
 
 See `docs/Archive_Assistant_AA-QA1_All-Media_Acceptance_Gate_2026-07-03.md` and `docs/AA-QA1_Manual_Test_Report_Template_2026-07-03.md`.
 
-## Three-System Boundary
+## System Boundary
 
 ```text
 Intake Watcher = Is the upload finished?
 Archive Assistant = What is it, what needs review, and where should it go after approval?
 Cleaner = After approved moves, what safe leftovers can be cleaned or sent to review?
+BM Radio = Plays the final Music and Audiobooks libraries.
 ```
 
 Archive Assistant must scan stable ready folders. It should not watch active downloads directly in production.
 Intake Watcher owns active upload completion detection.
-Cleaner owns later conservative cleanup of empty shells/leftovers.
+Cleaner (a separate app) owns conservative cleanup of empty shells and leftovers.
 
 ## Archive Assistant Responsibility
 
@@ -51,7 +52,7 @@ Cleaner owns later conservative cleanup of empty shells/leftovers.
 - No automatic deletion.
 - No embedded tag mutation.
 - No silent metadata edits.
-- No Cleaner behavior in v2.
+- No cleanup or deletion. Cleaner is a separate app.
 
 ## Backend Module Map
 
@@ -136,8 +137,14 @@ In bridge mode, `INGEST_ROOT` points to Intake Watcher's ready folder.
 
 Archive Assistant scans ready, not incoming.
 
-## Future Cleaner Boundary
+## Cleaner Boundary
 
-Cleaner is not implemented in Archive Assistant v2.
+Cleaner is a separate app. Archive Assistant never cleans up. It hands Cleaner evidence on disk: move manifests beside every moved release, and disposition records for quarantine, restore, discard, undo discard, and reject under `_REPORTS/archive-assistant/dispositions`. See [CLEANER_BOUNDARY.md](CLEANER_BOUNDARY.md).
 
-Cleanup of empty shells, uncertain leftovers, rejected retention, and deletion review belongs to future Cleaner / v3.
+## Multi-Disc Grouping
+
+`services/disc_markers.py` recognises disc markers at the end of names ("Dune Disc 1", "Album (Disc 2)", "The Wall (1)" with an agreeing disc tag and CD folder). The scanner, universal ingestion grouping, audiobook metadata, and review routing all use it, so a multi-disc release is one batch, not one per disc.
+
+## Database
+
+SQLite (`backend/archive_assistant.db`) by design. Tables are created by `app.db.init_db` at startup; there are no Alembic migrations, so schema changes need a one-time manual step. Back up with the SQLite backup API and check `pragma integrity_check`.

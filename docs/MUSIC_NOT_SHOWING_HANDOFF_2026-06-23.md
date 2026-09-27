@@ -1,3 +1,5 @@
+> **Historical (2026-06-23).** This records the system as it was on that date. Paths, versions and behavior may be out of date. For the current state see [README.md](../README.md) and the NAS runbook v12.
+
 # Music Not Showing - IDE Handoff
 
 Date: 2026-06-23
@@ -54,8 +56,8 @@ INGEST_ROOT=../data/_INGEST
 2. Shared NAS ready-folder bridge:
 
 ```text
-DATA_ROOT=C:/Users/BonnyMakaniankhondo/Documents/GitHub/NAS/nas-data
-INGEST_ROOT=C:/Users/BonnyMakaniankhondo/Documents/GitHub/NAS/nas-data/_INGEST/ready
+DATA_ROOT=C:/NAS-Local/nas-data
+INGEST_ROOT=C:/NAS-Local/nas-data/_INGEST/ready
 ```
 
 If music exists in the NAS folder but not in the UI, the backend may have been

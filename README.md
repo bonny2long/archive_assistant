@@ -1,334 +1,176 @@
 # Archive Assistant
 
-Archive Assistant is Bonny's local-first media review and organization layer for the NAS.
-It scans stable ingest folders, classifies media, presents metadata review, requires human approval, moves approved items into final library folders, and writes manifests/logs.
-It does not watch active downloads directly and does not clean up leftovers in v2.
-
-## What Archive Assistant Does
-
-- Scans a configured ingest folder.
-- Classifies media into review batches.
-- Shows metadata candidates and review issues.
-- Lets Bonny edit/confirm metadata.
-- Requires approval before final moves.
-- Moves approved media into final library folders.
-- Writes move manifests, metadata manifests, reports, and logs.
-
-## What Archive Assistant Does Not Do
-
-- No active download watching in production.
-- No automatic deletion in v1/v2.
-- No embedded tag mutation.
-- No silent metadata edits.
-- No final move without approval.
-- No Cleaner behavior.
-
-## Current Status
+Archive Assistant is the review-and-organize step of Bonny's NAS. It scans finished downloads in `_INGEST/ready`, works out what each item is, shows you the metadata to confirm, and, only after you approve, moves it into the final library with a manifest recording every file.
 
 ```text
-Core v1 is locked and tagged as archive-assistant-v1-core.
-v2 Metadata Assist is complete and treated as the current locked local baseline.
-Current local bridge to Intake Watcher is proven.
-Future v3 / Cleaner cleanup is not active.
+Intake Watcher     Is the upload finished?                          -> _INGEST/ready
+Archive Assistant  What is it, and where should it go after approval? -> final libraries
+Cleaner            After approved moves, what leftovers are safe to clean?
+BM Radio           Plays the final Music and Audiobooks libraries.
 ```
 
-Local workflow proof completed:
+Photos are not Archive Assistant's job. They belong to the future Immich deployment.
 
-- PDF/book files promoted by Intake Watcher into ready, scanned by Archive Assistant, reviewed, approved, moved, and manifest-written.
-- Large Kanye West FLAC discography moved through Intake Watcher, scanned by Archive Assistant as `music_discography`, reviewed/approved, and moved into `Music/Discographies/Kanye West`.
-- Lil Wayne discography/mixtape set moved through the same flow into `Music/Discographies/Lil Wayne Mixtapes`.
+## Where it lives
 
-These are local workflow proof cases, not final NAS production certification.
+| What | Local | NAS (planned) |
+|---|---|---|
+| Code | `C:\Dev\NAS\archive_assistant` | container image |
+| Data root | `C:\NAS-Local\nas-data` | `/mnt/rust-pool` mounted at `/app/data` |
+| Scans | `C:\NAS-Local\nas-data\_INGEST\ready` | `/app/data/_INGEST/ready` |
+| Database | SQLite, `backend\archive_assistant.db` | SQLite on the fast NVMe pool |
+| Backend API | http://127.0.0.1:8001 | private LAN or Tailscale only |
+| Dashboard | http://127.0.0.1:5173 | private LAN or Tailscale only |
 
-## Safety Contract
+Archive Assistant stays on **SQLite** by design; only BM Radio uses PostgreSQL. There are no Alembic migrations: tables are created at startup, so a schema change needs a one-time manual step.
+
+## Workflow
+
+1. Intake Watcher promotes a finished download into `_INGEST/ready`.
+2. Click **Scan ingest**. Nothing is scanned automatically, and ordinary review actions never trigger a hidden rescan.
+3. Each download becomes a **batch**. Mixed or multi-release downloads become a parent batch whose groups you approve in the **Review Workspace**, then **Create child batches**, one per release.
+4. Check and correct the metadata. Suggestions come from tags and folder names; your edits always win.
+5. **Approve**, then **Move approved** or move a single batch.
+6. Files move into the final library with a `move_manifest.json` and `.md` next to them. Nothing is overwritten.
+7. What's left in `ready` is Cleaner's to review.
+
+Final library layout:
 
 ```text
-No deletion in v1/v2.
-No overwrite.
-No embedded tag mutation.
+Music/Library/FLAC/<Artist>/<Year - Album>/
+Music/Library/MP3/<Artist>/<Year - Album>/
+Audiobooks/Library/<Author>/<Year - Title>/        (disc folders are kept inside)
+Books/EPUB/<Author>/<Year - Title>/
+Books/PDF/<Author>/<Year - Title>/
+Movies/Library/<Year - Title>/
+TV/Library/<Show>/Season NN/  and  TV/Library/<Show>/Specials/
+```
+
+A discography download is a source container: each album becomes its own child batch and moves into `Music/Library`, not into one giant discography folder.
+
+## Multi-disc releases
+
+Multi-disc albums and audiobooks are grouped as **one** release:
+
+- Names ending in a disc marker, such as `Dune Disc 1`, `Album (Disc 2)` or `Album - CD 3`, have the marker removed before grouping. Folders like that are treated as disc folders.
+- A bare `(1)` ending, as in `The Wall (1)`, counts as a disc only when the disc-number tag says 1 **and** the file sits in a `CD 1` style folder.
+- A multi-disc audiobook without disc tags uses each disc folder's number. One stray title or author tag on a single disc (for example `Dune Dics 4` or `Frank Herber`) does not split the book, as long as a clear majority agrees. The stray value stays visible in review.
+- Music with repeated track numbers and **no** disc tags is flagged `disc_number_missing` for review, because the files would collide in one album folder.
+
+## Quarantine
+
+Unknown and unsupported items land in **Quarantine review**.
+
+| Action | What happens |
+|---|---|
+| Move to quarantine | Files move to `_QUARANTINE/unknown-type` or `_QUARANTINE/unsupported-file` |
+| Restore to ingest | Files move back to `ready` and the item returns to Quarantine review. Run Scan ingest to re-classify anything you fixed |
+| Discard | Needs a reason. **Nothing is deleted**: the item stays in quarantine, marked for discard, for Cleaner to handle later |
+| Undo discard | Returns the item to plain quarantine |
+
+Every quarantine, restore, discard, undo discard and reject writes an append-only **disposition record** to `_REPORTS/archive-assistant/dispositions/`. See [docs/CLEANER_BOUNDARY.md](docs/CLEANER_BOUNDARY.md).
+
+**Send to recovery** returns an unknown item to Quarantine review, as long as its files are still in `ready`. It refuses moved, merged, quarantined and discard-marked batches. Scans retire stuck unknown rows whose files no longer exist.
+
+Only unknown and unsupported items can be quarantined today. Damaged recognized media is rejected instead.
+
+## Safety contract
+
+```text
+No deletion.
+No overwrite of existing destinations.
+No embedded tag changes.
 No final move without approval.
-No silent metadata edits.
-Metadata suggestions are candidates only.
-Manual review/approval is authoritative.
-Recognized weak metadata goes to review, not quarantine.
-Unknown/unsupported items go to quarantine review.
-Moved media gets manifests/logs.
-Dev reset tools must not run on real NAS media.
-Cleaner/v3 cleanup is future-only.
+No hidden rescans from review actions.
+Suggestions are candidates; your review is authoritative.
+Weak metadata goes to review, not quarantine.
+Every move writes manifests and logs.
+Dev reset tools never run against real NAS media.
 ```
 
-## How It Fits With Intake Watcher And Cleaner
+## Setup
 
-```text
-Intake Watcher = Is the upload finished?
-Archive Assistant = What is it, what needs review, and where should it go after approval?
-Cleaner = After approved moves, what safe leftovers can be cleaned or sent to review?
-```
-
-Archive Assistant should scan stable ready folders. It should not watch active downloads directly in production.
-
-## Folder Flow
-
-Standalone development flow:
-
-```text
-data/_INGEST
-  -> scan
-  -> review/edit
-  -> approve
-  -> move approved
-  -> data/Music | data/Movies | data/TV | data/Books | data/Audiobooks
-  -> metadata manifests + _REPORTS
-```
-
-Current local two-app bridge:
-
-```text
-nas-data/_INGEST/incoming
-  -> Intake Watcher stable upload check
-nas-data/_INGEST/ready
-  -> Archive Assistant scans
-  -> scan
-  -> review/edit
-  -> approve
-  -> move approved
-  -> nas-data/Music | Movies | TV | Books | Audiobooks
-```
-
-Future NAS production flow:
-
-```text
-/mnt/rust-pool/_INGEST/incoming
-  -> Intake Watcher
-/mnt/rust-pool/_INGEST/ready
-  -> Archive Assistant
-/mnt/rust-pool/Music | Movies | TV | Books | Audiobooks
-  -> media apps read final libraries
-  -> future Cleaner handles empty shells/leftovers later
-```
-
-## Local Quick Start
-
-Backend on Windows PowerShell:
+Backend:
 
 ```powershell
-cd C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\archive-assistant-scaffold\archive-assistant-scaffold\backend
-
+Set-Location C:\Dev\NAS\archive_assistant\backend
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-python -m app.db.init_db
-
-uvicorn app.main:app --reload
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+Copy-Item .env.example .env
+.\.venv\Scripts\python.exe -m app.db.init_db
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8001
 ```
 
-Frontend on Windows PowerShell:
+Frontend:
 
 ```powershell
-cd C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\archive-assistant-scaffold\archive-assistant-scaffold\frontend
-
-npm install
-npm run dev
+Set-Location C:\Dev\NAS\archive_assistant\frontend
+npm.cmd install
+npm.cmd run dev -- --host 127.0.0.1 --port 5173
 ```
 
-Generic macOS/Linux backend:
-
-```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-python -m app.db.init_db
-uvicorn app.main:app --reload
-```
-
-Generic macOS/Linux frontend:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-## Local Shared Data Root Setup
-
-Persistent local bridge:
-
-```text
-Create or edit:
-backend/.env
-```
-
-For Bonny's current local shared NAS-style root:
+`backend/.env`:
 
 ```env
-DATA_ROOT=C:/Users/BonnyMakaniankhondo/Documents/GitHub/NAS/nas-data
-INGEST_ROOT=C:/Users/BonnyMakaniankhondo/Documents/GitHub/NAS/nas-data/_INGEST/ready
-```
-
-Archive Assistant's project `data/_INGEST` is not the normal scan lane in this bridged setup. Intake Watcher promotes stable items into `nas-data/_INGEST/ready`; Archive Assistant scans only that ready folder.
-
-Validation:
-
-```powershell
-cd C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\archive-assistant-scaffold\archive-assistant-scaffold\backend
-
-python -c "from app.core.config import settings; print(settings.data_root); print(settings.ingest_root); print(settings.ingest_root.exists())"
-```
-
-Expected:
-
-```text
-C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\nas-data
-C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\nas-data\_INGEST\ready
-True
-```
-
-If this prints `False`, the path is wrong.
-If it prints Archive Assistant's own `data/_INGEST`, `backend/.env` did not load.
-
-## Shared Data Root Ownership
-
-| Path | Owner / purpose |
-| --- | --- |
-| `nas-data/_INGEST/incoming` | Intake Watcher watches active copies/downloads. |
-| `nas-data/_INGEST/intake-processing` | Intake Watcher temporary promotion lane. |
-| `nas-data/_INGEST/ready` | Archive Assistant scan input. |
-| `nas-data/_INGEST/failed` | Intake Watcher blocked/problem lane. |
-| `nas-data/_INGEST/leftover-review` | Future Cleaner / human review. |
-| `nas-data/_STAGING` | Archive Assistant working area. |
-| `nas-data/_QUARANTINE` | Archive Assistant review/quarantine area. |
-| `nas-data/_REPORTS/intake-watcher` | Intake Watcher logs. |
-| `nas-data/_REPORTS/archive-assistant` | Archive Assistant scan/move/review logs. |
-| `nas-data/_REPORTS/cleaner` | Future cleanup logs. |
-| `nas-data/Music` | Archive Assistant final music output. |
-| `nas-data/Movies` | Archive Assistant final movie output. |
-| `nas-data/TV` | Archive Assistant final TV output. |
-| `nas-data/Books` | Archive Assistant final book output. |
-| `nas-data/Audiobooks` | Archive Assistant final audiobook output. |
-
-## Dashboard Workflow
-
-1. Confirm the header says `Scanning ingest: .../_INGEST/ready`.
-2. Click Scan ingest.
-3. Review/edit metadata.
-4. Approve.
-5. Click Move approved.
-6. Confirm final library folder and metadata manifest.
-
-## Supported Media Types
-
-| Media type | Scan | Review | Approve | Move | Manifests |
-| --- | --- | --- | --- | --- | --- |
-| Music albums | Yes | Yes | Yes | Yes | Yes |
-| Music discographies | Yes | Yes | Yes | Yes | Yes |
-| Single movies | Yes | Yes | Yes | Yes | Yes |
-| Movie collections/trilogies | Yes | Yes | Yes | Yes | Yes |
-| TV shows | Yes | Yes | Yes | Yes | Yes |
-| Anime/specials/OAD/OVA/OAV handling | Yes | Yes | Yes | Yes | Yes |
-| Books/PDF/EPUB | Yes | Yes | Yes | Yes | Yes |
-| Book collections | Yes | Yes | Yes | Yes | Yes |
-| Audiobooks | Yes | Yes | Yes | Yes | Yes |
-| Multi-disc audiobooks | Yes | Yes | Yes | Yes | Yes |
-
-## Metadata Assist v2 Summary
-
-v2 metadata assist provides candidate suggestions and review-state guidance across supported media types.
-
-Metadata suggestions are candidates only. Manual review/approval is authoritative.
-
-## Manifests And Logs
-
-Moved media gets manifests/logs:
-
-- Per-move audit manifests.
-- Library metadata manifests.
-- Library indexes.
-- Reports under `_REPORTS`.
-
-These are audit records. They are not cleanup instructions.
-
-## Environment Variables
-
-```env
+DATA_ROOT=C:/NAS-Local/nas-data
+INGEST_ROOT=C:/NAS-Local/nas-data/_INGEST/ready
+DATABASE_URL=sqlite:///C:/Dev/NAS/archive_assistant/backend/archive_assistant.db
 DEBUG=true
 DEV_TOOLS_ENABLED=false
 API_DOCS_ENABLED=false
-DATABASE_URL=sqlite:///./archive_assistant.db
-DATA_ROOT=../data
-INGEST_ROOT=../data/_INGEST
 ARCHIVE_ASSISTANT_TIMEZONE=America/Chicago
 ```
 
-- `DATA_ROOT`: app data root.
-- `INGEST_ROOT`: folder Archive Assistant scans. In bridge mode this should be `nas-data/_INGEST/ready`.
-- `DATABASE_URL`: SQLite local or PostgreSQL NAS.
-- `DEV_TOOLS_ENABLED`: must stay false on NAS.
-- `API_DOCS_ENABLED`: keep false unless debugging locally.
-- `ARCHIVE_ASSISTANT_TIMEZONE`: app display/serialization timezone.
+Check the paths loaded:
 
-## API Summary
+```powershell
+.\.venv\Scripts\python.exe -c "from app.core.config import settings; print(settings.data_root, settings.ingest_root, settings.ingest_root.exists())"
+```
+
+## Useful API routes
 
 ```text
 GET  /api/health
 GET  /api/batches
-GET  /api/system/paths
-POST /api/scan/music
-PATCH /api/batches/{id}/metadata
-PATCH /api/batches/{id}/discography
-PATCH /api/batches/{id}/movie-metadata
-PATCH /api/batches/{id}/movie-collection-review
-PATCH /api/batches/{id}/tv-metadata
-PATCH /api/batches/{id}/tv-episode-review
-PATCH /api/batches/{id}/book-metadata
-PATCH /api/batches/{id}/book-collection-review
-PATCH /api/batches/{id}/audiobook-metadata
+POST /api/scan/music                     start a scan of ready
+GET  /api/scan/status
+GET  /api/batches/{id}/universal-ingestion
+GET  /api/batches/{id}/review-routing
+POST /api/batches/{id}/materialize-approved-candidates
 POST /api/batches/{id}/approve
+POST /api/batches/{id}/move
 POST /api/move/approved
+POST /api/batches/{id}/reject
+POST /api/batches/{id}/recovery
+POST /api/batches/{id}/quarantine
+POST /api/batches/{id}/restore-quarantine
+POST /api/batches/{id}/discard-quarantine   {"reason": "..."}
+POST /api/batches/{id}/undo-discard
+GET  /api/quarantine/reports
 ```
 
-## Regression And Testing
+## Testing
 
-```bash
-python -m compileall backend/app scripts
-python scripts/check_core_v1_regression.py
-python scripts/check_tv_anime_specials_regression.py
-python scripts/check_root_ingest.py
-PYTHONPATH=backend DEBUG=true python scripts/check_reset_safety.py
-cd frontend
-npm run build
-cd ..
-git diff --check
+```powershell
+Set-Location C:\Dev\NAS\archive_assistant
+$env:DEBUG="true"; $env:PYTHONPATH="backend"; $env:PYTHONIOENCODING="utf-8"
+backend\.venv\Scripts\python.exe scripts\check_core_v1_regression.py
+Set-Location frontend; npm.cmd run build
 ```
 
-## NAS Deployment Summary
+The Core V1 suite runs 24 checks against temporary folders and in-memory databases. See [docs/TESTING.md](docs/TESTING.md).
 
-Archive Assistant should mount `/mnt/rust-pool` as `/app/data`.
-It should scan `/app/data/_INGEST/ready`.
-It should not scan `/app/data/_INGEST/incoming`.
-Final media folders resolve under `DATA_ROOT` unless individually overridden.
+## Maintenance scripts
 
-Use LAN/Tailscale/VPN only. Do not expose Archive Assistant publicly.
-Disable API docs and dev tools on NAS.
+- `scripts/repair_foreign_root_batches.py` hides rows left by test runs against another data root. Dry run by default; `--apply` takes a verified SQLite backup first.
 
-## Future Cleaner / v3 Boundary
+## Known limitations
 
-Cleaner is future-only.
+- Only unknown or unsupported items can be quarantined.
+- Scans run only when you click Scan ingest.
+- Very noisy release names (for example uploader tags mixed into the title) still need a manual edit.
+- Folders with no media never leave Intake Watcher's `incoming`, so they don't reach quarantine.
 
-Archive Assistant v2 should leave empty shells and leftovers visible until Cleaner/v3 is built and proven.
+## More docs
 
-## Documentation Map
-
-- `docs/ARCHITECTURE.md`
-- `docs/SETUP.md`
-- `docs/USAGE.md`
-- `docs/ROADMAP.md`
-- `docs/INTAKE_WATCHER_BRIDGE.md`
-- `docs/NAS_DEPLOYMENT.md`
-- `docs/LOCAL_DEVELOPMENT.md`
-- `docs/OPERATIONS.md`
-- `docs/TESTING.md`
-- `docs/SAFETY_CONTRACT.md`
-- `docs/CLEANER_BOUNDARY.md`
-- `docs/CHANGELOG.md`
-- `docs/LOCAL_READY_BRIDGE_SETUP_2026-06-17.md`
+[ARCHITECTURE](docs/ARCHITECTURE.md) · [SAFETY_CONTRACT](docs/SAFETY_CONTRACT.md) · [CLEANER_BOUNDARY](docs/CLEANER_BOUNDARY.md) · [TESTING](docs/TESTING.md) · [OPERATIONS](docs/OPERATIONS.md) · [NAS_DEPLOYMENT](docs/NAS_DEPLOYMENT.md) · [ROADMAP](docs/ROADMAP.md) · [CHANGELOG](docs/CHANGELOG.md)

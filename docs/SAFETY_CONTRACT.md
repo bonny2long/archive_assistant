@@ -3,7 +3,7 @@
 ## Rules
 
 ```text
-No deletion in v1/v2.
+No deletion (discard only marks quarantined items for Cleaner).
 No overwrite.
 No embedded tag mutation.
 No final move without approval.
@@ -17,7 +17,7 @@ No media-app ownership of ingest.
 
 ## Why These Rules Exist
 
-- No deletion: prevents loss of source media.
+- No deletion: prevents loss of source media. Cleaner, a separate app, is the only future deletion authority.
 - No overwrite: prevents replacing good files with bad ones.
 - No embedded tag mutation: preserves source files.
 - Approval before move: keeps Bonny in control.
