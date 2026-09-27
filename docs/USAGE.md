@@ -70,4 +70,4 @@ Unknown/unsupported items go to quarantine review. Do not delete them manually a
 - Do not approve without review.
 - Do not run dev reset on real NAS media.
 - Do not use reset as a shared NAS restore tool; it is local-development only.
-- Do not treat empty shells/leftovers as safe deletion targets in v2.
+- Do not delete leftovers by hand; Cleaner reports them after 30 days.

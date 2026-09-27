@@ -12,14 +12,14 @@ The bridge is the shared ready folder under `nas-data`.
 Shared local root:
 
 ```text
-C:/Users/BonnyMakaniankhondo/Documents/GitHub/NAS/nas-data
+C:/NAS-Local/nas-data
 ```
 
 Archive Assistant `backend/.env`:
 
 ```env
-DATA_ROOT=C:/Users/BonnyMakaniankhondo/Documents/GitHub/NAS/nas-data
-INGEST_ROOT=C:/Users/BonnyMakaniankhondo/Documents/GitHub/NAS/nas-data/_INGEST/ready
+DATA_ROOT=C:/NAS-Local/nas-data
+INGEST_ROOT=C:/NAS-Local/nas-data/_INGEST/ready
 ```
 
 Archive Assistant's project `data/_INGEST` is not the normal scan lane in bridge mode.
@@ -32,12 +32,12 @@ Archive Assistant's project `data/_INGEST` is not the normal scan lane in bridge
 | `nas-data/_INGEST/intake-processing` | Intake Watcher temporary promotion lane. |
 | `nas-data/_INGEST/ready` | Archive Assistant scan input. |
 | `nas-data/_INGEST/failed` | Intake Watcher blocked/problem lane. |
-| `nas-data/_INGEST/leftover-review` | Future Cleaner / human review. |
+| `nas-data/_INGEST/leftover-review` | Cleaner / human review. |
 | `nas-data/_STAGING` | Archive Assistant working area. |
 | `nas-data/_QUARANTINE` | Archive Assistant review/quarantine area. |
 | `nas-data/_REPORTS/intake-watcher` | Intake Watcher logs. |
 | `nas-data/_REPORTS/archive-assistant` | Archive Assistant scan/move/review logs. |
-| `nas-data/_REPORTS/cleaner` | Future cleanup logs. |
+| `nas-data/_REPORTS/cleaner` | Cleaner plan and execution reports. |
 | `nas-data/Music` | Archive Assistant final music output. |
 | `nas-data/Movies` | Archive Assistant final movie output. |
 | `nas-data/TV` | Archive Assistant final TV output. |
@@ -67,7 +67,7 @@ Archive Assistant scans:
 ## Verification Commands
 
 ```powershell
-cd C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\archive-assistant-scaffold\archive-assistant-scaffold\backend
+cd C:\Dev\NAS\archive_assistant\backend
 
 python -c "from app.core.config import settings; print(settings.data_root); print(settings.ingest_root); print(settings.ingest_root.exists())"
 ```

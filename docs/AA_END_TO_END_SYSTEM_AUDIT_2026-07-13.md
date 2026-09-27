@@ -1,3 +1,5 @@
+> **Historical (2026-07-13).** This records the system as it was on that date. Paths, versions and behavior may be out of date. For the current state see [README.md](../README.md) and the NAS runbook v12.
+
 # Archive Assistant End-to-End System Audit
 
 Date: 2026-07-13

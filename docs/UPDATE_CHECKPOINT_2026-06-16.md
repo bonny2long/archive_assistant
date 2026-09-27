@@ -1,3 +1,5 @@
+> **Historical (2026-06-16).** This records the system as it was on that date. Paths, versions and behavior may be out of date. For the current state see [README.md](../README.md) and the NAS runbook v12.
+
 # Update Checkpoint - 2026-06-16
 
 Use this before continuing app work. It captures the current known-good state

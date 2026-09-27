@@ -3,7 +3,7 @@
 ## Backend Setup
 
 ```powershell
-cd C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\archive-assistant-scaffold\archive-assistant-scaffold\backend
+cd C:\Dev\NAS\archive_assistant\backend
 
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
@@ -15,7 +15,7 @@ uvicorn app.main:app --reload
 ## Frontend Setup
 
 ```powershell
-cd C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\archive-assistant-scaffold\archive-assistant-scaffold\frontend
+cd C:\Dev\NAS\archive_assistant\frontend
 
 npm install
 npm run dev
@@ -34,8 +34,8 @@ INGEST_ROOT=../data/_INGEST
 ## Intake Watcher Bridge Mode
 
 ```env
-DATA_ROOT=C:/Users/BonnyMakaniankhondo/Documents/GitHub/NAS/nas-data
-INGEST_ROOT=C:/Users/BonnyMakaniankhondo/Documents/GitHub/NAS/nas-data/_INGEST/ready
+DATA_ROOT=C:/NAS-Local/nas-data
+INGEST_ROOT=C:/NAS-Local/nas-data/_INGEST/ready
 ```
 
 In bridge mode, the project `data/_INGEST` folder is not the normal scan lane. Intake Watcher promotes stable files into `nas-data/_INGEST/ready`, and Archive Assistant scans that ready folder.
