@@ -7,7 +7,8 @@ from app.core.origin_guard import parse_origin_list
 
 class Settings(BaseSettings):
     app_name: str = "Archive Assistant"
-    debug: bool = True
+    # Dev tools (database and test-data reset) are off unless explicitly enabled.
+    debug: bool = False
 
     # Project root is two levels above backend/app/core/config.py
     backend_dir: Path = Path(__file__).resolve().parents[2]
@@ -44,7 +45,7 @@ class Settings(BaseSettings):
     database_url: str = f"sqlite:///{backend_dir / 'archive_assistant.db'}"
 
     api_docs_enabled: bool = False
-    dev_tools_enabled: bool = True
+    dev_tools_enabled: bool = False
     archive_assistant_timezone: str = "America/Chicago"
 
     musicbrainz_api_base_url: str = "https://musicbrainz.org/ws/2"
