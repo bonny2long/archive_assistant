@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased - Safer defaults
+
+- `DEBUG` and `DEV_TOOLS_ENABLED` now default to `false` in code. Before, a checkout with no `.env` exposed the dev-reset endpoints. Local development that needs them must set both to `true` in `backend/.env` (see SETUP and LOCAL_DEVELOPMENT).
+- Added `scripts/check_safe_defaults.py`.
+
 ## 2026-09-27 - Docs brought up to date
 
 - README, architecture, testing, roadmap, operations, safety, and Cleaner boundary rewritten for the current system and the runbook v12 layout.
