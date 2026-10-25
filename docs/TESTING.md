@@ -34,6 +34,7 @@ scripts/check_discography_intake.py        discography split into child albums, 
 scripts/check_tv_anime_specials_regression.py
 scripts/check_root_ingest.py
 scripts/check_reset_safety.py
+scripts/check_origin_guard.py              changing requests from other sites are refused
 scripts/check_stale_quarantine_repair.py
 scripts/check_audiobooks_foundation.py
 scripts/check_library_metadata_manifests.py

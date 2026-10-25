@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import router
 from app.core.config import settings
+from app.core.origin_guard import OriginGuardMiddleware
 from app.db.init_db import init_db
 
 app = FastAPI(
@@ -17,6 +18,10 @@ def initialize_database():
     init_db()
 
 
+app.add_middleware(
+    OriginGuardMiddleware,
+    get_extra_origins=lambda: settings.allowed_origin_list,
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5174", "http://127.0.0.1:5173"],

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased - Origin check
+
+- Changing requests (`POST`, `PUT`, `PATCH`, `DELETE`) are rejected with 403 when their `Origin` header is not a loopback address or listed in the new `ALLOWED_ORIGINS` setting. Before, a web page on another site could make your browser call `/api/move/approved` and similar routes. Requests with no `Origin` header (curl, scripts, tests) and all reads are unchanged. Implemented as plain ASGI middleware, so media and report reads pay nothing.
+- Added `scripts/check_origin_guard.py`.
+
 ## 2026-09-27 - Docs brought up to date
 
 - README, architecture, testing, roadmap, operations, safety, and Cleaner boundary rewritten for the current system and the runbook v12 layout.
