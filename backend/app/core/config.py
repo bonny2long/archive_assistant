@@ -2,6 +2,8 @@ from pathlib import Path
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings
 
+from app.core.origin_guard import parse_origin_list
+
 
 class Settings(BaseSettings):
     app_name: str = "Archive Assistant"
@@ -50,8 +52,16 @@ class Settings(BaseSettings):
     musicbrainz_user_agent: str = "ArchiveAssistant/0.1 (local metadata enrichment)"
     musicbrainz_timeout_seconds: float = 15.0
 
+    # Extra browser origins allowed to make changing requests, comma separated.
+    # Loopback addresses are always allowed.
+    allowed_origins: str = ""
+
     class Config:
         env_file = ".env"
+
+    @property
+    def allowed_origin_list(self) -> tuple[str, ...]:
+        return parse_origin_list(self.allowed_origins)
 
     @field_validator("debug", mode="before")
     @classmethod

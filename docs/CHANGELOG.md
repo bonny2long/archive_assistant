@@ -1,9 +1,12 @@
 # Changelog
 
-## Unreleased - Safer defaults
+## Unreleased
 
 - `DEBUG` and `DEV_TOOLS_ENABLED` now default to `false` in code. Before, a checkout with no `.env` exposed the dev-reset endpoints. Local development that needs them must set both to `true` in `backend/.env` (see SETUP and LOCAL_DEVELOPMENT).
 - Added `scripts/check_safe_defaults.py`.
+- Changing requests (`POST`, `PUT`, `PATCH`, `DELETE`) are rejected with 403 when their `Origin` header is not a loopback address or listed in the new `ALLOWED_ORIGINS` setting. Before, a web page on another site could make your browser call `/api/move/approved` and similar routes. Requests with no `Origin` header (curl, scripts, tests) and all reads are unchanged. Implemented as plain ASGI middleware, so media and report reads pay nothing.
+- Added `scripts/check_origin_guard.py`.
+
 
 ## 2026-09-27 - Docs brought up to date
 

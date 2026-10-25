@@ -45,4 +45,5 @@ It should not scan `/app/data/_INGEST/incoming`.
 Use LAN/Tailscale/VPN only.
 Do not expose Archive Assistant publicly.
 Disable API docs/dev tools on NAS.
+Changing requests (approve, move, quarantine, edit) are rejected with 403 unless their `Origin` header is a loopback address or is listed in `ALLOWED_ORIGINS`. A web page on another site therefore cannot drive the API through your browser. To use the dashboard from a LAN or Tailscale address, set `ALLOWED_ORIGINS` to that exact address, for example `ALLOWED_ORIGINS=http://192.168.1.50:5173`. Plain scripts such as `curl` send no `Origin` header and are not affected.
 Do not use reset test data on real NAS media. Before real NAS installation, remove or hard-disable reset UI/API behavior.
