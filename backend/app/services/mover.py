@@ -1,6 +1,8 @@
 import json
 import shutil
+import threading
 from collections import Counter
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
@@ -35,6 +37,34 @@ from app.services.duplicate_fragment_review import (
     format_music_track_positions,
     music_track_completeness_for_batch,
 )
+from app.services.content_guard import (
+    apply_duplicate_state,
+    find_content_duplicates,
+    summarize as summarize_content_duplicates,
+)
+
+
+class MoveAlreadyRunningError(RuntimeError):
+    """Raised when a move is requested while another move is still running."""
+
+
+# Moves rename files and then record the result, so two runs at once would see each
+# other's half-finished work (files already in place, rows not yet committed) and
+# mislabel finished batches. One move at a time; the lock is re-entrant so callers
+# that already hold it can still call move_approved_batches.
+_MOVE_LOCK = threading.RLock()
+
+
+@contextmanager
+def exclusive_move():
+    if not _MOVE_LOCK.acquire(blocking=False):
+        raise MoveAlreadyRunningError(
+            "A move is already running. Wait for it to finish, then check the results."
+        )
+    try:
+        yield
+    finally:
+        _MOVE_LOCK.release()
 
 
 def _music_track_completeness_blocker(batch: IngestBatch) -> str | None:
@@ -244,6 +274,9 @@ def preflight_selected_batches(
             blockers.extend(_validate_tv_file_metadata_ready(batch))
         if not movable_files:
             blockers.append("Batch has no attached files eligible for move.")
+        content_duplicates = find_content_duplicates(db, batch)
+        if content_duplicates:
+            blockers.append(summarize_content_duplicates(content_duplicates))
 
         missing_sources = [
             str(item.file_path)
@@ -2334,6 +2367,15 @@ def move_approved_batches(
     db: Session,
     batch_ids: Iterable[int] | None = None,
 ) -> tuple[int, list[str]]:
+    """Move approved batches, one move run at a time."""
+    with _MOVE_LOCK:
+        return _move_approved_batches_locked(db, batch_ids)
+
+
+def _move_approved_batches_locked(
+    db: Session,
+    batch_ids: Iterable[int] | None = None,
+) -> tuple[int, list[str]]:
     requested_ids = (
         list(dict.fromkeys(int(value) for value in batch_ids))
         if batch_ids is not None
@@ -2374,6 +2416,19 @@ def move_approved_batches(
             batch.updated_at = now_utc()
             db.commit()
             errors.append(f"Batch {batch.id}: {completeness_blocker}")
+            continue
+
+        # Last line of defence: never move a file whose exact content is already in
+        # the library or in an earlier batch, whatever its name or metadata says.
+        content_duplicates = find_content_duplicates(db, batch)
+        if content_duplicates:
+            apply_duplicate_state(batch, content_duplicates)
+            batch.status = "needs_metadata_review"
+            batch.updated_at = now_utc()
+            db.commit()
+            errors.append(
+                f"Batch {batch.id}: {summarize_content_duplicates(content_duplicates)}"
+            )
             continue
 
         moved_files = []

@@ -67,7 +67,8 @@ def source_file(
 ) -> IngestFile:
     path = root / "_INGEST" / folder / name
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(b"archive-assistant-canary")
+    # Unique per file: the content-duplicate guard treats identical bytes as duplicates.
+    path.write_bytes(f"archive-assistant-canary:{folder}/{name}".encode())
     return IngestFile(
         file_path=str(path),
         file_name=name,

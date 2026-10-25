@@ -9,16 +9,18 @@ Reports leftovers in ready, failed, staging, leftover-review and quarantine.
 Waits until a leftover is 30 days old (MIN_AGE_DAYS).
 Requires an Archive Assistant move manifest with verified destinations.
 Removes reviewed empty folders only, and only when all production gates are on.
+Reads the disposition records below and lists approved quarantine discards (report only).
+Compares folders it has no record of with the final libraries by content and lists exact duplicates (report only).
 Logs every plan and every removal.
 ```
 
 ## Cleaner Later
 
 ```text
-Read every move manifest per source folder and these disposition records.
+Read every move manifest per source folder.
 Ask Archive Assistant whether a source folder still has pending batches.
 Route deletions through a 14-day trash hold.
-Clean approved quarantine discards and known junk only after that.
+Clean verified duplicates, approved quarantine discards and known junk only after that.
 ```
 
 ## Cleaner Must Not

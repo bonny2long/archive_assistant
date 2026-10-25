@@ -43,6 +43,7 @@ BLOCKING_WARNING_TYPES = {
     "tv_file_metadata_not_ready",
     "book_collection_duplicate_destination",
     "track_order_ambiguous",
+    "duplicate_content_detected",
 }
 
 

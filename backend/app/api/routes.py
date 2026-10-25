@@ -90,9 +90,15 @@ from app.services.music_metadata import (
 )
 from app.services.scan_runtime import get_scan_status, start_scan_job
 from app.services.mover import (
+    MoveAlreadyRunningError,
     _lock_metadata_for_move,
+    exclusive_move,
     move_approved_batches,
     preflight_selected_batches,
+)
+from app.services.content_guard import (
+    refresh_duplicate_state,
+    summarize as summarize_content_duplicates,
 )
 from app.services.quarantine import (
     discard_quarantined_batch,
@@ -2314,6 +2320,14 @@ def approve_batch(batch_id: int, db: Session = Depends(get_db)):
             status=batch.status,
             message=discography_blocker,
         )
+    content_duplicates = refresh_duplicate_state(db, batch)
+    if content_duplicates:
+        db.commit()
+        return ApproveResponse(
+            batch_id=batch.id,
+            status=batch.status,
+            message=summarize_content_duplicates(content_duplicates),
+        )
 
     meta = build_review_state(batch.detected_type, batch.metadata_json)
     if meta["blocking_review_items"]:
@@ -2367,6 +2381,11 @@ def approve_selected_batches(
             errors.append(BulkApproveError(batch_id=batch_id, reason="not_found"))
             continue
 
+        content_duplicates = (
+            []
+            if batch.detected_type in {"unknown_type", "unsupported_file"}
+            else refresh_duplicate_state(db, batch)
+        )
         metadata = build_review_state(batch.detected_type, batch.metadata_json)
         parent_summary = build_parent_candidate_summary(db, batch)
         routing_decision = get_batch_routing_decision(db, batch.id)
@@ -2382,6 +2401,8 @@ def approve_selected_batches(
             reason = "music_track_completeness_required"
         elif _discography_child_batch_blocker(batch, parent_summary):
             reason = "discography_child_batches_required"
+        elif content_duplicates:
+            reason = "duplicate_content"
         elif metadata["blocking_review_items"]:
             reason = "blocking_review_items"
         elif batch.status in {"needs_metadata_review", "metadata_recovery"}:
@@ -2652,6 +2673,17 @@ def _execute_selected_move(
     db: Session,
     batch_ids: list[int],
 ) -> SelectedMoveResponse:
+    try:
+        with exclusive_move():
+            return _execute_selected_move_locked(db, batch_ids)
+    except MoveAlreadyRunningError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+def _execute_selected_move_locked(
+    db: Session,
+    batch_ids: list[int],
+) -> SelectedMoveResponse:
     requested_ids = list(dict.fromkeys(batch_ids))
     preflight = preflight_selected_batches(db, requested_ids)
     ready_ids = [item["batch_id"] for item in preflight if item["ready"]]
@@ -2739,6 +2771,14 @@ def _execute_selected_move(
 
 @router.post("/move/approved", response_model=MoveResponse)
 def move_approved(db: Session = Depends(get_db)):
+    try:
+        with exclusive_move():
+            return _move_all_approved(db)
+    except MoveAlreadyRunningError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+def _move_all_approved(db: Session) -> MoveResponse:
     approved_ids = [
         value[0]
         for value in (
