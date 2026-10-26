@@ -17,6 +17,28 @@
 /mnt/fast-pool/apps/archive-assistant/backups
 ```
 
+Everything under `/mnt/rust-pool` that the apps move between (`_INGEST`, `_STAGING`, `_QUARANTINE`, `_TRASH`, `_REPORTS` and the libraries) must be one dataset; see the next section. `fast-pool/apps/...` holds app state and is never part of a move.
+
+## Storage layout: one filesystem
+
+Archive Assistant, Intake Watcher and Cleaner move files by **rename**, which is instant and atomic but only works inside one filesystem. Put the whole data root on a single dataset/mount and use plain folders inside it:
+
+```text
+nas-data/                      one dataset (or one bind mount in Docker)
+  _INGEST/ _STAGING/ _QUARANTINE/ _TRASH/ _REPORTS/
+  Music/ Movies/ TV/ Audiobooks/ Books/    plain folders, NOT child datasets
+```
+
+Do not create a child dataset (or a separate Docker mount) per media type or per `_INGEST`/`_TRASH`. On ZFS a child dataset is a different filesystem, so a move from `_INGEST` into `Music/Library` could not be a rename. Archive Assistant refuses such a move (it never copies then deletes) and Cleaner refuses a `_TRASH` on another disk, so the symptom would be blocked batches, not damaged files. Snapshots and quotas still work on the one dataset.
+
+Before real data goes in, run this on the NAS as the user the apps run as:
+
+```bash
+python scripts/nas_storage_preflight.py --data-root /mnt/<pool>/nas-data
+```
+
+It checks that every NAS folder is on one filesystem, that there are no child mounts inside the data root, that a real file can be renamed between the folders, that the user can write, and reports case sensitivity and Unicode filename handling. Exit code 1 means fix the layout first.
+
 ## Environment Example
 
 ```env

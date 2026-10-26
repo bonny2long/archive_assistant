@@ -1,5 +1,4 @@
 import json
-import shutil
 import threading
 from collections import Counter
 from contextlib import contextmanager
@@ -37,6 +36,7 @@ from app.services.duplicate_fragment_review import (
     format_music_track_positions,
     music_track_completeness_for_batch,
 )
+from app.services.safe_move import CROSS_DEVICE_MESSAGE, device_of, move_by_rename
 from app.services.content_guard import (
     apply_duplicate_state,
     find_content_duplicates,
@@ -145,6 +145,22 @@ def _preflight_movable_files(batch: IngestBatch) -> list:
             }
         ]
     return list(batch.files)
+
+
+def _crosses_filesystems(movable_files: list, destination: Path) -> bool:
+    """True when any file to move sits on a different filesystem from its destination.
+
+    Moves are renames only, so a batch like this would fail file by file halfway through. Reporting
+    it up front keeps a batch all-or-nothing.
+    """
+    target = device_of(destination)
+    if target is None:
+        return False
+    parents = {str(Path(item.file_path).parent) for item in movable_files}
+    return any(
+        (source := device_of(Path(parent))) is not None and source != target
+        for parent in parents
+    )
 
 
 def _preflight_destination_paths(
@@ -277,6 +293,8 @@ def preflight_selected_batches(
         content_duplicates = find_content_duplicates(db, batch)
         if content_duplicates:
             blockers.append(summarize_content_duplicates(content_duplicates))
+        if destination is not None and _crosses_filesystems(movable_files, destination):
+            blockers.append(CROSS_DEVICE_MESSAGE)
 
         missing_sources = [
             str(item.file_path)
@@ -591,7 +609,7 @@ def _move_movie_batch(
         db.add(action)
         db.flush()
         try:
-            shutil.move(str(source), str(destination_file))
+            move_by_rename(str(source), str(destination_file))
             action.status = "completed"
             action.completed_at = now_utc()
             moved_files.append(str(destination_file))
@@ -806,7 +824,7 @@ def _move_movie_collection_batch(
         db.add(action)
         db.flush()
         try:
-            shutil.move(str(source), str(destination_file))
+            move_by_rename(str(source), str(destination_file))
             action.status = "completed"
             action.completed_at = now_utc()
             moved_files.append(str(destination_file))
@@ -909,7 +927,7 @@ def _move_movie_collection_batch(
             db.add(action)
             db.flush()
             try:
-                shutil.move(str(source), str(dest_file))
+                move_by_rename(str(source), str(dest_file))
                 action.status = "completed"
                 action.completed_at = now_utc()
                 moved_files.append(str(dest_file))
@@ -1221,7 +1239,7 @@ def _move_tv_batch(
         db.add(action)
         db.flush()
         try:
-            shutil.move(str(source), str(destination_file))
+            move_by_rename(str(source), str(destination_file))
             action.status = "completed"
             action.completed_at = now_utc()
             moved_files.append(str(destination_file))
@@ -1575,7 +1593,7 @@ def _move_discography_batch(
         db.add(action)
         db.flush()
         try:
-            shutil.move(str(source), str(destination_file))
+            move_by_rename(str(source), str(destination_file))
             action.status = "completed"
             action.completed_at = now_utc()
             if quarantined:
@@ -2050,7 +2068,7 @@ def _move_audiobook_batch(
         db.add(action)
         db.flush()
         try:
-            shutil.move(str(source), str(destination_file))
+            move_by_rename(str(source), str(destination_file))
             action.status = "completed"
             action.completed_at = now_utc()
             moved_files.append(str(destination_file))
@@ -2262,7 +2280,7 @@ def _move_book_batch(
         db.add(action)
         db.flush()
         try:
-            shutil.move(str(source), str(destination_file))
+            move_by_rename(str(source), str(destination_file))
             action.status = "completed"
             action.completed_at = now_utc()
             moved_files.append(str(destination_file))
@@ -2877,7 +2895,7 @@ def _move_approved_batches_locked(
                 db.flush()
 
                 try:
-                    shutil.move(str(source), str(destination_file))
+                    move_by_rename(str(source), str(destination_file))
                     action.status = "completed"
                     action.completed_at = now_utc()
                     moved_files.append(str(destination_file))

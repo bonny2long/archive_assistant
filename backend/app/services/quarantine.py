@@ -12,7 +12,6 @@ Archive Assistant never deletes. Every decision writes a disposition record
 """
 
 import json
-import shutil
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -20,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.time import configured_timezone, now_utc, serialize_utc
 from app.models.archive import IngestBatch
+from app.services.safe_move import move_by_rename
 from app.services.dispositions import (
     build_file_list_inventory,
     write_disposition_record,
@@ -128,7 +128,7 @@ def quarantine_batch(db: Session, batch: IngestBatch) -> Path:
             if not source.exists():
                 continue
             destination_file = _available_destination(destination, source)
-            shutil.move(str(source), str(destination_file))
+            move_by_rename(str(source), str(destination_file))
             files_moved.append(str(destination_file))
             quarantine_items.append({
                 "original": str(source),
@@ -142,7 +142,7 @@ def quarantine_batch(db: Session, batch: IngestBatch) -> Path:
             raise ValueError("Quarantine source must be inside the ingest root")
         destination = _available_destination(root, source)
         source_was_dir = source.is_dir()
-        shutil.move(str(source), str(destination))
+        move_by_rename(str(source), str(destination))
         if source_was_dir:
             folders_moved.append(str(destination))
         else:
@@ -255,7 +255,7 @@ def restore_quarantined_batch(db: Session, batch: IngestBatch) -> Path:
         if not moves:
             raise FileNotFoundError("No quarantined files remain to restore")
         for quarantined, original in moves:
-            shutil.move(str(quarantined), str(original))
+            move_by_rename(str(quarantined), str(original))
         try:
             # Removes only the group folder Archive Assistant created, and
             # only when it is now empty. Anything else stays in place.
@@ -277,7 +277,7 @@ def restore_quarantined_batch(db: Session, batch: IngestBatch) -> Path:
         if original.exists():
             raise ValueError(f"Restore destination already exists: {original}")
         original.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(source), str(original))
+        move_by_rename(str(source), str(original))
         _refresh_counts(metadata, original)
         target = original
 
