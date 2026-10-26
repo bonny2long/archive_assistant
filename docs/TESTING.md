@@ -37,6 +37,7 @@ scripts/check_reset_safety.py
 scripts/check_safe_defaults.py             debug and dev tools are off unless explicitly enabled
 scripts/check_origin_guard.py              changing requests from other sites are refused
 scripts/check_content_duplicate_guard.py   identical files never move twice; moves run one at a time
+scripts/check_rename_only_moves.py         moves never copy, never replace; a cross-filesystem batch is blocked up front
 scripts/check_stale_quarantine_repair.py
 scripts/check_audiobooks_foundation.py
 scripts/check_library_metadata_manifests.py

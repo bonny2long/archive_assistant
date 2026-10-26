@@ -281,8 +281,8 @@ def check_moves_run_one_at_a_time(root: Path) -> None:
     with factory() as db:
         ids = [race_album(db, root, index).id for index in range(4)]
 
-    real_move = shutil.move
-    mover.shutil.move = lambda src, dst: (time.sleep(0.03), real_move(src, dst))[1]
+    real_move = mover.move_by_rename
+    mover.move_by_rename = lambda src, dst: (time.sleep(0.03), real_move(src, dst))[1]
     results: list[tuple[int, list[str]]] = []
     try:
         def run() -> None:
@@ -295,7 +295,7 @@ def check_moves_run_one_at_a_time(root: Path) -> None:
         for thread in threads:
             thread.join(timeout=60)
     finally:
-        mover.shutil.move = real_move
+        mover.move_by_rename = real_move
 
     assert sorted(moved for moved, _ in results) == [0, 4], results
     assert all(not errors for _, errors in results), results
